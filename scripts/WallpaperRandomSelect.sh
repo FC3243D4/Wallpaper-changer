@@ -26,8 +26,4 @@ do
     RANDOMPICS="/$RANDOMPICS"
 done
 
-complete_wallpaper_path="$wallDIR$RANDOMPICS"
-
-#ln -sf $complete_wallpaper_path $HOME/.config/rofi/.current_wallpaper
-
 $HOME/.config/hypr/UserScripts/WallpaperAspectRatio.sh $RANDOMPICS

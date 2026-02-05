@@ -15,3 +15,5 @@ TO DO:
       - 10:21
       - 10:32
       - 2:3
+- expand collection
+- implement aspect ratio checker for windows as well as rgb sync (maybe)

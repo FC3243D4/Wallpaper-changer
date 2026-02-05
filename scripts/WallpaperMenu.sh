@@ -3,21 +3,11 @@
 # This script for selecting wallpapers (SUPER W)
 
 # WALLPAPERS PATH
-terminal=kitty
 wallDIR="$HOME/Pictures/wallpapers/16-9"
-SCRIPTSDIR="$HOME/.config/hypr/scripts"
-wallpaper_current="$HOME/.config/hypr/wallpaper_effects/.wallpaper_current"
 
 # Directory for swaync
 iDIR="$HOME/.config/swaync/images"
 iDIRi="$HOME/.config/swaync/icons"
-
-# swww transition config
-FPS=60
-TYPE="any"
-DURATION=2
-BEZIER=".43,1.19,1,.4"
-SWWW_PARAMS="--transition-fps $FPS --transition-type $TYPE --transition-duration $DURATION --transition-bezier $BEZIER"
 
 # Check if package bc exists
 if ! command -v bc &>/dev/null; then
@@ -43,26 +33,10 @@ icon_size=$(echo "scale=1; ($monitor_height * 3) / ($scale_factor * 150)" | bc)
 adjusted_icon_size=$(echo "$icon_size" | awk '{if ($1 < 15) $1 = 20; if ($1 > 25) $1 = 25; print $1}')
 rofi_override="element-icon{size:${adjusted_icon_size}%;}"
 
-# Kill existing wallpaper daemons for video
-kill_wallpaper_for_video() {
-  awww kill 2>/dev/null
-  pkill mpvpaper 2>/dev/null
-  pkill swaybg 2>/dev/null
-  pkill hyprpaper 2>/dev/null
-}
-
-# Kill existing wallpaper daemons for image
-kill_wallpaper_for_image() {
-  pkill mpvpaper 2>/dev/null
-  pkill swaybg 2>/dev/null
-  pkill hyprpaper 2>/dev/null
-}
-
 # Retrieve wallpapers (both images & videos)
 mapfile -d '' PICS < <(find -L "${wallDIR}" -type f \( \
   -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.gif" -o \
-  -iname "*.bmp" -o -iname "*.tiff" -o -iname "*.webp" -o \
-  -iname "*.mp4" -o -iname "*.mkv" -o -iname "*.mov" -o -iname "*.webm" \) -print0)
+  -iname "*.bmp" -o -iname "*.tiff" -o -iname "*.webp" \) -print0)
 
 RANDOM_PIC="${PICS[$((RANDOM % ${#PICS[@]}))]}"
 RANDOM_PIC_NAME=". random"
@@ -98,108 +72,6 @@ menu() {
   done
 }
 
-# Offer SDDM Simple Wallpaper Option (only for non-video wallpapers)
-set_sddm_wallpaper() {
-  sleep 1
-
-  # Resolve SDDM themes directory (standard and NixOS path)
-  local sddm_themes_dir=""
-  if [ -d "/usr/share/sddm/themes" ]; then
-    sddm_themes_dir="/usr/share/sddm/themes"
-  elif [ -d "/run/current-system/sw/share/sddm/themes" ]; then
-    sddm_themes_dir="/run/current-system/sw/share/sddm/themes"
-  fi
-
-  [ -z "$sddm_themes_dir" ] && return 0
-
-  local sddm_simple="$sddm_themes_dir/simple_sddm_2"
-
-  # Only prompt if theme exists and its Backgrounds directory is writable
-  if [ -d "$sddm_simple" ] && [ -w "$sddm_simple/Backgrounds" ]; then
-
-    # Check if yad is running to avoid multiple notifications
-    if pidof yad >/dev/null; then
-      killall yad
-    fi
-
-    if yad --info --text="Set current wallpaper as SDDM background?\n\nNOTE: This only applies to SIMPLE SDDM v2 Theme" \
-      --text-align=left \
-      --title="SDDM Background" \
-      --timeout=5 \
-      --timeout-indicator=right \
-      --button="yes:0" \
-      --button="no:1"; then
-
-      # Check if terminal exists
-      if ! command -v "$terminal" &>/dev/null; then
-        notify-send -i "$iDIR/error.png" "Missing $terminal" "Install $terminal to enable setting of wallpaper background"
-        exit 1
-      fi
-
-      exec "$SCRIPTSDIR/sddm_wallpaper.sh" --normal
-
-    fi
-  fi
-}
-
-modify_startup_config() {
-  local selected_file="$1"
-  local startup_config="$HOME/.config/hypr/UserConfigs/Startup_Apps.conf"
-
-  # Check if it's a live wallpaper (video)
-  if [[ "$selected_file" =~ \.(mp4|mkv|mov|webm)$ ]]; then
-    # For video wallpapers:
-    sed -i '/^\s*exec-once\s*=\s*awww-daemon\s*--format\s*xrgb\s*$/s/^/\#/' "$startup_config"
-    sed -i '/^\s*#\s*exec-once\s*=\s*mpvpaper\s*.*$/s/^#\s*//;' "$startup_config"
-
-    # Update the livewallpaper variable with the selected video path (using $HOME)
-    selected_file="${selected_file/#$HOME/\$HOME}" # Replace /home/user with $HOME
-    sed -i "s|^\$livewallpaper=.*|\$livewallpaper=\"$selected_file\"|" "$startup_config"
-
-    echo "Configured for live wallpaper (video)."
-  else
-    # For image wallpapers:
-    sed -i '/^\s*#\s*exec-once\s*=\s*awww-daemon\s*--format\s*xrgb\s*$/s/^\s*#\s*//;' "$startup_config"
-
-    sed -i '/^\s*exec-once\s*=\s*mpvpaper\s*.*$/s/^/\#/' "$startup_config"
-
-    echo "Configured for static wallpaper (image)."
-  fi
-}
-
-# Apply Image Wallpaper
-apply_image_wallpaper() {
-  local image_path="$1"
-
-  kill_wallpaper_for_image
-
-  if ! pgrep -x "awww-daemon" >/dev/null; then
-    echo "Starting awww-daemon..."
-    awww-daemon --format xrgb &
-  fi
-
-  awww img -o "$focused_monitor" "$image_path" $SWWW_PARAMS
-
-  # Run additional scripts (pass the image path to avoid cache race conditions)
-  "$SCRIPTSDIR/WallustSwww.sh" "$image_path"
-  sleep 2
-  "$SCRIPTSDIR/Refresh.sh"
-  sleep 1
-
-  set_sddm_wallpaper
-  
-  #Get dominant color from wallpaper
-  $HOME/dominantcolor -n 2 -e black -p dominant .config/rofi/.current_wallpaper > color.tmp
-  colorLine="$(grep -E '#' color.tmp)"
-  color=$(echo $colorLine | tr -d '#')
-
-  #apply color to openrgb
-  openrgb -c $color
-
-  #remove temp file
-  rm color.tmp
-}
-
 # Main function
 main() {
   choice=$(menu | $rofi_command)
@@ -226,15 +98,16 @@ main() {
     exit 1
   fi
 
+  # Saves defaiult wallpaper for wallust/openrgb
+  ln -sf $selected_file $HOME/.config/rofi/.current_wallpaper
+
+  # Get the relative path from the wallpapers directory for generalization
   selected_file=${selected_file#*$HOME/Pictures/wallpapers/}
   selected_file=$(echo "$selected_file" | sed 's,^[^/]*/,,')
   selected_file="/$selected_file"
   echo "Selected file path: $selected_file"
 
-  complete_wallpaper_path="$wallDIR$selected_file"
-
-  ln -sf $complete_wallpaper_path $HOME/.config/rofi/.current_wallpaper
-
+  # Call the wallpaper aspect ratio script to set the wallpaper for all monitors
   $HOME/.config/hypr/UserScripts/WallpaperAspectRatio.sh $selected_file
 }
 

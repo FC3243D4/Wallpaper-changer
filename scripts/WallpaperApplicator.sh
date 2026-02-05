@@ -4,12 +4,6 @@
 primary=$(xrandr | grep primary)
 primary=${primary%%[[:space:]]*}
 
-echo ""
-echo "Primary display: $primary"
-echo ""
-echo "$1"
-echo ""
-
 #get resolution of display
 width=$(cut -d 'x' -f1 <<< $2)
 height=$(cut -d 'x' -f2 <<< $2)
@@ -41,6 +35,5 @@ awww query || awww-daemon --format xrgb && awww img -o $1 $Wallpaper $AWWW_PARAM
 
 if [[ $primary == $1 ]]
     then
-        echo "Primary display, wallpaper: $Wallpaper"
         ln -sf $Wallpaper $HOME/.config/rofi/.current_wallpaper
     fi

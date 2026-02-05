@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 #Script for random wallpaper on all displays based on their aspect ratio
 
-primary = $(xrandr | grep primary)
+primary=$(xrandr | grep primary)
+primary=${primary%%[[:space:]]*}
 
 #get resolution of display
 width=$(cut -d 'x' -f1 <<< $2)
@@ -32,7 +33,7 @@ AWWW_PARAMS="--transition-fps $FPS --transition-type $TYPE --transition-duration
 #transition wallpaper on display
 awww query || awww-daemon --format xrgb && awww img -o $1 $Wallpaper $AWWW_PARAMS
 
-if [[ $primary = *$1* ]]
+if [[ $primary == $1 ]]
     then
-        ln -sf $RANDOMPICS $HOME/.config/rofi/.current_wallpaper
+        ln -sf $Wallpaper $HOME/.config/rofi/.current_wallpaper
     fi

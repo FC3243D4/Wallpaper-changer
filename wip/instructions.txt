@@ -1,7 +1,0 @@
-1 - convert the image to png
-2 - if there is not already a folder for the series of the wallpaper add it
-3 - add the wallpaper in the correct folder for the series
-4 - name it something like <character>-<number>
-    4.1 - the name MUST NOT CONTAIN SPACES use - instead
-    4.2 - the number is there to avoid overwriting
-5 - the wallpaper wil be removed from this folder ONLY WHEN THEY ARE ADAPTED TO ALL ASPECT RATIOS

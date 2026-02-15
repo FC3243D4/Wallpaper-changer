@@ -3,6 +3,7 @@
 Stop=false
 HyprctlInstalled=true
 UseXrandr=false
+CreatePicturesDir=false
 
 if hyprctl -v foo &> /dev/null; then
     HyprctlInstalled=false
@@ -42,27 +43,28 @@ fi
 if [ -d $HOME/.config/WallpaperChanger ]; then
   echo "Directory exists $HOME/.config/WallpaperChanger. If you want to reinstall, please delete the directory first. If you want to keep its content, please move it to a different location and delete the directory, then run this script again."
   Stop=true
-else
-    mkdir $HOME/.config/WallpaperChanger
 fi
 
 if [ -d $HOME/Pictures ]; then
     if [ -d $HOME/Pictures/wallpapers ]; then
         echo "Directory exists $HOME/Pictures/wallpapers. if you want to keep its content please rename it or move it to a different location, then run this script again. If you want to replace it, please delete the directory and run this script again."
         Stop=true
-        else
-        mkdir $HOME/Pictures/wallpapers
     fi
     else
         echo "Pictures directory does not exist. This can be because of your system language or because you deleted it. the directory will be created"
-        mkdir $HOME/Pictures
-        mkdir $HOME/Pictures/wallpapers
+        CreatePicturesDir=true
 fi
 
 if [ "$Stop" = true ]; then
     echo "Installation stopped due to the above errors. Please fix them and run the script again."
     exit 1
 fi
+
+if [ "$CreatePicturesDir" = true ]; then
+    mkdir $HOME/Pictures
+fi
+mkdir $HOME/Pictures/wallpapers
+mkdir $HOME/.config/WallpaperChanger
 
 #copy correct scripts based on display utility availability
 if [ "$UseXrandr" = true ]; then

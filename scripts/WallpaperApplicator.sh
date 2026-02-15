@@ -27,5 +27,5 @@ awww query || awww-daemon --format xrgb && awww img -o $1 $Wallpaper $AWWW_PARAM
 
 if [[ $primary == $1 ]]
     then
-        ln -sf $Wallpaper $HOME/WallpaperChanger/.current_wallpaper
+        ln -sf $Wallpaper $HOME/.config/WallpaperChanger/.current_wallpaper
     fi

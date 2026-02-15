@@ -4,57 +4,52 @@ Stop=false
 HyprctlInstalled=true
 UseXrandr=false
 
-if ! hyprctl -v foo &> /dev/null
-    $HyprctlInstalled=false
-    if ! xrandr -v foo &> /dev/null
+if hyprctl -v foo &> /dev/null; then
+    HyprctlInstalled=false
+    if ! xrandr -v foo &> /dev/nu; then
         echo "Neither hyprctl nor xrandr is installed. Please install one of them before running this script."
-        $Stop=true
+        Stop=true
     else
         echo "hyprctl is not installed. The script will need to use xrandr instead."
-        $UseXrandr=true
+        UseXrandr=true
     fi
 fi
 
-if ! rofi -v foo &> /dev/null
-    echo "rofi is not installed. Please install rofi before running this script."
-    $Stop=true
-fi
-
-if ! magick -v foo &> /dev/null
+if magick -v foo &> /dev/null; then
     echo "ImageMagick is not installed. Please install ImageMagick before running this script."
-    $Stop=true
+    Stop=true
 fi
 
-if ! wallust -v foo &> /dev/null
+if wallust -v foo &> /dev/null; then
     echo "wallust is not installed. Please install wallust before running this script."
-    $Stop=true
+    Stop=true
 fi
 
-if ! awww -v foo &> /dev/null
+if awww -v foo &> /dev/null; then
     echo "awww is not installed. Please install awww before running this script."
-    $Stop=true
+    Stop=true
 fi
 
 if ! [ -f $HOME/.config/hypr/scripts/Refresh.sh ]; then
   echo "did not find Refresh.sh. Please make sure you installed https://github.com/JaKooLit dotfiles correctly"
-  $Stop=true
+  Stop=true
 fi
 
-if ! openrgb -v foo &> /dev/null
+if openrgb -v foo &> /dev/null ; then
     echo "openrgb is not installed. You will not have the wallpapers dominant color applied to your devices. Please install openrgb if you want this feature."
 fi
 
 if [ -d $HOME/.config/WallpaperChanger ]; then
-  echo "Directory exists. If you want to reinstall, please delete the directory first. If you want to keep its content, please move it to a different location and delete the directory, then run this script again."
-  $Stop=true
+  echo "Directory exists $HOME/.config/WallpaperChanger. If you want to reinstall, please delete the directory first. If you want to keep its content, please move it to a different location and delete the directory, then run this script again."
+  Stop=true
 else
     mkdir $HOME/.config/WallpaperChanger
 fi
 
 if [ -d $HOME/Pictures ]; then
     if [ -d $HOME/Pictures/wallpapers ]; then
-        echo "Directory exists. if you want to keep its content please rename it or move it to a different location, then run this script again. If you want to replace it, please delete the directory and run this script again."
-        $Stop=true
+        echo "Directory exists $HOME/Pictures/wallpapers. if you want to keep its content please rename it or move it to a different location, then run this script again. If you want to replace it, please delete the directory and run this script again."
+        Stop=true
         else
         mkdir $HOME/Pictures/wallpapers
     fi
@@ -83,8 +78,10 @@ else
 fi
 
 #copy display utility agnostic scripts
+cp ./scripts/AspectRatioChecker.sh $HOME/.config/WallpaperChanger/
 cp ./scripts/WallpaperApplicator.sh $HOME/.config/WallpaperChanger/
 cp ./scripts/dominantcolor $HOME/.config/WallpaperChanger/
+
 
 #copy wallpapers x:9
 if [ -d ./16-9 ]; then
@@ -154,7 +151,7 @@ if [ -d ./2-3 ]; then
     cp -r ./2-3 $HOME/Pictures/wallpapers/
 fi
 
-if [ $UseXrandr ]; then
+if [ "$UseXrandr" = true ]; then
     echo "Installation complete. You can run the wallpaper menu with $HOME/.config/WallpaperChanger/WallpaperMenuXrandr.sh to select a wallpaper, or you can run $HOME/.config/WallpaperChanger/WallpaperRandomAutoXrandr.sh to start the automatic random wallpaper changer every 30min (if you want to change the interval edit the script). You can apply a random wallpaper with $HOME/.config/WallpaperChanger/WallpaperRandomSelectXrandr.sh. In all cases the wallpaper will be applied to all your displays with the correct aspect ratio and the dominant color will be applied to your openrgb supported devices. If you have any issues please open an issue on the github repository"
 else
     echo "Installation complete. You can run the wallpaper menu with $HOME/.config/WallpaperChanger/WallpaperMenu.sh to select a wallpaper, or you can run $HOME/.config/WallpaperChanger/WallpaperRandomAuto.sh to start the automatic random wallpaper changer every 30min (if you want to change the interval edit the script). You can apply a random wallpaper with $HOME/.config/WallpaperChanger/WallpaperRandomSelect.sh. In all cases the wallpaper will be applied to all your displays with the correct aspect ratio and the dominant color will be applied to your openrgb supported devices. If you have any issues please open an issue on the github repository"

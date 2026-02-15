@@ -10,7 +10,7 @@ height=$(cut -d 'x' -f2 <<< $2)
 echo "Width: $width Height: $height"
 
 #call aspect ratio checker script
-Wallpaper=$($HOME/.config/hypr/UserScripts/AspectRatioChecker.sh $width $height)
+Wallpaper=$($HOME/.config/WallpaperChanger/AspectRatioChecker.sh $width $height)
 
 #get full path of wallpaper based on aspect ratio folder and wallpaper name
 Wallpaper+=$3
@@ -27,5 +27,5 @@ awww query || awww-daemon --format xrgb && awww img -o $1 $Wallpaper $AWWW_PARAM
 
 if [[ $primary == $1 ]]
     then
-        ln -sf $Wallpaper $HOME/.config/rofi/.current_wallpaper
+        ln -sf $Wallpaper $HOME/WallpaperChanger/.current_wallpaper
     fi

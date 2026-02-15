@@ -108,7 +108,7 @@ main() {
   echo "Selected file path: $selected_file"
 
   # Call the wallpaper aspect ratio script to set the wallpaper for all monitors
-  $HOME/.config/WallpaperChanger/WallpaperAspectRatio.sh $selected_file
+  $HOME/.config/WallpaperChanger/WallpaperAspectRatioXrandr.sh $selected_file
 }
 
 # Check if rofi is already running

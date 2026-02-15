@@ -24,12 +24,12 @@ while [[ -n ${var[$n]} ]]; do
     
     echo "Changing wallpapers on display: $screen"
     echo "with resolution: $resolution"
-    $HOME/.config/hypr/UserScripts/WallpaperApplicator.sh $screen $resolution $1 && echo "done"
+    $HOME/.config/WallpaperChanger/WallpaperApplicator.sh $screen $resolution $1 && echo "done"
     ((n++))
 done
 
 #refresh color pallette
-wallust run -s $HOME/.config/rofi/.current_wallpaper
+wallust run -s $HOME/.config/WallpaperChanger/.current_wallpaper
 
 #refresh hyprland
 sleep 2
@@ -39,7 +39,7 @@ $SCRIPTSDIR/Refresh.sh
 kill -SIGUSR1 $(pidof kitty)
 
 #Get dominant color from wallpaper
-colorLine="$($HOME/.config/hypr/UserScripts/dominantcolor -m 1 -n 2 -e black -p dominant $HOME/.config/rofi/.current_wallpaper | grep -E '#')"
+colorLine="$($HOME/.config/WallpaperChanger/dominantcolor -m 1 -n 2 -e black -p dominant $HOME/.config/WallpaperChanger/.current_wallpaper | grep -E '#')"
 color=$(echo $colorLine | tr -d '#')
 echo "Dominant color: #$color"
 

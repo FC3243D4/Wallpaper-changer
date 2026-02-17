@@ -67,12 +67,14 @@ if openrgb -v foo &> /dev/null ; then
 fi
 
 if [ -d $HOME/.config/WallpaperChanger ]; then
-    read -p "Directory $HOME/.config/WallpaperChanger exists. Do you want to delete it and all its content? [y/n]" -n 1 -r
+    read -p "Directory $HOME/.config/WallpaperChanger exists. Do you want to delete it and all its content? [y/N]" -n 1 -r
+    echo ""
     echo ""
     if [[ ! $REPLY =~ ^[Yy]$ ]]
     then
         ConfigDirExists=true
-        read -p "Do you still want to copy this repo's scripts to the directory? [y/n]" -n 1 -r
+        read -p "Do you still want to copy this repo's scripts to the directory? [y/N]" -n 1 -r
+        echo ""
         echo ""
         if [[ ! $REPLY =~ ^[Yy]$ ]]
         then
@@ -87,12 +89,14 @@ fi
 
 if [ -d $HOME/Pictures ]; then
     if [ -d $HOME/Pictures/wallpapers ]; then
-        read -p "Directory $HOME/Pictures/wallpapers exists. Do you want to delete it and all its content? [y/n]" -n 1 -r
+        read -p "Directory $HOME/Pictures/wallpapers exists. Do you want to delete it and all its content? [y/N]" -n 1 -r
+        echo ""
         echo ""
         if [[ ! $REPLY =~ ^[Yy]$ ]]
         then
             WallpapersDirExists=true
-            read -p "Do you still want to copy this repo's wallpapers to the directory? [y/n]" -n 1 -r
+            read -p "Do you still want to copy this repo's wallpapers to the directory? [y/N]" -n 1 -r
+            echo ""
             echo ""
             if [[ ! $REPLY =~ ^[Yy]$ ]]
             then
@@ -105,7 +109,8 @@ if [ -d $HOME/Pictures ]; then
         fi
     fi
 else
-    read -p "Pictures directory does not exist. This can be because of your system language or because you deleted it. Do you want to create it? [y/n]" -n 1 -r
+    read -p "Pictures directory does not exist. This can be because of your system language or because you deleted it. Do you want to create it? [y/N]" -n 1 -r
+    echo ""
     echo ""
     if [[ ! $REPLY =~ ^[Yy]$ ]]
     then
@@ -113,7 +118,8 @@ else
         WallpapersDirExists=false
     else
         CreatePicturesDir=true
-        read -p "Do you want to copy this repo's wallpapers to the directory? [y/n]" -n 1 -r
+        read -p "Do you want to copy this repo's wallpapers to the directory? [y/N]" -n 1 -r
+        echo ""
         echo ""
         if [[ ! $REPLY =~ ^[Yy]$ ]]
         then
@@ -186,7 +192,9 @@ else
 fi
 
 if [ "$CopyWallpapers" = true ]; then
-    read -p "Do you want to copy only the sfw wallpapers? [y/n]" -n 1 -r
+    read -p "Do you want to copy only the sfw wallpapers? [y/N]" -n 1 -r
+    echo ""
+    echo ""
     if [[ ! $REPLY =~ ^[Yy]$ ]]
     then
         CopyNsfw=true

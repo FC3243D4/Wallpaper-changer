@@ -265,8 +265,6 @@ if [ "$CopyWallpapers" = true ]; then
     if [ "$CopyNsfw" = true ]; then
         #copy wallpapers x:9
         if [ -d ./nsfw/16-9 ]; then
-            echo ""
-            echo "copia nsfw"
             cp -r ./nsfw/16-9 $HOME/Pictures/wallpapers/
         fi
 

@@ -8,6 +8,7 @@ ConfigDirExists=false
 CopyScripts=true
 WallpapersDirExists=false
 CopyWallpapers=true
+CopyNsfw=false
 
 if hyprctl -v foo &> /dev/null; then
     HyprctlInstalled=false
@@ -66,12 +67,14 @@ if openrgb -v foo &> /dev/null ; then
 fi
 
 if [ -d $HOME/.config/WallpaperChanger ]; then
-    read -p "Directory $HOME/.config/WallpaperChanger exists. Do you want to delete it and all its content? [y/n]" -n 1 -r
+    read -p "Directory $HOME/.config/WallpaperChanger exists. Do you want to delete it and all its content? [y/N]" -n 1 -r
+    echo ""
     echo ""
     if [[ ! $REPLY =~ ^[Yy]$ ]]
     then
         ConfigDirExists=true
-        read -p "Do you still want to copy this repo's scripts to the directory? [y/n]" -n 1 -r
+        read -p "Do you still want to copy this repo's scripts to the directory? [y/N]" -n 1 -r
+        echo ""
         echo ""
         if [[ ! $REPLY =~ ^[Yy]$ ]]
         then
@@ -86,12 +89,14 @@ fi
 
 if [ -d $HOME/Pictures ]; then
     if [ -d $HOME/Pictures/wallpapers ]; then
-        read -p "Directory $HOME/Pictures/wallpapers exists. Do you want to delete it and all its content? [y/n]" -n 1 -r
+        read -p "Directory $HOME/Pictures/wallpapers exists. Do you want to delete it and all its content? [y/N]" -n 1 -r
+        echo ""
         echo ""
         if [[ ! $REPLY =~ ^[Yy]$ ]]
         then
             WallpapersDirExists=true
-            read -p "Do you still want to copy this repo's wallpapers to the directory? [y/n]" -n 1 -r
+            read -p "Do you still want to copy this repo's wallpapers to the directory? [y/N]" -n 1 -r
+            echo ""
             echo ""
             if [[ ! $REPLY =~ ^[Yy]$ ]]
             then
@@ -104,7 +109,8 @@ if [ -d $HOME/Pictures ]; then
         fi
     fi
 else
-    read -p "Pictures directory does not exist. This can be because of your system language or because you deleted it. Do you want to create it? [y/n]" -n 1 -r
+    read -p "Pictures directory does not exist. This can be because of your system language or because you deleted it. Do you want to create it? [y/N]" -n 1 -r
+    echo ""
     echo ""
     if [[ ! $REPLY =~ ^[Yy]$ ]]
     then
@@ -112,7 +118,8 @@ else
         WallpapersDirExists=false
     else
         CreatePicturesDir=true
-        read -p "Do you want to copy this repo's wallpapers to the directory? [y/n]" -n 1 -r
+        read -p "Do you want to copy this repo's wallpapers to the directory? [y/N]" -n 1 -r
+        echo ""
         echo ""
         if [[ ! $REPLY =~ ^[Yy]$ ]]
         then
@@ -147,6 +154,9 @@ if [ "$ConfigDirExists" = true ]; then
         cp ./scripts/AspectRatioChecker.sh $HOME/.config/WallpaperChanger/
         cp ./scripts/WallpaperApplicator.sh $HOME/.config/WallpaperChanger/
         cp ./scripts/dominantcolor $HOME/.config/WallpaperChanger/
+
+        #make them all executables
+        chmod +x $HOME/.config/WallpaperChanger/*
     fi
 else
     mkdir $HOME/.config/WallpaperChanger
@@ -166,6 +176,9 @@ else
     cp ./scripts/AspectRatioChecker.sh $HOME/.config/WallpaperChanger/
     cp ./scripts/WallpaperApplicator.sh $HOME/.config/WallpaperChanger/
     cp ./scripts/dominantcolor $HOME/.config/WallpaperChanger/
+
+    #make them all executables
+    chmod +x $HOME/.config/WallpaperChanger/*
 fi
 
 
@@ -179,6 +192,15 @@ else
 fi
 
 if [ "$CopyWallpapers" = true ]; then
+    read -p "Do you want to copy only the sfw wallpapers? [y/N]" -n 1 -r
+    echo ""
+    echo ""
+    if [[ ! $REPLY =~ ^[Yy]$ ]]
+    then
+        CopyNsfw=true
+    else
+        CopyNsfw=false
+    fi
     #copy wallpapers x:9
     if [ -d ./16-9 ]; then
         cp -r ./16-9 $HOME/Pictures/wallpapers/
@@ -245,6 +267,77 @@ if [ "$CopyWallpapers" = true ]; then
 
     if [ -d ./2-3 ]; then
         cp -r ./2-3 $HOME/Pictures/wallpapers/
+    fi
+
+    #copy nsfw variants
+    if [ "$CopyNsfw" = true ]; then
+        #copy wallpapers x:9
+        if [ -d ./nsfw/16-9 ]; then
+            cp -r ./nsfw/16-9 $HOME/Pictures/wallpapers/
+        fi
+
+        if [ -d ./21-9 ]; then
+            cp -r ./nsfw/21-9 $HOME/Pictures/wallpapers/
+        fi
+
+        if [ -d ./32-9 ]; then
+            cp -r ./nsfw/32-9 $HOME/Pictures/wallpapers/
+        fi
+
+        if [ -d ./4-3 ]; then
+            cp -r ./nsfw/4-3 $HOME/Pictures/wallpapers/
+        fi
+
+        #copy wallpapers x:10
+        if [ -d ./16-10 ]; then
+            cp -r ./nsfw/16-10 $HOME/Pictures/wallpapers/
+        fi
+
+        if [ -d ./21-10 ]; then
+            cp -r ./nsfw/21-10 $HOME/Pictures/wallpapers/
+        fi
+
+        if [ -d ./32-10 ]; then
+            cp -r ./nsfw/32-10 $HOME/Pictures/wallpapers/
+        fi
+
+        if [ -d ./3-2 ]; then
+            cp -r ./nsfw/3-2 $HOME/Pictures/wallpapers/
+        fi
+
+        #copy wallpapers 9:x
+        if [ -d ./9-16 ]; then
+            cp -r ./nsfw/9-16 $HOME/Pictures/wallpapers/
+        fi
+
+        if [ -d ./9-21 ]; then
+            cp -r ./nsfw/9-21 $HOME/Pictures/wallpapers/
+        fi
+
+        if [ -d ./9-32 ]; then
+            cp -r ./nsfw/9-32 $HOME/Pictures/wallpapers/
+        fi
+
+        if [ -d ./3-4 ]; then
+            cp -r ./nsfw/3-4 $HOME/Pictures/wallpapers/
+        fi
+
+        #copy wallpapers 10:x
+        if [ -d ./10-16 ]; then
+            cp -r ./nsfw/10-16 $HOME/Pictures/wallpapers/
+        fi
+
+        if [ -d ./10-21 ]; then
+            cp -r ./nsfw/10-21 $HOME/Pictures/wallpapers/
+        fi
+
+        if [ -d ./10-32 ]; then
+            cp -r ./nsfw/10-32 $HOME/Pictures/wallpapers/
+        fi
+
+        if [ -d ./2-3 ]; then
+            cp -r ./nsfw/2-3 $HOME/Pictures/wallpapers/
+        fi
     fi
 fi
 

@@ -4,6 +4,6 @@
 INTERVAL=1800 #30 minutes
 
 while true; do
-    $HOME/.config/WallpaperChanger/WallpaperRandomSelect.sh
+    $HOME/.config/WallpaperChanger/WallpaperRandomSelectXrandr.sh
     sleep $INTERVAL
 done

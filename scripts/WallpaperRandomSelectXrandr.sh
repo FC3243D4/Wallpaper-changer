@@ -26,4 +26,4 @@ do
     RANDOMPICS="/$RANDOMPICS"
 done
 
-$HOME/.config/WallpaperChanger/WallpaperAspectRatio.sh $RANDOMPICS
+$HOME/.config/WallpaperChanger/WallpaperAspectRatioXrandr.sh $RANDOMPICS

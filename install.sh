@@ -148,6 +148,9 @@ if [ "$ConfigDirExists" = true ]; then
         cp ./scripts/AspectRatioChecker.sh $HOME/.config/WallpaperChanger/
         cp ./scripts/WallpaperApplicator.sh $HOME/.config/WallpaperChanger/
         cp ./scripts/dominantcolor $HOME/.config/WallpaperChanger/
+
+        #make them all executables
+        chmod +x $HOME/.config/WallpaperChanger/*
     fi
 else
     mkdir $HOME/.config/WallpaperChanger
@@ -167,6 +170,9 @@ else
     cp ./scripts/AspectRatioChecker.sh $HOME/.config/WallpaperChanger/
     cp ./scripts/WallpaperApplicator.sh $HOME/.config/WallpaperChanger/
     cp ./scripts/dominantcolor $HOME/.config/WallpaperChanger/
+
+    #make them all executables
+    chmod +x $HOME/.config/WallpaperChanger/*
 fi
 
 

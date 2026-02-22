@@ -35,6 +35,22 @@ $closest = $ratioFolders |
 $ratioFolder = $closest
 $finalPath = Join-Path $BasePath (Join-Path $ratioFolder $RelativeWallpaper)
 
+# monitor rect already computed
+$fadeScript = "C:\scripts\fadeOverlay.ps1"
+
+Start-Process powershell -ArgumentList @(
+    "-ExecutionPolicy Bypass",
+    "-File `"$fadeScript`"",
+    "`"$finalPath`"",
+    $rect.left,
+    $rect.top,
+    $width,
+    $height,
+    600
+)
+
+Start-Sleep -Milliseconds 120
+
 # Apply wallpaper
 if (Test-Path $finalPath) {
     $dw.SetWallpaper($monitorId, $finalPath)

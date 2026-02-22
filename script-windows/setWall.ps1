@@ -17,24 +17,22 @@ $rect = $dw.GetMonitorRECT($monitorId)
 $width  = $rect.right - $rect.left
 $height = $rect.bottom - $rect.top
 
-# Function to simplify ratio
-function Get-GCD($a, $b) {
-    while ($b -ne 0) {
-        $temp = $b
-        $b = $a % $b
-        $a = $temp
-    }
-    return $a
+$ratio = $width / $height
+
+# Available ratio folders
+$ratioFolders = Get-ChildItem $BasePath -Directory | Select-Object -Expand Name
+
+function Parse-Ratio($r){
+    $p = $r -split "-"
+    return [double]$p[0] / [double]$p[1]
 }
 
-$gcd = Get-GCD $width $height
-$ratioW = [int]($width / $gcd)
-$ratioH = [int]($height / $gcd)
+# Find closest ratio
+$closest = $ratioFolders |
+    Sort-Object { [math]::Abs((Parse-Ratio $_) - $ratio) } |
+    Select-Object -First 1
 
-# Folder naming like 16-9
-$ratioFolder = "$ratioW-$ratioH"
-
-# Build final path
+$ratioFolder = $closest
 $finalPath = Join-Path $BasePath (Join-Path $ratioFolder $RelativeWallpaper)
 
 # Apply wallpaper

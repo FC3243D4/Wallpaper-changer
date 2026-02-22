@@ -142,13 +142,17 @@ if [ "$ConfigDirExists" = true ]; then
         if [ "$UseXrandr" = true ]; then
             cp ./scripts/WallpaperAspectRatioXrandr.sh $HOME/.config/WallpaperChanger/
             cp ./scripts/WallpaperRandomSelectXrandr.sh $HOME/.config/WallpaperChanger/
+            cp ./scripts/WallpaperRandomSelectXrandrSFW.sh $HOME/.config/WallpaperChanger/
             cp ./scripts/WallpaperMenutXrandr.sh $HOME/.config/WallpaperChanger/
             cp ./scripts/WallpaperRandomAutoXrandr.sh $HOME/.config/WallpaperChanger/
+            cp ./scripts/WallpaperRandomAutoXrandrSFW.sh $HOME/.config/WallpaperChanger/
         else
             cp ./scripts/WallpaperAspectRatio.sh $HOME/.config/WallpaperChanger/
             cp ./scripts/WallpaperRandomSelect.sh $HOME/.config/WallpaperChanger/
+            cp ./scripts/WallpaperRandomSelectSFW.sh $HOME/.config/WallpaperChanger/
             cp ./scripts/WallpaperMenu.sh $HOME/.config/WallpaperChanger/
             cp ./scripts/WallpaperRandomAuto.sh $HOME/.config/WallpaperChanger/
+            cp ./scripts/WallpaperRandomAutoSFW.sh $HOME/.config/WallpaperChanger/
         fi
         #copy display utility agnostic scripts
         cp ./scripts/AspectRatioChecker.sh $HOME/.config/WallpaperChanger/
@@ -350,6 +354,8 @@ if [ "$UseXrandr" = true ]; then
     echo ""
     echo "You can apply a random wallpaper with $HOME/.config/WallpaperChanger/WallpaperRandomSelectXrandr.sh"
     echo ""
+    echo "If you copied the nsfw wallpapers you can also use $HOME/.config/WallpaperChanger/WallpaperRandomAutoXrandrSFW.sh and $HOME/.config/WallpaperChanger/WallpaperRandomSelectXrandrSFW.sh to only apply sfw wallpapers"
+    echo ""
     echo "In all cases the wallpaper will be applied to all your displays with the correct aspect ratio and the dominant color will be applied to your openrgb supported devices. If you have any issues please open an issue on the github repository"
 else
     echo "Installation complete."
@@ -359,6 +365,8 @@ else
     echo "You can run $HOME/.config/WallpaperChanger/WallpaperRandomAuto.sh to start the automatic random wallpaper changer every 30min (if you want to change the interval edit the script)"
     echo ""
     echo "You can apply a random wallpaper with $HOME/.config/WallpaperChanger/WallpaperRandomSelect.sh"
+    echo ""
+    echo "If you copied the nsfw wallpapers you can also use $HOME/.config/WallpaperChanger/WallpaperRandomAutoSFW.sh and $HOME/.config/WallpaperChanger/WallpaperRandomSelectSFW.sh to only apply sfw wallpapers"
     echo ""
     echo "In all cases the wallpaper will be applied to all your displays with the correct aspect ratio and the dominant color will be applied to your openrgb supported devices. If you have any issues please open an issue on the github repository"
 fi

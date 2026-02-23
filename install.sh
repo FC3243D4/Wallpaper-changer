@@ -10,6 +10,11 @@ WallpapersDirExists=false
 CopyWallpapers=true
 CopyNsfw=false
 
+# -------------------------
+# 1️⃣ CHECK FOR REQUIRED UTILITIES
+# -------------------------
+
+
 if hyprctl -v foo &> /dev/null; then
     HyprctlInstalled=false
     if ! xrandr -v foo &> /dev/null; then
@@ -136,41 +141,30 @@ if [ "$Stop" = true ]; then
     exit 1
 fi
 
-if [ "$ConfigDirExists" = true ]; then
-    if [ "$CopyScripts" = true ]; then
-        #copy correct scripts based on display utility availability
-        if [ "$UseXrandr" = true ]; then
-            cp ./scripts/WallpaperAspectRatioXrandr.sh $HOME/.config/WallpaperChanger/
-            cp ./scripts/WallpaperRandomSelectXrandr.sh $HOME/.config/WallpaperChanger/
-            cp ./scripts/WallpaperMenutXrandr.sh $HOME/.config/WallpaperChanger/
-            cp ./scripts/WallpaperRandomAutoXrandr.sh $HOME/.config/WallpaperChanger/
-        else
-            cp ./scripts/WallpaperAspectRatio.sh $HOME/.config/WallpaperChanger/
-            cp ./scripts/WallpaperRandomSelect.sh $HOME/.config/WallpaperChanger/
-            cp ./scripts/WallpaperMenu.sh $HOME/.config/WallpaperChanger/
-            cp ./scripts/WallpaperRandomAuto.sh $HOME/.config/WallpaperChanger/
-        fi
-        #copy display utility agnostic scripts
-        cp ./scripts/AspectRatioChecker.sh $HOME/.config/WallpaperChanger/
-        cp ./scripts/WallpaperApplicator.sh $HOME/.config/WallpaperChanger/
-        cp ./scripts/dominantcolor $HOME/.config/WallpaperChanger/
+# -------------------------
+# 2️⃣ SCRIPT INSTALLATION
+# -------------------------
 
-        #make them all executables
-        chmod +x $HOME/.config/WallpaperChanger/*
-    fi
-else
+if [ "$ConfigDirExists" = false ]; then
     mkdir $HOME/.config/WallpaperChanger
+fi
+
+if [ "$CopyScripts" = true ]; then
     #copy correct scripts based on display utility availability
     if [ "$UseXrandr" = true ]; then
         cp ./scripts/WallpaperAspectRatioXrandr.sh $HOME/.config/WallpaperChanger/
         cp ./scripts/WallpaperRandomSelectXrandr.sh $HOME/.config/WallpaperChanger/
+        cp ./scripts/WallpaperRandomSelectXrandrSFW.sh $HOME/.config/WallpaperChanger/
         cp ./scripts/WallpaperMenutXrandr.sh $HOME/.config/WallpaperChanger/
         cp ./scripts/WallpaperRandomAutoXrandr.sh $HOME/.config/WallpaperChanger/
+        cp ./scripts/WallpaperRandomAutoXrandrSFW.sh $HOME/.config/WallpaperChanger/
     else
         cp ./scripts/WallpaperAspectRatio.sh $HOME/.config/WallpaperChanger/
         cp ./scripts/WallpaperRandomSelect.sh $HOME/.config/WallpaperChanger/
+        cp ./scripts/WallpaperRandomSelectSFW.sh $HOME/.config/WallpaperChanger/
         cp ./scripts/WallpaperMenu.sh $HOME/.config/WallpaperChanger/
         cp ./scripts/WallpaperRandomAuto.sh $HOME/.config/WallpaperChanger/
+        cp ./scripts/WallpaperRandomAutoSFW.sh $HOME/.config/WallpaperChanger/
     fi
     #copy display utility agnostic scripts
     cp ./scripts/AspectRatioChecker.sh $HOME/.config/WallpaperChanger/
@@ -181,6 +175,10 @@ else
     chmod +x $HOME/.config/WallpaperChanger/*
 fi
 
+# -------------------------
+# 3️⃣ WALLPAPER INSTALLATION
+# -------------------------
+
 
 if [ "$CreatePicturesDir" = true ]; then
     mkdir $HOME/Pictures
@@ -190,17 +188,17 @@ else
         mkdir $HOME/Pictures/wallpapers
     fi
 fi
+read -p "Do you want to copy only the sfw wallpapers? [y/N]" -n 1 -r
+echo ""
+echo ""
+if [[ ! $REPLY =~ ^[Yy]$ ]]
+then
+    CopyNsfw=true
+else
+    CopyNsfw=false
+fi
 
 if [ "$CopyWallpapers" = true ]; then
-    read -p "Do you want to copy only the sfw wallpapers? [y/N]" -n 1 -r
-    echo ""
-    echo ""
-    if [[ ! $REPLY =~ ^[Yy]$ ]]
-    then
-        CopyNsfw=true
-    else
-        CopyNsfw=false
-    fi
     #copy wallpapers x:9
     if [ -d ./16-9 ]; then
         cp -r ./16-9 $HOME/Pictures/wallpapers/
@@ -341,6 +339,11 @@ if [ "$CopyWallpapers" = true ]; then
     fi
 fi
 
+# -------------------------
+# 4️⃣ FINAL MESSAGE
+# -------------------------
+
+
 if [ "$UseXrandr" = true ]; then
     echo "Installation complete."
     echo ""
@@ -349,6 +352,8 @@ if [ "$UseXrandr" = true ]; then
     echo "You can run $HOME/.config/WallpaperChanger/WallpaperRandomAutoXrandr.sh to start the automatic random wallpaper changer every 30min (if you want to change the interval edit the script)"
     echo ""
     echo "You can apply a random wallpaper with $HOME/.config/WallpaperChanger/WallpaperRandomSelectXrandr.sh"
+    echo ""
+    echo "If you copied the nsfw wallpapers you can also use $HOME/.config/WallpaperChanger/WallpaperRandomAutoXrandrSFW.sh and $HOME/.config/WallpaperChanger/WallpaperRandomSelectXrandrSFW.sh to only apply sfw wallpapers"
     echo ""
     echo "In all cases the wallpaper will be applied to all your displays with the correct aspect ratio and the dominant color will be applied to your openrgb supported devices. If you have any issues please open an issue on the github repository"
 else
@@ -359,6 +364,8 @@ else
     echo "You can run $HOME/.config/WallpaperChanger/WallpaperRandomAuto.sh to start the automatic random wallpaper changer every 30min (if you want to change the interval edit the script)"
     echo ""
     echo "You can apply a random wallpaper with $HOME/.config/WallpaperChanger/WallpaperRandomSelect.sh"
+    echo ""
+    echo "If you copied the nsfw wallpapers you can also use $HOME/.config/WallpaperChanger/WallpaperRandomAutoSFW.sh and $HOME/.config/WallpaperChanger/WallpaperRandomSelectSFW.sh to only apply sfw wallpapers"
     echo ""
     echo "In all cases the wallpaper will be applied to all your displays with the correct aspect ratio and the dominant color will be applied to your openrgb supported devices. If you have any issues please open an issue on the github repository"
 fi

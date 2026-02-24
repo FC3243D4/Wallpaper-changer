@@ -1,8 +1,9 @@
 param(
-    [string]$BasePath = "C:\Users\colac\Pictures\wallpapers",
+    [string]$BasePath = "$env:USERPROFILE\Pictures\wallpapers",
     [string]$WallpaperEngineExe = "C:\Program Files (x86)\Steam\steamapps\common\wallpaper_engine\wallpaper64.exe",
     [string]$CacheFile = "$env:LOCALAPPDATA\wallpaper_cache.json",
     [string]$LastFile = "$env:LOCALAPPDATA\wallpaper_last.txt"
+    [string]$DominantColorScript = "$env:USERPROFILE\wallpaperScripts\getDominantColor.ps1"
 )
 
 # -------------------------
@@ -99,18 +100,25 @@ for ($i=0;$i -lt $monitors.Count;$i++){
 }
 
 # -------------------------
-# PRIMARY MONITOR WALLFILE
+# 5️⃣ PRIMARY MONITOR WALLFILE AND DOMINANT COLOR FOR RGB
 # -------------------------
-$primaryMonitor = $monitors | Where-Object { $_.Primary }
+$openrgbExe = "C:\Program Files\OpenRGB\OpenRGB.exe"
 
-$width  = $primaryMonitor.Bounds.Width
-$height = $primaryMonitor.Bounds.Height
+if (-not (Test-Path $openrgbExe)) {
+    Write-Host "OpenRGB not found at $openrgbExe. Skipping RGB color sync." -ForegroundColor Yellow
+    exit 0
+}
+else {
+    Write-Host "OpenRGB found. Proceeding with RGB color sync..." -ForegroundColor Green
+    $primaryMonitor = $monitors | Where-Object { $_.Primary }
 
-$availableFolders = Get-ChildItem $BasePath -Directory | Select-Object -Expand Name
-$ratioFolder = Get-AspectFolder $width $height $availableFolders
+    $width  = $primaryMonitor.Bounds.Width
+    $height = $primaryMonitor.Bounds.Height
 
-$primaryWallFile = "$BasePath\$ratioFolder\$relativePath"
+    $availableFolders = Get-ChildItem $BasePath -Directory | Select-Object -Expand Name
+    $ratioFolder = Get-AspectFolder $width $height $availableFolders
 
-$dominantScript = "C:\Users\colac\Documents\wallpaper\script-windows\getDominantColor.ps1"
+    $primaryWallFile = "$BasePath\$ratioFolder\$relativePath"
 
-powershell.exe -ExecutionPolicy Bypass -File $dominantScript "$primaryWallFile"
+    powershell.exe -ExecutionPolicy Bypass -File $DominantColorScript "$primaryWallFile"
+}

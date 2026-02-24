@@ -20,24 +20,20 @@ expand collection
       - [ ] 10:21
       - [ ] 10:32
       - [ ] 2:3
-- [x] implement aspect ratio checker for windows as well as rgb sync
-- [ ] add Windows install script
-- [ ] add fallback to closest aspect ratio on Linux 
+- [x] implement aspect ratio checker for windows as well as rgb sync with [OpenRGB](https://openrgb.org/)
+- [x] add Windows install script
+- [x] add fallback to closest aspect ratio on Linux 
 
 # Installation
 
 ## Linux
 make sure that the install.sh file is executable and run it
 ```
-chmod +x install.sh
-./install.sh
+chmod +x install-Linux.sh
+./install-Linux.sh
 ```
 
 ## Windows
- - Make sure you installed wallpaper engine through steam on your C drive
- - Copy the files from script-windows into C:\Users\<Your username>\wallpaperScripts, you can see what's your C:\User\<Your Username> by opening a CMD windows and running
-   ```
-   echo %USERPROFILE%
-   ```
- - Copy the wallpapers into the C:\Users\<Your username>\Pictures\wallpapers folder by copying the aspect ratios folder into it, if you want to add the nsfw variants just copy the aspect ratios folder inside the nsfw folder into C:\Users\<Your username>\Pictures\wallpapers as well
+ - make sure you installed [wallpaper engine through steam](https://store.steampowered.com/app/431960/Wallpaper_Engine/) on your C drive, if not the script will fail
+ - execute the install script by right clicking it and selecting "Run with PowerShell"
 

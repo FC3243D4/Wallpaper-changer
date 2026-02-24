@@ -152,24 +152,24 @@ fi
 if [ "$CopyScripts" = true ]; then
     #copy correct scripts based on display utility availability
     if [ "$UseXrandr" = true ]; then
-        cp ./scripts/WallpaperAspectRatioXrandr.sh $HOME/.config/WallpaperChanger/
-        cp ./scripts/WallpaperRandomSelectXrandr.sh $HOME/.config/WallpaperChanger/
-        cp ./scripts/WallpaperRandomSelectXrandrSFW.sh $HOME/.config/WallpaperChanger/
-        cp ./scripts/WallpaperMenutXrandr.sh $HOME/.config/WallpaperChanger/
-        cp ./scripts/WallpaperRandomAutoXrandr.sh $HOME/.config/WallpaperChanger/
-        cp ./scripts/WallpaperRandomAutoXrandrSFW.sh $HOME/.config/WallpaperChanger/
+        cp ./scripts-linux/WallpaperAspectRatioXrandr.sh $HOME/.config/WallpaperChanger/
+        cp ./scripts-linux/WallpaperRandomSelectXrandr.sh $HOME/.config/WallpaperChanger/
+        cp ./scripts-linux/WallpaperRandomSelectXrandrSFW.sh $HOME/.config/WallpaperChanger/
+        cp ./scripts-linux/WallpaperMenutXrandr.sh $HOME/.config/WallpaperChanger/
+        cp ./scripts-linux/WallpaperRandomAutoXrandr.sh $HOME/.config/WallpaperChanger/
+        cp ./scripts-linux/WallpaperRandomAutoXrandrSFW.sh $HOME/.config/WallpaperChanger/
     else
-        cp ./scripts/WallpaperAspectRatio.sh $HOME/.config/WallpaperChanger/
-        cp ./scripts/WallpaperRandomSelect.sh $HOME/.config/WallpaperChanger/
-        cp ./scripts/WallpaperRandomSelectSFW.sh $HOME/.config/WallpaperChanger/
-        cp ./scripts/WallpaperMenu.sh $HOME/.config/WallpaperChanger/
-        cp ./scripts/WallpaperRandomAuto.sh $HOME/.config/WallpaperChanger/
-        cp ./scripts/WallpaperRandomAutoSFW.sh $HOME/.config/WallpaperChanger/
+        cp ./scripts-linux/WallpaperAspectRatio.sh $HOME/.config/WallpaperChanger/
+        cp ./scripts-linux/WallpaperRandomSelect.sh $HOME/.config/WallpaperChanger/
+        cp ./scripts-linux/WallpaperRandomSelectSFW.sh $HOME/.config/WallpaperChanger/
+        cp ./scripts-linux/WallpaperMenu.sh $HOME/.config/WallpaperChanger/
+        cp ./scripts-linux/WallpaperRandomAuto.sh $HOME/.config/WallpaperChanger/
+        cp ./scripts-linux/WallpaperRandomAutoSFW.sh $HOME/.config/WallpaperChanger/
     fi
     #copy display utility agnostic scripts
-    cp ./scripts/AspectRatioChecker.sh $HOME/.config/WallpaperChanger/
-    cp ./scripts/WallpaperApplicator.sh $HOME/.config/WallpaperChanger/
-    cp ./scripts/dominantcolor $HOME/.config/WallpaperChanger/
+    cp ./scripts-linux/AspectRatioChecker.sh $HOME/.config/WallpaperChanger/
+    cp ./scripts-linux/WallpaperApplicator.sh $HOME/.config/WallpaperChanger/
+    cp ./scripts-linux/dominantcolor $HOME/.config/WallpaperChanger/
 
     #make them all executables
     chmod +x $HOME/.config/WallpaperChanger/*

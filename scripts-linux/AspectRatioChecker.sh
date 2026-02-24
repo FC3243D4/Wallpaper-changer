@@ -3,33 +3,35 @@
 # $1 = width
 # $2 = height
 
-# Calculate actual aspect ratio
-actual_ratio=$(awk "BEGIN {printf \"%.2f\", $1/$2}")
+actual_ratio=$(awk "BEGIN {print $1/$2}")
+echo "Actual aspect ratio: $actual_ratio"
 
-# Define known ratios
 declare -A ratios=(
-    [1.77]="16-9"
-    #[2.33]="21-9"
-    [3.55]="32-9"
-    #[1.33]="4-3"
-    [1.60]="16-10"
-    #[2.10]="21-10"
-    #[3.20]="32-10"
-    #[1.50]="3-2"
-    #[0.56]="9-16"
-    #[0.42]="9-21"
-    #[0.28]="9-32"
-    #[0.75]="3-4"
-    #[0.62]="10-16"
-    #[0.48]="10-21"
-    #[0.31]="10-32"
-    #[0.66]="2-3"
+    [1.777777]="16-9"
+    [2.333333]="21-9"
+    [3.555555]="32-9"
+    [1.333333]="4-3"
+    [1.6]="16-10"
+    [2.1]="21-10"
+    [3.2]="32-10"
+    [1.5]="3-2"
+    [0.5625]="9-16"
+    [0.428571]="9-21"
+    [0.28125]="9-32"
+    [0.75]="3-4"
+    [0.625]="10-16"
+    [0.47619]="10-21"
+    [0.3125]="10-32"
+    [0.666666]="2-3"
 )
 
-# Find closest ratio
-closest_key=$(for key in "${!ratios[@]}"; do
-    echo "$key"
-done | awk -v target="$actual_ratio" '{print ($0-target)^2, $0}' | sort -n | head -1 | awk '{print $2}')
+closest_key=$(
+for key in "${!ratios[@]}"; do
+    awk -v a="$actual_ratio" -v b="$key" 'BEGIN{
+        d=a-b; if(d<0)d=-d;
+        printf "%.12f %s\n", d, b
+    }'
+done | sort -n | head -1 | awk '{print $2}'
+)
 
 echo "$HOME/Pictures/wallpapers/${ratios[$closest_key]}"
-exit 0

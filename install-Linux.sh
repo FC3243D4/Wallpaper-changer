@@ -188,17 +188,18 @@ else
         mkdir $HOME/Pictures/wallpapers
     fi
 fi
-read -p "Do you want to copy only the sfw wallpapers? [y/N]" -n 1 -r
-echo ""
-echo ""
-if [[ ! $REPLY =~ ^[Yy]$ ]]
-then
-    CopyNsfw=true
-else
-    CopyNsfw=false
-fi
+
 
 if [ "$CopyWallpapers" = true ]; then
+    read -p "Do you want to copy only the sfw wallpapers? [y/N]" -n 1 -r
+    echo ""
+    echo ""
+    if [[ ! $REPLY =~ ^[Yy]$ ]]
+    then
+        CopyNsfw=true
+    else
+        CopyNsfw=false
+    fi
     #copy wallpapers x:9
     if [ -d ./16-9 ]; then
         cp -r ./16-9 $HOME/Pictures/wallpapers/

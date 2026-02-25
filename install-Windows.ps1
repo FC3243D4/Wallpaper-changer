@@ -13,16 +13,24 @@ Write-Host "Wallpaper Engine found. Proceeding with installation..." -Foreground
 
 # Copy script-windows to wallpaperScripts
 $sourceScripts = ".\script-windows"
-$destScripts = "$env:USERPROFILE\wallpaperScripts"
+$destScripts = "$env:USERPROFILE\Documents\wallpaperScripts"
 
-if (Test-Path $sourceScripts) {
-    Copy-Item -Path $sourceScripts -Destination $destScripts -Recurse -Force
-    Write-Host "Scripts copied to $destScripts" -ForegroundColor Green
+if (Test-Path $destScripts) {
+    Copy-Item -Path "$sourceScripts\*" -Destination $destScripts -Recurse -Force
+    Write-Host "Contents of script-windows copied to $destScripts" -ForegroundColor Green
 } else {
     New-Item -ItemType Directory -Force -Path $destScripts
-    Write-Host "Directory created at $destScripts and copied scripts there." -ForegroundColor Green
-
+    Copy-Item -Path "$sourceScripts\*" -Destination $destScripts -Recurse -Force
+    Write-Host "Directory created at $destScripts and copied contents of script-windows there." -ForegroundColor Green
 }
+
+#cretes shortcut to run hotkey listener from login
+$startup = [Environment]::GetFolderPath("Startup")
+
+$source = "$destScripts\wallpaperHotkey.ahk"
+$dest   = Join-Path $startup "wallpaperHotkey.ahk"
+
+cmd /c mklink /H "$dest" "$source"
 
 # Check and create Pictures folder
 $picturesPath = "$env:USERPROFILE\Pictures"
@@ -49,7 +57,7 @@ if (-not (Test-Path $picturesPath)) {
 $includeNSFW = Read-Host "Include NSFW wallpapers? (y/n)"
 
 # Copy wallpaper folders
-$aspectRatios = @("16-9", "32-9", "16-10")
+$aspectRatios = @("16-9", "32-9", "16-10", "21-9")
 foreach ($ratio in $aspectRatios) {
     $source = ".\$ratio"
     if (Test-Path $source) {
@@ -60,7 +68,7 @@ foreach ($ratio in $aspectRatios) {
 
 # Copy NSFW if requested
 if ($includeNSFW -eq 'y') {
-    $nsfwSource = ".\nsfw"
+    $nsfwSource = ".\nsfw\*"
     if (Test-Path $nsfwSource) {
         Copy-Item -Path $nsfwSource -Destination "$wallpapersPath\" -Recurse -Force
         Write-Host "Copied NSFW wallpapers." -ForegroundColor Green

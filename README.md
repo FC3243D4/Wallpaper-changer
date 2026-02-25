@@ -5,7 +5,7 @@ expand collection
    - [ ] horizonltal
      - [x] 16:9
      - [x] 32:9 
-     - [ ] 21:9
+     - [x] 21:9
      - [ ] 4:3
      - [x] 16:10
      - [ ] 21:10
@@ -13,12 +13,12 @@ expand collection
      - [ ] 3:2
     - [ ] vertical
       - [ ] 9:16
-      - [ ] 9:21
-      - [ ] 9:32
+      - [ ] ~~9:21~~
+      - [ ] ~~9:32~~
       - [ ] 3:4
       - [ ] 10:16
-      - [ ] 10:21
-      - [ ] 10:32
+      - [ ] ~~10:21~~
+      - [ ] ~~10:32~~
       - [ ] 2:3
 - [x] implement aspect ratio checker for windows as well as rgb sync with [OpenRGB](https://openrgb.org/)
 - [x] add Windows install script
@@ -37,5 +37,11 @@ any other dependency will be checked by the script and it will inform you if the
 
 ## Windows
  - make sure you installed [wallpaper engine through steam](https://store.steampowered.com/app/431960/Wallpaper_Engine/) on your C drive, if not the script will fail
- - execute the install script by right clicking it and selecting "Run with PowerShell"
+ - if you also walt to use the hotkey to run the script be sure to have [autohotkey](https://www.autohotkey.com/) installed
+ - go into the folder where you cloned the repo
+ - open a cmd windows there and run 
+   ```
+   powershell.exe -ExecutionPolicy Bypass -File .\install-Windows.ps1
+   ```
+ - next either start manually the hotkey by going into Documents\wallpaperScripts and double click on it or logout and login again ad it will start automatically
 

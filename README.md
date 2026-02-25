@@ -26,6 +26,8 @@ expand collection
 
 # Installation
 
+On both OSs if you wish to automatically set the color of your rgb you have to use [OpenRGB](https://openrgb.org/)
+
 ## Linux
 make sure that the install.sh file is executable and run it
 ```

@@ -59,20 +59,17 @@ $includeNSFW = Read-Host "Include NSFW wallpapers? (y/n)"
 # Copy wallpaper folders
 $aspectRatios = @("16-9", "32-9", "16-10", "21-9")
 foreach ($ratio in $aspectRatios) {
-    $source = ".\$ratio"
+    $source = ".\sfw\$ratio"
     if (Test-Path $source) {
         Copy-Item -Path $source -Destination "$wallpapersPath\$ratio" -Recurse -Force
         Write-Host "Copied $ratio wallpapers." -ForegroundColor Green
     }
-}
-
-# Copy NSFW if requested
-if ($includeNSFW -eq 'y') {
-    $nsfwSource = ".\nsfw\*"
-    if (Test-Path $nsfwSource) {
-        Copy-Item -Path $nsfwSource -Destination "$wallpapersPath\" -Recurse -Force
-        Write-Host "Copied NSFW wallpapers." -ForegroundColor Green
+    if($includeNSFW -eq 'y') {
+        $nsfwSource = ".\nsfw\$ratio"
+        if (Test-Path $nsfwSource) {
+            Copy-Item -Path $nsfwSource -Destination "$wallpapersPath\$ratio\" -Recurse -Force
+            Write-Host "Copied NSFW $ratio wallpapers." -ForegroundColor Green
+        }
     }
 }
-
 Write-Host "Installation complete!" -ForegroundColor Green

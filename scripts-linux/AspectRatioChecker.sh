@@ -4,7 +4,6 @@
 # $2 = height
 
 actual_ratio=$(awk "BEGIN {print $1/$2}")
-echo "Actual aspect ratio: $actual_ratio"
 
 declare -A ratios=(
     [1.777777]="16-9"

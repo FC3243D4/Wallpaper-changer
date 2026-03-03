@@ -5,24 +5,30 @@
 
 actual_ratio=$(awk "BEGIN {print $1/$2}")
 
-declare -A ratios=(
-    [1.777777]="16-9"
-    [2.333333]="21-9"
-    [3.555555]="32-9"
-    #[1.333333]="4-3"
-    [1.6]="16-10"
-    #[2.1]="21-10"
-    #[3.2]="32-10"
-    #[1.5]="3-2"
-    #[0.5625]="9-16"
-    #[0.428571]="9-21"
-    #[0.28125]="9-32"
-    #[0.75]="3-4"
-    #[0.625]="10-16"
-    #[0.47619]="10-21"
-    #[0.3125]="10-32"
-    #[0.666666]="2-3"
-)
+declare -A ratios
+
+cache_file="$HOME/.cache/wallpaper_ratios.cache"
+cache_dir=$(dirname "$cache_file")
+mkdir -p "$cache_dir"
+
+if [[ -f "$cache_file" ]]; then
+    while IFS='=' read -r key value; do
+        ratios[$key]=$value
+    done < "$cache_file"
+else
+    for dir in "$HOME/Pictures/wallpapers/"*; do
+        dir_name=${dir##*/}
+        width=${dir_name%%-*}
+        height=${dir_name#*-}
+        height=${height%%-*}
+        ratio=$(awk "BEGIN {print $width/$height}")
+        ratios[$ratio]=$dir_name/
+    done
+    
+    for key in "${!ratios[@]}"; do
+        echo "$key=${ratios[$key]}" >> "$cache_file"
+    done
+fi
 
 closest_key=$(
 for key in "${!ratios[@]}"; do

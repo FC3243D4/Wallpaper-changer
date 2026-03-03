@@ -157,7 +157,6 @@ if [ "$CopyScripts" = true ]; then
         cp ./scripts-linux/WallpaperRandomSelectXrandrSFW.sh $HOME/.config/WallpaperChanger/
         cp ./scripts-linux/WallpaperMenutXrandr.sh $HOME/.config/WallpaperChanger/
         cp ./scripts-linux/WallpaperRandomAutoXrandr.sh $HOME/.config/WallpaperChanger/
-        cp ./scripts-linux/WallpaperRandomAutoXrandrSFW.sh $HOME/.config/WallpaperChanger/
     else
         cp ./scripts-linux/WallpaperAspectRatio.sh $HOME/.config/WallpaperChanger/
         cp ./scripts-linux/WallpaperRandomSelect.sh $HOME/.config/WallpaperChanger/
@@ -203,6 +202,24 @@ if [ "$CopyWallpapers" = true ]; then
     else
         CopyNsfw=false
     fi
+
+    if [ "$CopyNsfw" = true ]; then
+        if [ "$CopyScripts" = true ]; then
+            echo "Since you chose to copy the nsfw wallpapers, the scripts that only apply sfw/nsfw wallpapers will also be copied. If you want to use them, make sure to select sfw wallpapers in the menu or use the correct random wallpaper scripts."
+            echo ""
+            if [ "$UseXrandr" = true ]; then
+                cp ./scripts-linux/WallpaperRandomAutoXrandrSFW.sh $HOME/.config/WallpaperChanger/
+                cp ./scripts-linux/WallpaperRandomSelectXrandrSFW.sh $HOME/.config/WallpaperChanger/
+                cp ./scripts-linux/WallpaperRandomAutoXrandrNSFW.sh $HOME/.config/WallpaperChanger/
+                cp ./scripts-linux/WallpaperRandomSelectXrandrNSFW.sh $HOME/.config/WallpaperChanger/
+            else
+                cp ./scripts-linux/WallpaperRandomAutoSFW.sh $HOME/.config/WallpaperChanger/
+                cp ./scripts-linux/WallpaperRandomSelectSFW.sh $HOME/.config/WallpaperChanger/
+                cp ./scripts-linux/WallpaperRandomAutoNSFW.sh $HOME/.config/WallpaperChanger/
+                cp ./scripts-linux/WallpaperRandomSelectNSFW.sh $HOME/.config/WallpaperChanger/
+            fi
+        fi
+
     #copy wallpapers x:9
     if [ -d ./sfw/16-9 ]; then
         cp -r ./sfw/16-9 $HOME/Pictures/wallpapers/
@@ -357,7 +374,9 @@ if [ "$UseXrandr" = true ]; then
     echo ""
     echo "You can apply a random wallpaper with $HOME/.config/WallpaperChanger/WallpaperRandomSelectXrandr.sh"
     echo ""
-    echo "If you copied the nsfw wallpapers you can also use $HOME/.config/WallpaperChanger/WallpaperRandomAutoXrandrSFW.sh and $HOME/.config/WallpaperChanger/WallpaperRandomSelectXrandrSFW.sh to only apply sfw wallpapers"
+    if [ "$CopyNsfw" = true && "$CopyScripts" = true ]; then
+        echo "Since you copied the nsfw wallpapers you can also use $HOME/.config/WallpaperChanger/WallpaperRandomAutoXrandrSFW.sh and $HOME/.config/WallpaperChanger/WallpaperRandomSelectXrandrSFW.sh to only apply sfw wallpapers as well as $HOME/.config/WallpaperChanger/WallpaperRandomAutoXrandrNSFW.sh and $HOME/.config/WallpaperChanger/WallpaperRandomSelectXrandrNSFW.sh to only apply nsfw wallpapers"
+    fi
     echo ""
     echo "On its first run, the script will create a cache file with the aspect ratios of your wallpapers to speed up the process. If you add or remove wallpaper ratios, make sure to delete the cache file at $HOME/.cache/wallpaper_ratios.cache to ensure the script works correctly."
     echo ""
@@ -371,9 +390,12 @@ else
     echo ""
     echo "You can apply a random wallpaper with $HOME/.config/WallpaperChanger/WallpaperRandomSelect.sh"
     echo ""
-    echo "If you copied the nsfw wallpapers you can also use $HOME/.config/WallpaperChanger/WallpaperRandomAutoSFW.sh and $HOME/.config/WallpaperChanger/WallpaperRandomSelectSFW.sh to only apply sfw wallpapers"
-    echo ""
-    echo "On its first run, the script will create a cache file with the aspect ratios of your wallpapers to speed up the process. If you add or remove wallpaper ratios, make sure to delete the cache file at $HOME/.cache/wallpaper_ratios.cache to ensure the script works correctly."
+    if [ "$CopyNsfw" = true && "$CopyScripts" = true ]; then
+        echo "Since you copied the nsfw wallpapers you can also use $HOME/.config/WallpaperChanger/WallpaperRandomAutoSFW.sh and $HOME/.config/WallpaperChanger/WallpaperRandomSelectSFW.sh to only apply sfw wallpapers as well as $HOME/.config/WallpaperChanger/WallpaperRandomAutoNSFW.sh and $HOME/.config/WallpaperChanger/WallpaperRandomSelectNSFW.sh to only apply nsfw wallpapers"
+    fi
     echo ""
     echo "In all cases the wallpaper will be applied to all your displays with the correct aspect ratio and the dominant color will be applied to your openrgb supported devices. If you have any issues please open an issue on the github repository"
+    echo ""
+    echo "On its first run, the script will create a cache file with the aspect ratios of your wallpapers to speed up the process. If you add or remove wallpaper ratios, make sure to delete the cache file at $HOME/.cache/wallpaper_ratios.cache to ensure the script detects them correctly."
+    echo ""
 fi

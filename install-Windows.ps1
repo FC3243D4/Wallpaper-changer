@@ -15,14 +15,16 @@ Write-Host "Wallpaper Engine found. Proceeding with installation..." -Foreground
 $sourceScripts = ".\script-windows"
 $destScripts = "$env:USERPROFILE\Documents\wallpaperScripts"
 
-if (Test-Path $destScripts) {
-    Copy-Item -Path "$sourceScripts\*" -Destination $destScripts -Recurse -Force
-    Write-Host "Contents of script-windows copied to $destScripts" -ForegroundColor Green
-} else {
-    New-Item -ItemType Directory -Force -Path $destScripts
-    Copy-Item -Path "$sourceScripts\*" -Destination $destScripts -Recurse -Force
-    Write-Host "Directory created at $destScripts and copied contents of script-windows there." -ForegroundColor Green
+if (-not (Test-Path $destScripts)) {
+    New-Item -ItemType Directory -Path $destScripts -Force | Out-Null
+    Write-Host "Directory created at $destScripts" -ForegroundColor Green
 }
+
+Copy-Item -Path "$sourceScripts\clearCache-Windows.ps1" -Destination $destScripts -Recurse -Force
+Copy-Item -Path "$sourceScripts\getDominantColor.ps1" -Destination $destScripts -Recurse -Force
+Copy-Item -Path "$sourceScripts\setRandomWallpaper-WE.ps1" -Destination $destScripts -Recurse -Force
+Copy-Item -Path "$sourceScripts\wallpaperHotkey.ahk" -Destination $destScripts -Recurse -Force
+Write-Host "Contents of script-windows copied to $destScripts" -ForegroundColor Green
 
 #cretes shortcut to run hotkey listener from login
 $startup = [Environment]::GetFolderPath("Startup")
@@ -76,10 +78,15 @@ if ($copyWallpapers -ne 'y') {
             $nsfwSource = ".\nsfw\$ratio"
             if (Test-Path $nsfwSource) {
                 Copy-Item -Path $nsfwSource -Destination "$wallpapersPath\$ratio\" -Recurse -Force
-                Write-Host "Copied NSFW $ratio wallpapers." -ForegroundColor Green
+                Copy-Item -Path "$sourceScripts\setRandomWallpaper-WE-NSFW.ps1" -Destination $destScripts -Recurse -Force
+                Copy-Item -Path "$sourceScripts\setRandomWallpaper-WE-SFW.ps1" -Destination $destScripts -Recurse -Force
+                Write-Host "Copied NSFW $ratio wallpapers. and extra scripts." -ForegroundColor Green
             }
         }
     }
     Write-Host "Wallpapers copied to $wallpapersPath, on the script's first run they will be cached in $cachePath, if you ever want to regenerate the cache, delete $cachePath manually or using the script in $destScripts and run the script again." -ForegroundColor Green
+    if($includeNSFW -eq 'y') {
+        Write-Host "If you want to only use sfw or nsfw wallpapers, you can use the dedicated scripts in $destScripts to do so." -ForegroundColor Green
+    }
 }
 Write-Host "Installation complete!" -ForegroundColor Green

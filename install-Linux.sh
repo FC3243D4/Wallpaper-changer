@@ -374,7 +374,7 @@ if [ "$UseXrandr" = true ]; then
     echo ""
     echo "You can apply a random wallpaper with $HOME/.config/WallpaperChanger/WallpaperRandomSelectXrandr.sh"
     echo ""
-    if [ "$CopyNsfw" = true && "$CopyScripts" = true ]; then
+    if [ "$CopyNsfw" = true ] && [ "$CopyScripts" = true ]; then
         echo "Since you copied the nsfw wallpapers you can also use $HOME/.config/WallpaperChanger/WallpaperRandomAutoXrandrSFW.sh and $HOME/.config/WallpaperChanger/WallpaperRandomSelectXrandrSFW.sh to only apply sfw wallpapers as well as $HOME/.config/WallpaperChanger/WallpaperRandomAutoXrandrNSFW.sh and $HOME/.config/WallpaperChanger/WallpaperRandomSelectXrandrNSFW.sh to only apply nsfw wallpapers"
     fi
     echo ""
@@ -390,7 +390,7 @@ else
     echo ""
     echo "You can apply a random wallpaper with $HOME/.config/WallpaperChanger/WallpaperRandomSelect.sh"
     echo ""
-    if [ "$CopyNsfw" = true && "$CopyScripts" = true ]; then
+    if [ "$CopyNsfw" = true ] && [ "$CopyScripts" = true ]; then
         echo "Since you copied the nsfw wallpapers you can also use $HOME/.config/WallpaperChanger/WallpaperRandomAutoSFW.sh and $HOME/.config/WallpaperChanger/WallpaperRandomSelectSFW.sh to only apply sfw wallpapers as well as $HOME/.config/WallpaperChanger/WallpaperRandomAutoNSFW.sh and $HOME/.config/WallpaperChanger/WallpaperRandomSelectNSFW.sh to only apply nsfw wallpapers"
     fi
     echo ""

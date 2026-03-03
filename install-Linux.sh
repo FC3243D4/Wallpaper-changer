@@ -202,22 +202,21 @@ if [ "$CopyWallpapers" = true ]; then
         CopyNsfw=false
     fi
 
-    if [ "$CopyNsfw" = true ]; then
-        if [ "$CopyScripts" = true ]; then
-            echo "Since you chose to copy the nsfw wallpapers, the scripts that only apply sfw/nsfw wallpapers will also be copied. If you want to use them, make sure to select sfw wallpapers in the menu or use the correct random wallpaper scripts."
-            echo ""
-            if [ "$UseXrandr" = true ]; then
-                cp ./scripts-linux/WallpaperRandomAutoXrandrSFW.sh $HOME/.config/WallpaperChanger/
-                cp ./scripts-linux/WallpaperRandomSelectXrandrSFW.sh $HOME/.config/WallpaperChanger/
-                cp ./scripts-linux/WallpaperRandomAutoXrandrNSFW.sh $HOME/.config/WallpaperChanger/
-                cp ./scripts-linux/WallpaperRandomSelectXrandrNSFW.sh $HOME/.config/WallpaperChanger/
-            else
-                cp ./scripts-linux/WallpaperRandomAutoSFW.sh $HOME/.config/WallpaperChanger/
-                cp ./scripts-linux/WallpaperRandomSelectSFW.sh $HOME/.config/WallpaperChanger/
-                cp ./scripts-linux/WallpaperRandomAutoNSFW.sh $HOME/.config/WallpaperChanger/
-                cp ./scripts-linux/WallpaperRandomSelectNSFW.sh $HOME/.config/WallpaperChanger/
-            fi
+    if [ "$CopyNsfw" = true ] && [ "$CopyScripts" = true ]; then
+        echo "Since you chose to copy the nsfw wallpapers, the scripts that only apply sfw/nsfw wallpapers will also be copied. If you want to use them, make sure to select sfw wallpapers in the menu or use the correct random wallpaper scripts."
+        echo ""
+        if [ "$UseXrandr" = true ]; then
+            cp ./scripts-linux/WallpaperRandomAutoXrandrSFW.sh $HOME/.config/WallpaperChanger/
+            cp ./scripts-linux/WallpaperRandomSelectXrandrSFW.sh $HOME/.config/WallpaperChanger/
+            cp ./scripts-linux/WallpaperRandomAutoXrandrNSFW.sh $HOME/.config/WallpaperChanger/
+            cp ./scripts-linux/WallpaperRandomSelectXrandrNSFW.sh $HOME/.config/WallpaperChanger/
+        else
+            cp ./scripts-linux/WallpaperRandomAutoSFW.sh $HOME/.config/WallpaperChanger/
+            cp ./scripts-linux/WallpaperRandomSelectSFW.sh $HOME/.config/WallpaperChanger/
+            cp ./scripts-linux/WallpaperRandomAutoNSFW.sh $HOME/.config/WallpaperChanger/
+            cp ./scripts-linux/WallpaperRandomSelectNSFW.sh $HOME/.config/WallpaperChanger/
         fi
+        chmod +x $HOME/.config/WallpaperChanger/*
     fi
 
     #copy wallpapers x:9

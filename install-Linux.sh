@@ -191,6 +191,9 @@ fi
 
 
 if [ "$CopyWallpapers" = true ]; then
+    if [ -f "$HOME/.cache/wallpaper_ratios.cache" ]; then
+        rm "$HOME/.cache/wallpaper_ratios.cache"
+    fi
     read -p "Do you want to copy only the sfw wallpapers? [y/N]" -n 1 -r
     echo ""
     echo ""
@@ -356,6 +359,8 @@ if [ "$UseXrandr" = true ]; then
     echo ""
     echo "If you copied the nsfw wallpapers you can also use $HOME/.config/WallpaperChanger/WallpaperRandomAutoXrandrSFW.sh and $HOME/.config/WallpaperChanger/WallpaperRandomSelectXrandrSFW.sh to only apply sfw wallpapers"
     echo ""
+    echo "On its first run, the script will create a cache file with the aspect ratios of your wallpapers to speed up the process. If you add or remove wallpaper ratios, make sure to delete the cache file at $HOME/.cache/wallpaper_ratios.cache to ensure the script works correctly."
+    echo ""
     echo "In all cases the wallpaper will be applied to all your displays with the correct aspect ratio and the dominant color will be applied to your openrgb supported devices. If you have any issues please open an issue on the github repository"
 else
     echo "Installation complete."
@@ -367,6 +372,8 @@ else
     echo "You can apply a random wallpaper with $HOME/.config/WallpaperChanger/WallpaperRandomSelect.sh"
     echo ""
     echo "If you copied the nsfw wallpapers you can also use $HOME/.config/WallpaperChanger/WallpaperRandomAutoSFW.sh and $HOME/.config/WallpaperChanger/WallpaperRandomSelectSFW.sh to only apply sfw wallpapers"
+    echo ""
+    echo "On its first run, the script will create a cache file with the aspect ratios of your wallpapers to speed up the process. If you add or remove wallpaper ratios, make sure to delete the cache file at $HOME/.cache/wallpaper_ratios.cache to ensure the script works correctly."
     echo ""
     echo "In all cases the wallpaper will be applied to all your displays with the correct aspect ratio and the dominant color will be applied to your openrgb supported devices. If you have any issues please open an issue on the github repository"
 fi

@@ -67,6 +67,10 @@ if ($filtered.Count -eq 0) { $filtered = $files }
 
 $relativePath = Get-Random $filtered
 
+while ($relativePath -notlike "*nsfw*") {
+    $relativePath = Get-Random $filtered
+}
+
 Write-Host "Selected wallpaper: $relativePath"
 
 # -------------------------

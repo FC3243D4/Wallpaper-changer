@@ -13,7 +13,7 @@ wallpaper_path="/$wallpaper_path"
 RANDOMPICS=$wallpaper_path
 
 #chooses new image until it is different from current one
-while [[ "$RANDOMPICS" == "$wallpaper_path" || "$RANDOMPICS" == *"nsfw"* ]]
+while [[ "$RANDOMPICS" == "$wallpaper_path" || "$RANDOMPICS" != *"nsfw"* ]]
 do
     RANDOMPICS=${PICS[ $RANDOM % ${#PICS[@]} ]}
     RANDOMPICS=${RANDOMPICS#*$HOME/Pictures/wallpapers/}

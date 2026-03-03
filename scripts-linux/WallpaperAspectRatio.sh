@@ -42,7 +42,11 @@ color=$(echo $colorLine | tr -d '#')
 echo "Dominant color: #$color"
 
 #apply color to openrgb
-openrgb -c $color
-
+if ! openrgb -version &> /dev/null; then
+    echo "OpenRGB is not installed. Skipping color application."
+else
+    echo "OpenRGB detected. Applying dominant color to OpenRGB devices..."
+    openrgb -c $color
+fi
 
 

@@ -43,8 +43,11 @@ colorLine="$($HOME/.config/WallpaperChanger/dominantcolor -m 1 -n 2 -e black -p 
 color=$(echo $colorLine | tr -d '#')
 echo "Dominant color: #$color"
 
-#apply color to openrgb
-openrgb -c $color
+if ! openrgb -version &> /dev/null; then
+    echo "OpenRGB is not installed. Skipping color application."
+else
+    openrgb -c $color
+fi
 
 
 

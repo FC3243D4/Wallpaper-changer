@@ -8,11 +8,11 @@ INTERVAL=1800 #30 minutes
 while true; do
     if ! [ -z "$1" ]; then
         if [ "$1" == "nsfw" ]; then
-            $HOME/.config/WallpaperChanger/WallpaperRandomSelect.sh nsfw
+            $HOME/.config/WallpaperChanger/WallpaperApplicator.sh random nsfw
         elif [ "$1" == "sfw" ]; then
-            $HOME/.config/WallpaperChanger/WallpaperRandomSelect.sh sfw
+            $HOME/.config/WallpaperChanger/WallpaperApplicator.sh random sfw
         else
-            $HOME/.config/WallpaperChanger/WallpaperRandomSelect.sh
+            $HOME/.config/WallpaperChanger/WallpaperApplicator.sh random
         fi
     fi
     sleep $INTERVAL

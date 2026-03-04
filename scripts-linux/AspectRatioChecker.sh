@@ -3,7 +3,11 @@
 # $1 = width
 # $2 = height
 
-actual_ratio=$(awk "BEGIN {print $1/$2}")
+#get resolution width and height of display
+width=$(cut -d 'x' -f1 <<< $1)
+height=$(cut -d 'x' -f2 <<< $1)
+
+actual_ratio=$(awk "BEGIN {print $width/$height}")
 
 declare -A ratios
 

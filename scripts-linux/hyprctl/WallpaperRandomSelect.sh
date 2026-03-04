@@ -19,6 +19,14 @@ do
     RANDOMPICS=${RANDOMPICS#*$HOME/Pictures/wallpapers/}
     RANDOMPICS=$(echo "$RANDOMPICS" | sed 's,^[^/]*/,,')
     RANDOMPICS="/$RANDOMPICS"
+
+    if ! [ -z "$1" ]; then
+        if [ "$1" == "nsfw" ] && [[ "$RANDOMPICS" != *"nsfw"* ]]; then
+            RANDOMPICS=$wallpaper_path
+        elif [ "$1" == "sfw" ] && [[ "$RANDOMPICS" == *"nsfw"* ]]; then
+            RANDOMPICS=$wallpaper_path
+        fi
+    fi
 done
 
 $HOME/.config/WallpaperChanger/WallpaperAspectRatio.sh $RANDOMPICS

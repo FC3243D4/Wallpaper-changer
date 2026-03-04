@@ -152,23 +152,16 @@ fi
 if [ "$CopyScripts" = true ]; then
     #copy correct scripts based on display utility availability
     if [ "$UseXrandr" = true ]; then
-        cp ./scripts-linux/WallpaperAspectRatioXrandr.sh $HOME/.config/WallpaperChanger/
-        cp ./scripts-linux/WallpaperRandomSelectXrandr.sh $HOME/.config/WallpaperChanger/
-        cp ./scripts-linux/WallpaperRandomSelectXrandrSFW.sh $HOME/.config/WallpaperChanger/
-        cp ./scripts-linux/WallpaperMenutXrandr.sh $HOME/.config/WallpaperChanger/
-        cp ./scripts-linux/WallpaperRandomAutoXrandr.sh $HOME/.config/WallpaperChanger/
+        cp ./scripts-linux/Xrandr/* $HOME/.config/WallpaperChanger/
     else
-        cp ./scripts-linux/WallpaperAspectRatio.sh $HOME/.config/WallpaperChanger/
-        cp ./scripts-linux/WallpaperRandomSelect.sh $HOME/.config/WallpaperChanger/
-        cp ./scripts-linux/WallpaperRandomSelectSFW.sh $HOME/.config/WallpaperChanger/
-        cp ./scripts-linux/WallpaperMenu.sh $HOME/.config/WallpaperChanger/
-        cp ./scripts-linux/WallpaperRandomAuto.sh $HOME/.config/WallpaperChanger/
-        cp ./scripts-linux/WallpaperRandomAutoSFW.sh $HOME/.config/WallpaperChanger/
+        cp ./scripts-linux/hyprctl/* $HOME/.config/WallpaperChanger/
     fi
     #copy display utility agnostic scripts
     cp ./scripts-linux/AspectRatioChecker.sh $HOME/.config/WallpaperChanger/
-    cp ./scripts-linux/WallpaperApplicator.sh $HOME/.config/WallpaperChanger/
     cp ./scripts-linux/dominantcolor $HOME/.config/WallpaperChanger/
+    cp ./scripts-linux/themeRefresher.sh $HOME/.config/WallpaperChanger/
+    cp ./scripts-linux/WallpaperApplicator.sh $HOME/.config/WallpaperChanger/
+    
 
     #make them all executables
     chmod +x $HOME/.config/WallpaperChanger/*
@@ -201,23 +194,6 @@ if [ "$CopyWallpapers" = true ]; then
         CopyNsfw=true
     else
         CopyNsfw=false
-    fi
-
-    if [ "$CopyNsfw" = true ] && [ "$CopyScripts" = true ]; then
-        echo "Since you chose to copy the nsfw wallpapers, the scripts that only apply sfw/nsfw wallpapers will also be copied. If you want to use them, make sure to select sfw wallpapers in the menu or use the correct random wallpaper scripts."
-        echo ""
-        if [ "$UseXrandr" = true ]; then
-            cp ./scripts-linux/WallpaperRandomAutoXrandrSFW.sh $HOME/.config/WallpaperChanger/
-            cp ./scripts-linux/WallpaperRandomSelectXrandrSFW.sh $HOME/.config/WallpaperChanger/
-            cp ./scripts-linux/WallpaperRandomAutoXrandrNSFW.sh $HOME/.config/WallpaperChanger/
-            cp ./scripts-linux/WallpaperRandomSelectXrandrNSFW.sh $HOME/.config/WallpaperChanger/
-        else
-            cp ./scripts-linux/WallpaperRandomAutoSFW.sh $HOME/.config/WallpaperChanger/
-            cp ./scripts-linux/WallpaperRandomSelectSFW.sh $HOME/.config/WallpaperChanger/
-            cp ./scripts-linux/WallpaperRandomAutoNSFW.sh $HOME/.config/WallpaperChanger/
-            cp ./scripts-linux/WallpaperRandomSelectNSFW.sh $HOME/.config/WallpaperChanger/
-        fi
-        chmod +x $HOME/.config/WallpaperChanger/*
     fi
 
     #copy wallpapers x:9

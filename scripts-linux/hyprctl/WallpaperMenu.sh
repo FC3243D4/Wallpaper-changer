@@ -98,9 +98,6 @@ main() {
     exit 1
   fi
 
-  # Saves defaiult wallpaper for wallust/openrgb
-  ln -sf $selected_file $HOME/.config/WallpaperChanger/.current_wallpaper
-
   # Get the relative path from the wallpapers directory for generalization
   selected_file=${selected_file#*$HOME/Pictures/wallpapers/}
   selected_file=$(echo "$selected_file" | sed 's,^[^/]*/,,')

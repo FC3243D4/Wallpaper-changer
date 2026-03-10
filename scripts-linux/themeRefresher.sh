@@ -50,3 +50,12 @@ kill -SIGUSR1 $(pidof kitty)
 if pidof kded6 >/dev/null; then
     kill kded6
 fi
+
+# Check if multiple waybars are running
+waybar_count=$(pidof waybar | wc -w)
+if [ "$waybar_count" -gt 1 ]; then
+  echo "Warning: Multiple waybar instances detected ($waybar_count). Killing all..."
+  pkill -9 waybar
+  sleep 0.5
+  waybar &
+fi

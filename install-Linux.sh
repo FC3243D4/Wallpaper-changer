@@ -147,19 +147,19 @@ fi
 
 if [ ! -d "$HOME/.config/rofi" ]; then
     mkdir -p $HOME/.config/rofi
-    if [ -f "$HOME/.config/rofi/config-wallpaper.rasi" ]; then
-        echo "Rofi config for the wallpaper menu already exists. Would you like to overwrite it with the one from the repo? [y/N]"
-        read -n 1 -r
-        echo ""
-        if [[ $REPLY =~ ^[Yy]$ ]]; then
-            cp ./rofi/config-wallpaper.rasi $HOME/.config/rofi/
-        fi
-    else
-        if [ ! -d "$HOME/.config/rofi" ]; then
-            mkdir -p $HOME/.config/rofi
-        fi
+fi
+if [ -f "$HOME/.config/rofi/config-wallpaper.rasi" ]; then
+    read -p "Rofi config for the wallpaper menu already exists. Would you like to overwrite it with the one from the repo? [y/N]" -n 1 -r
+    echo ""
+    echo ""
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
         cp ./rofi/config-wallpaper.rasi $HOME/.config/rofi/
     fi
+else
+    if [ ! -d "$HOME/.config/rofi" ]; then
+        mkdir -p $HOME/.config/rofi
+    fi
+    cp ./rofi/config-wallpaper.rasi $HOME/.config/rofi/
 fi
 
 # -------------------------

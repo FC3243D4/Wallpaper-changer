@@ -60,8 +60,9 @@ if awww -v foo &> /dev/null; then
     Stop=true
 fi
 
-if ! [ -f $HOME/.config/hypr/scripts/Refresh.sh ]; then
-    echo "did not find Refresh.sh. Please make sure you installed https://github.com/JaKooLit dotfiles correctly"
+# Check if package bc exists
+if ! command -v bc &>/dev/null; then
+    echo "bc missing. Install package bc first"
     echo ""
     Stop=true
 fi
@@ -71,6 +72,15 @@ if openrgb -v foo &> /dev/null ; then
     echo ""
 fi
 
+if [ "$Stop" = true ]; then
+    echo "Installation stopped due to the above errors. Please fix them and run the script again."
+    echo ""
+    exit 1
+fi
+
+# -------------------------
+# 2️⃣ CHECK FOR EXISTING DIRECTORIES AND FILES
+# -------------------------
 if [ -d $HOME/.config/WallpaperChanger ]; then
     read -p "Directory $HOME/.config/WallpaperChanger exists. Do you want to delete it and all its content? [y/N]" -n 1 -r
     echo ""
@@ -135,14 +145,25 @@ else
     fi
 fi
 
-if [ "$Stop" = true ]; then
-    echo "Installation stopped due to the above errors. Please fix them and run the script again."
-    echo ""
-    exit 1
+if [ ! -d "$HOME/.config/rofi" ]; then
+    mkdir -p $HOME/.config/rofi
+    if [ -f "$HOME/.config/rofi/config-wallpaper.rasi" ]; then
+        echo "Rofi config for the wallpaper menu already exists. Would you like to overwrite it with the one from the repo? [y/N]"
+        read -n 1 -r
+        echo ""
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            cp ./rofi/config-wallpaper.rasi $HOME/.config/rofi/
+        fi
+    else
+        if [ ! -d "$HOME/.config/rofi" ]; then
+            mkdir -p $HOME/.config/rofi
+        fi
+        cp ./rofi/config-wallpaper.rasi $HOME/.config/rofi/
+    fi
 fi
 
 # -------------------------
-# 2️⃣ SCRIPT INSTALLATION
+# 3️⃣ SCRIPT INSTALLATION
 # -------------------------
 
 if [ "$ConfigDirExists" = false ]; then
@@ -166,7 +187,7 @@ if [ "$CopyScripts" = true ]; then
 fi
 
 # -------------------------
-# 3️⃣ WALLPAPER INSTALLATION
+# 4️⃣ WALLPAPER INSTALLATION
 # -------------------------
 
 
@@ -184,14 +205,14 @@ if [ "$CopyWallpapers" = true ]; then
     if [ -f "$HOME/.cache/wallpaper_ratios.cache" ]; then
         rm "$HOME/.cache/wallpaper_ratios.cache"
     fi
-    read -p "Do you want to copy only the sfw wallpapers? [y/N]" -n 1 -r
+    read -p "Do you want to copy the nsfw wallpapers? [y/N]" -n 1 -r
     echo ""
     echo ""
     if [[ ! $REPLY =~ ^[Yy]$ ]]
     then
-        CopyNsfw=true
-    else
         CopyNsfw=false
+    else
+        CopyNsfw=true
     fi
 
     #copy wallpapers x:9
@@ -335,7 +356,7 @@ if [ "$CopyWallpapers" = true ]; then
 fi
 
 # -------------------------
-# 4️⃣ FINAL MESSAGE
+# 5️⃣ FINAL MESSAGE
 # -------------------------
 
 echo "Installation complete."

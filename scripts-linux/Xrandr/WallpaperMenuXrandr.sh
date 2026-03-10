@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # /* ---- 💫 https://github.com/JaKooLit 💫 ---- */
-# This script for selecting wallpapers (SUPER W)
+# This script for selecting wallpapers (SUPER W) with xrandr (for non-hyprland users)
 
 # WALLPAPERS PATH
 wallDIR="$HOME/Pictures/wallpapers/16-9"
@@ -9,34 +9,27 @@ wallDIR="$HOME/Pictures/wallpapers/16-9"
 iDIR="$HOME/.config/swaync/images"
 iDIRi="$HOME/.config/swaync/icons"
 
-# Check if package bc exists
-if ! command -v bc &>/dev/null; then
-  notify-send -i "$iDIR/error.png" "bc missing" "Install package bc first"
-  exit 1
-fi
-
 # Variables
 rofi_theme="$HOME/.config/rofi/config-wallpaper.rasi"
-focused_monitor=$(hyprctl monitors -j | jq -r '.[] | select(.focused) | .name')
+main_monitor=$(xrandr | grep primary | awk '{print $1}')
 
-# Ensure focused_monitor is detected
-if [[ -z "$focused_monitor" ]]; then
+# Ensure main_monitor is detected
+if [[ -z "$main_monitor" ]]; then
   notify-send -i "$iDIR/error.png" "E-R-R-O-R" "Could not detect focused monitor"
   exit 1
 fi
 
 # Monitor details
-scale_factor=$(hyprctl monitors -j | jq -r --arg mon "$focused_monitor" '.[] | select(.name == $mon) | .scale')
-monitor_height=$(hyprctl monitors -j | jq -r --arg mon "$focused_monitor" '.[] | select(.name == $mon) | .height')
+scale_factor=1.00
+monitor_height=$(xrandr --query | awk '/ primary / {split($4,a,"x"); split(a[2],b,"+"); print b[1]}')
 
 icon_size=$(echo "scale=1; ($monitor_height * 3) / ($scale_factor * 150)" | bc)
 adjusted_icon_size=$(echo "$icon_size" | awk '{if ($1 < 15) $1 = 20; if ($1 > 25) $1 = 25; print $1}')
 rofi_override="element-icon{size:${adjusted_icon_size}%;}"
 
-# Retrieve wallpapers (both images & videos)
+# Retrieve wallpapers
 mapfile -d '' PICS < <(find -L "${wallDIR}" -type f \( \
-  -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.gif" -o \
-  -iname "*.bmp" -o -iname "*.tiff" -o -iname "*.webp" \) -print0)
+  -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png"\) -print0)
 
 RANDOM_PIC="${PICS[$((RANDOM % ${#PICS[@]}))]}"
 RANDOM_PIC_NAME=". random"
@@ -52,23 +45,7 @@ menu() {
 
   for pic_path in "${sorted_options[@]}"; do
     pic_name=$(basename "$pic_path")
-    if [[ "$pic_name" =~ \.gif$ ]]; then
-      cache_gif_image="$HOME/.cache/gif_preview/${pic_name}.png"
-      if [[ ! -f "$cache_gif_image" ]]; then
-        mkdir -p "$HOME/.cache/gif_preview"
-        magick "$pic_path[0]" -resize 1920x1080 "$cache_gif_image"
-      fi
-      printf "%s\x00icon\x1f%s\n" "$pic_name" "$cache_gif_image"
-    elif [[ "$pic_name" =~ \.(mp4|mkv|mov|webm|MP4|MKV|MOV|WEBM)$ ]]; then
-      cache_preview_image="$HOME/.cache/video_preview/${pic_name}.png"
-      if [[ ! -f "$cache_preview_image" ]]; then
-        mkdir -p "$HOME/.cache/video_preview"
-        ffmpeg -v error -y -i "$pic_path" -ss 00:00:01.000 -vframes 1 "$cache_preview_image"
-      fi
-      printf "%s\x00icon\x1f%s\n" "$pic_name" "$cache_preview_image"
-    else
       printf "%s\x00icon\x1f%s\n" "$pic_name" "$pic_path"
-    fi
   done
 }
 

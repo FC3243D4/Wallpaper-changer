@@ -61,7 +61,7 @@ fi
 # -----------------------------------------------------------------
 
 #Get connected displays and resolutions and maps them to arrays
-displays=$(hyprctl monitors | awk '/Monitor/{print}')
+displays=$(hyprctl monitors | awk '/^Monitor/{print $2}')
 mapfile -t -O 1 var < <(echo "$displays")
 
 resolutions=$(hyprctl monitors | awk '/Monitor/{getline; print}')
@@ -74,9 +74,6 @@ mapfile -t -O 1 res < <(echo "$resolutions")
 n=1
 while [[ -n ${var[$n]} ]]; do
     screen=${var[$n]}
-    screen=$(echo $screen | tr -d ' ')
-    screen=$(cut -d '(' -f1 <<< $screen)
-    screen=$(cut -d 'r' -f2 <<< $screen)
 
     resolutionAndRefreshRate=${res[$n]}
     resolutionAndRefreshRate=$(echo $resolutionAndRefreshRate | tr -d ' ')

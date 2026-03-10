@@ -29,7 +29,7 @@ rofi_override="element-icon{size:${adjusted_icon_size}%;}"
 
 # Retrieve wallpapers
 mapfile -d '' PICS < <(find -L "${wallDIR}" -type f \( \
-  -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png"\) -print0)
+  -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" \) -print0)
 
 RANDOM_PIC="${PICS[$((RANDOM % ${#PICS[@]}))]}"
 RANDOM_PIC_NAME=". random"

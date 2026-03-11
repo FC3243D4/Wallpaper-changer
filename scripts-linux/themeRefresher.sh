@@ -17,7 +17,7 @@ fi
 wallust run -s $HOME/.config/WallpaperChanger/.current_wallpaper
 
 # Kill already running processes
-_ps=(waybar rofi swaync ags)
+_ps=(rofi swaync ags)
 for _prs in "${_ps[@]}"; do
   if pidof "${_prs}" >/dev/null; then
     pkill "${_prs}"
@@ -28,12 +28,13 @@ done
 pkill qs && qs &
 
 # some process to kill
-for pid in $(pidof waybar rofi swaync ags swaybg); do
+for pid in $(pidof rofi swaync ags swaybg); do
   kill -SIGUSR1 "$pid"
   sleep 0.1
 done
 
-#Restart waybar
+#Restart waybar and kill kded6 to ensure functiin of tray module
+killall waybar
 sleep 0.5
 waybar &
 
@@ -46,16 +47,6 @@ swaync-client --reload-config
 #reload kitty
 kill -SIGUSR1 $(pidof kitty)
 
-#if kded6 is running, killing it to fix tray not appearing in waybar
-if pidof kded6 >/dev/null; then
-    kill kded6
-fi
-
-# Check if multiple waybars are running
-waybar_count=$(pidof waybar | wc -w)
-if [ "$waybar_count" -gt 1 ]; then
-  echo "Warning: Multiple waybar instances detected ($waybar_count). Killing all..."
-  pkill -9 waybar
-  sleep 0.5
-  waybar &
-fi
+sleep 2
+echo "killing kded6 to refresh system tray"
+pkill "kded6"

@@ -56,6 +56,8 @@ else
     WallpaperRelativePath=$1
 fi
 
+notify-send "Changing wallpaper" "Selected wallpaper: $WallpaperRelativePath" -t 3000
+
 # -----------------------------------------------------------------
 # 2️⃣ Get connected displays and resolutions and maps them to arrays
 # -----------------------------------------------------------------
@@ -88,6 +90,7 @@ while [[ -n ${var[$n]} ]]; do
 
     echo "Changing wallpapers on display: $screen"
     echo "with resolution: $resolution"
+    echo "and refresh rate: $refreshRate"
 
     AspectRatioFolder=$($HOME/.config/WallpaperChanger/AspectRatioChecker.sh $resolution)
     Wallpaper=$AspectRatioFolder$WallpaperRelativePath

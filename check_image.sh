@@ -1,21 +1,93 @@
 #!/usr/bin/env bash
 
+trap 'echo "Stopping..."; kill -- -$$' SIGINT SIGTERM
+
 # Default values
 TARGET_WIDTH=3840
 TARGET_HEIGHT=2160
-JOBS=$(nproc)
+#JOBS=$(($(nproc) / 5))
+JOBS=4
 BATCH=50
 
 usage() {
-  echo "Usage: $0 [directory] [width] [height]"
-  echo "Defaults: directory=., width=3840, height=2160"
-  exit 1
+  cat <<EOF
+Usage: $0 [OPTIONS] [DIRECTORY] [WIDTH] [HEIGHT]
+
+Scan images and report files that:
+- Do not match the target resolution
+- Contain transparency
+
+OPTIONS:
+  -h, --help        Show this help message and exit
+
+  --16-9            Set resolution to 3840x2160
+  --16-10           Set resolution to 3840x2400
+  --21-9            Set resolution to 5120x2160
+  --32-9            Set resolution to 7680x2160
+
+ARGS:
+  DIRECTORY         Target directory (default: current directory)
+  WIDTH             Expected width (overridden by flags)
+  HEIGHT            Expected height (overridden by flags)
+
+EXAMPLES:
+  $0
+  $0 ./images
+  $0 ./images 1920 1080
+  $0 --21-9 ./images
+
+OUTPUT:
+  path, width, height, opaque, ISSUE
+EOF
+  exit 0
 }
 
-# Args
+# Parse flags
+while [[ "$1" == --* || "$1" == "-h" ]]; do
+  case "$1" in
+    -h|--help)
+      usage
+      ;;
+
+    --16-9)
+      TARGET_WIDTH=3840
+      TARGET_HEIGHT=2160
+      shift
+      ;;
+
+    --16-10)
+      TARGET_WIDTH=3840
+      TARGET_HEIGHT=2400
+      shift
+      ;;
+
+    --21-9)
+      TARGET_WIDTH=5120
+      TARGET_HEIGHT=2160
+      shift
+      ;;
+
+    --32-9)
+      TARGET_WIDTH=7680
+      TARGET_HEIGHT=2160
+      shift
+      ;;
+
+    *)
+      echo "Unknown option: $1"
+      usage
+      ;;
+  esac
+done
+
+# Positional args
 DIR="$(realpath "${1:-.}")"
-TARGET_WIDTH="${2:-$TARGET_WIDTH}"
-TARGET_HEIGHT="${3:-$TARGET_HEIGHT}"
+
+# Only use manual width/height if no preset flag was used
+if [[ -n "$2" && -n "$3" ]]; then
+  TARGET_WIDTH="$2"
+  TARGET_HEIGHT="$3"
+fi
 
 # Check dependencies
 command -v identify >/dev/null 2>&1 || {

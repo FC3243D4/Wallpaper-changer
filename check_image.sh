@@ -5,8 +5,7 @@ trap 'echo "Stopping..."; kill -- -$$' SIGINT SIGTERM
 # Default values
 TARGET_WIDTH=3840
 TARGET_HEIGHT=2160
-#JOBS=$(($(nproc) / 5))
-JOBS=4
+JOBS=$(($(nproc) / 4))
 BATCH=50
 
 usage() {

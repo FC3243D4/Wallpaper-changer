@@ -5,7 +5,7 @@ trap 'echo "Stopping..."; kill -- -$$' SIGINT SIGTERM
 # Default values
 TARGET_WIDTH=3840
 TARGET_HEIGHT=2160
-JOBS=$(($(nproc) / 4))
+JOBS=$(($(nproc) / 4)) # Use a quarter of available cores
 BATCH=50
 
 usage() {
@@ -96,34 +96,72 @@ command -v identify >/dev/null 2>&1 || {
 
 echo "Scanning: $DIR"
 echo "Expected: ${TARGET_WIDTH}x${TARGET_HEIGHT}, fully opaque"
+
+TOTAL=$(find "$DIR" -type f \( -iname "*.png" -o -iname "*.jpg" -o -iname "*.jpeg" \) | wc -l)
+echo "total files: $TOTAL"
 echo
 
 # Main pipeline
-find "$DIR" -type f \( -iname "*.png" -o -iname "*.jpg" -o -iname "*.jpeg" \) -print0 \
-| xargs -0 -n "$BATCH" -P "$JOBS" bash -c '
-  for f do
-    identify -format "$f, %w, %h, %[opaque]\n" "$f" 2>/dev/null
-  done
-' bash \
+find "$DIR" -type f \( -iname "*.png" -o -iname "*.jpg" -o -iname "*.jpeg" \) \
+| parallel --bar -j "$JOBS" --line-buffer '
+  identify -format "{}, %w, %h, %[opaque]\n" {} 2>/dev/null
+' \
 | awk -F ',' -v w="$TARGET_WIDTH" -v h="$TARGET_HEIGHT" -v base="$DIR/" '
 {
-  # Trim spaces
+
+  # Trim
   gsub(/^ +| +$/, "", $2)
   gsub(/^ +| +$/, "", $3)
   gsub(/^ +| +$/, "", $4)
 
-  # Remove absolute base path
-  sub("^" base, "", $1)
+  file=$1
+  sub("^" base, "", file)
+  sub(/^\.\//, "", file)
 
-  # Conditions
   bad_res = ($2 != w || $3 != h)
   bad_trans = ($4 != "True")
 
   if (bad_res || bad_trans) {
     label = (bad_res && bad_trans) ? "BOTH" :
             (bad_res ? "RESOLUTION" : "TRANSPARENCY")
-
-    print $1 ", " $2 ", " $3 ", " $4 ", " label
+    
+    print file ", " $2 ", " $3 ", " $4 ", " label >> "/tmp/check_image_results.tmp"
   }
 }
 '
+if [[ -f /tmp/check_image_results.tmp ]]; then
+  echo "Issue summary by directory:"
+  echo
+  awk -F ',' '{
+    gsub(/^ +| +$/, "", $2)
+    gsub(/^ +| +$/, "", $3)
+    gsub(/^ +| +$/, "", $5)
+
+    path = $1
+    sub(/\/[^/]*$/, "", path)
+    if (path == "") path = "."
+
+    entry = $1
+    if ($5 == "RESOLUTION" || $5 == "BOTH") {
+      entry = entry " (" $2 "x" $3 ") "
+    }
+
+    dirs[path]++
+    files[path] = files[path] entry "" $5 "\n"
+  }
+  END {
+    n = asorti(dirs, sorted_dirs)
+    for (i = 1; i <= n; i++) {
+      dir = sorted_dirs[i]
+      if (i > 1) print ""
+      print dir
+      split(files[dir], arr, "\n")
+      for (j in arr) {
+        if (arr[j] != "") print "|-- " arr[j]
+      }
+    }
+  }' /tmp/check_image_results.tmp
+  rm /tmp/check_image_results.tmp
+else
+  echo "All images match the expected resolution and are fully opaque."
+fi

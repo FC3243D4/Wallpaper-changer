@@ -146,6 +146,10 @@ if [[ -f /tmp/check_image_results.tmp ]]; then
       entry = entry " (" $2 "x" $3 ") "
     }
 
+    if ($5 == "TRANSPARENCY") {
+      entry = entry " "
+    }
+
     dirs[path]++
     files[path] = files[path] entry "" $5 "\n"
   }

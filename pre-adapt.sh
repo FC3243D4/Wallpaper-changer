@@ -1,29 +1,32 @@
 #!/usr/bin/env bash
 
-DIR="$(dirname "$(realpath "$1")")"
+DIR="$1"
+cd "$DIR"
+
+pwd
 
 # convert heic to png
-for f in $DIR/*.heic
-    if test -f $f
-        magick "$f" -quality 95 (path change-extension .png $f)
-    end
-end
-rm $DIR/*.heic
+for f in *.heic; do
+    if test -f "$f"; then
+        magick "$f" -quality 95 "${f%.heic}.png"
+        rm "$f"
+    fi
+done
 
-mkdir -p $DIR/upscale $DIR/check
+mkdir -p ./upscale ./check
 
-for img in $DIR/*.jpg $DIR/*.png $DIR/*.jpeg $DIR/*.heic 
-    if test -f $img
+for img in *.jpg *.png *.jpeg *.heic; do
+    if test -f "$img"; then
         # Move low-resolution images
-        set height (identify -format "%h" $img)
-        if test $height -lt 1800
-            mv $img $DIR/upscale/
+        height=$(identify -format "%h" "$img")
+        if test "$height" -lt 1800; then
+            mv "$img" upscale/
             continue
-        end
+        fi
 
         # Move files without "cleanup" in the name
-        if not string match -q "*cleanup*" $img
-            mv $img $DIR/check/
-        end
-    end
-end
+        if ! [[ "$img" =~ cleanup ]]; then
+            mv "$img" check/
+        fi
+    fi
+done

@@ -43,7 +43,7 @@ if [ "$serie_mode" -eq 1 ]; then
     }' | sort -nr
 
 else
-    # 👤 CHARACTER MODE (max index method)
+    # 👤 CHARACTER MODE (fixed)
 
     find "$dir" -type f -name "*.png" | awk -F/ -v mode="$mode" '
     {
@@ -52,9 +52,6 @@ else
 
         is_nsfw = (file ~ /^nsfw-/)
 
-        if (mode == "nsfw" && !is_nsfw) next
-        if (mode == "sfw" && is_nsfw) next
-
         sub(/^nsfw-/, "", file)
 
         if (!match(file, /-([0-9]+)$/, arr)) next
@@ -62,14 +59,43 @@ else
 
         name = substr(file, 1, RSTART-1)
 
+        # allow 1–2 parts (handles chi-chi)
         split(name, parts, "-")
         if (length(parts) > 2) next
 
-        if (n > max[name])
-            max[name] = n
+        char = name
+
+        if (is_nsfw) {
+            if (n > max_nsfw[char])
+                max_nsfw[char] = n
+        } else {
+            if (n > max_sfw[char])
+                max_sfw[char] = n
+        }
     }
     END {
-        for (c in max)
-            print max[c], c
+        for (c in max_sfw) {
+            sfw = max_sfw[c] + 0
+            nsfw = max_nsfw[c] + 0
+
+            if (mode == "sfw")
+                print sfw, c
+            else if (mode == "nsfw")
+                print nsfw, c
+            else
+                print (sfw + nsfw), c
+        }
+
+        # include characters that exist only in nsfw
+        for (c in max_nsfw) {
+            if (!(c in max_sfw)) {
+                nsfw = max_nsfw[c]
+
+                if (mode == "nsfw")
+                    print nsfw, c
+                else if (mode == "all")
+                    print nsfw, c
+            }
+        }
     }' | sort -nr
 fi

@@ -13,19 +13,23 @@ for f in *.heic; do
     fi
 done
 
-mkdir -p ./upscale ./check
-
 for img in *.jpg *.png *.jpeg *.heic; do
     if test -f "$img"; then
         # Move low-resolution images
         height=$(identify -format "%h" "$img")
         if test "$height" -lt 1800; then
+            if ! [ -d "upscale" ]; then
+                mkdir -p upscale
+            fi
             mv "$img" upscale/
             continue
         fi
 
         # Move files without "cleanup" in the name
         if ! [[ "$img" =~ cleanup ]]; then
+            if ! [ -d "check" ]; then
+                mkdir -p check
+            fi
             mv "$img" check/
         fi
     fi

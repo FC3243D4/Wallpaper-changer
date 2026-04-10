@@ -43,7 +43,7 @@ if [ "$serie_mode" -eq 1 ]; then
     }' | sort -nr
 
 else
-    # 👤 CHARACTER MODE (fixed)
+    # 👤 CHARACTER MODE
 
     find "$dir" -type f -name "*.png" | awk -F/ -v mode="$mode" '
     {

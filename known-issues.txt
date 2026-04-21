@@ -49,6 +49,10 @@ mha/nsfw-mirko-4 hue around head
     32:9
 naruto/nsfw-tsunade-2 32:9 improve centering -> move a bit to the right
 nagatoro/nsfw-nagatoro-10 remake
+    16:9 ✅
+    16:10
+    21:9
+    32:9
 one-punch/nsfw-tatsumaki-3 remake
     16:9 ✅
     16:10

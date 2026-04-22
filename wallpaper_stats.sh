@@ -7,6 +7,7 @@ top_n=0
 show_percentage=0
 details=0
 details_group=0
+spreadsheet=0
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -18,12 +19,13 @@ while [[ $# -gt 0 ]]; do
         --percentage) show_percentage=1 ;;
         --details) details=1 ;;
         --details-group) details_group=1 ;;
+        --spreadsheet) spreadsheet=1 ;;
         --top)
             shift
             top_n="$1"
             ;;
         --help)
-            echo "Usage: $0 [--nsfw|--sfw|--all] [--individual] [--details|--details-group] [--percentage] [--top N] [directory]"
+            echo "Usage: $0 [--nsfw|--sfw|--all] [--individual] [--details|--details-group] [--percentage] [--top N] [--spreadsheet] [directory]"
             exit 0
             ;;
         *)
@@ -39,20 +41,18 @@ if [[ "$details" -eq 1 && "$details_group" -eq 1 ]]; then
     exit 1
 fi
 
+run_pipeline() {
 find "$dir" -type f -name "*.png" | awk -F/ -v mode="$mode" -v individual="$individual" '
 
 function camel_to_words(str) {
     out = ""
     len = length(str)
-
     for (i = 1; i <= len; i++) {
         c = substr(str, i, 1)
         prev = (i > 1) ? substr(str, i-1, 1) : ""
         nxt  = (i < len) ? substr(str, i+1, 1) : ""
 
-        if (i > 1 &&
-            c ~ /[A-Z]/ &&
-            (prev ~ /[a-z0-9]/ || nxt ~ /[a-z]/)) {
+        if (i > 1 && c ~ /[A-Z]/ && (prev ~ /[a-z0-9]/ || nxt ~ /[a-z]/)) {
             out = out "-" tolower(c)
         } else {
             out = out tolower(c)
@@ -65,7 +65,6 @@ function camel_to_words(str) {
     file = $NF
     sub(/\.png$/, "", file)
 
-    # exclude "-group-" files
     if (file ~ /-group-/) next
 
     serie = $(NF-1)
@@ -116,11 +115,7 @@ END {
         sfw_g = group_sfw[k]
         nsfw_g = group_nsfw[k]
 
-        sfw = sfw_i + sfw_g
-        nsfw = nsfw_i + nsfw_g
-        total = sfw + nsfw
-
-        print total "|" sfw_i "|" nsfw_i "|" sfw_g "|" nsfw_g "|" k
+        print (sfw_i + sfw_g + nsfw_i + nsfw_g) "|" sfw_i "|" nsfw_i "|" sfw_g "|" nsfw_g "|" k
     }
 
     for (k in max_nsfw) {
@@ -130,11 +125,7 @@ END {
             sfw_g = group_sfw[k]
             nsfw_g = group_nsfw[k]
 
-            sfw = sfw_i + sfw_g
-            nsfw = nsfw_i + nsfw_g
-            total = sfw + nsfw
-
-            print total "|" sfw_i "|" nsfw_i "|" sfw_g "|" nsfw_g "|" k
+            print (sfw_i + sfw_g + nsfw_i + nsfw_g) "|" sfw_i "|" nsfw_i "|" sfw_g "|" nsfw_g "|" k
         }
     }
 
@@ -145,11 +136,7 @@ END {
             sfw_g = group_sfw[k]
             nsfw_g = group_nsfw[k]
 
-            sfw = sfw_g
-            nsfw = nsfw_g
-            total = sfw + nsfw
-
-            print total "|" sfw_i "|" nsfw_i "|" sfw_g "|" nsfw_g "|" k
+            print (sfw_g + nsfw_g) "|" sfw_i "|" nsfw_i "|" sfw_g "|" nsfw_g "|" k
         }
     }
 }
@@ -157,25 +144,30 @@ END {
     -v top="$top_n" \
     -v showp="$show_percentage" \
     -v details="$details" \
-    -v dgroup="$details_group" '
+    -v dgroup="$details_group" \
+    -v spreadsheet="$spreadsheet" '
+
 BEGIN {
-    if (dgroup && showp)
-        printf "%-4s %-7s %-7s %-7s %-7s %-7s %-7s %s\n",
-               "#","TOTAL","SFW-I","NSFW-I","SFW-G","NSFW-G","NSFW%","CHARACTER"
+    if (spreadsheet)
+        print "RANK,TOTAL,SFW_INDIVIDUAL,SFW_GROUP,NSFW_INDIVIDUAL,NSFW_GROUP,NSFW_PERCENT,CHARACTER,SERIE"
+    else if (dgroup && showp)
+        printf "%-4s %-7s %-7s %-7s %-7s %-7s %-7s %-35s %-20s\n",
+               "#","TOTAL","SFW-I","NSFW-I","SFW-G","NSFW-G","NSFW%","CHARACTER","SERIE"
     else if (dgroup)
-        printf "%-4s %-7s %-7s %-7s %-7s %-7s %s\n",
-               "#","TOTAL","SFW-I","NSFW-I","SFW-G","NSFW-G","CHARACTER"
+        printf "%-4s %-7s %-7s %-7s %-7s %-7s %-35s %-20s\n",
+               "#","TOTAL","SFW-I","NSFW-I","SFW-G","NSFW-G","CHARACTER","SERIE"
     else if (details && showp)
-        printf "%-4s %-7s %-7s %-7s %-7s %s\n",
-               "#","TOTAL","SFW","NSFW","NSFW%","CHARACTER"
+        printf "%-4s %-7s %-7s %-7s %-7s %-35s %-20s\n",
+               "#","TOTAL","SFW","NSFW","NSFW%","CHARACTER","SERIE"
     else if (details)
-        printf "%-4s %-7s %-7s %-7s %s\n",
-               "#","TOTAL","SFW","NSFW","CHARACTER"
+        printf "%-4s %-7s %-7s %-7s %-35s %-20s\n",
+               "#","TOTAL","SFW","NSFW","CHARACTER","SERIE"
     else if (showp)
-        printf "%-4s %-7s %-7s %s\n",
-               "#","TOTAL","NSFW%","CHARACTER"
+        printf "%-4s %-7s %-7s %-35s %-20s\n",
+               "#","TOTAL","NSFW%","CHARACTER","SERIE"
     else
-        printf "%-4s %-7s %s\n", "#","TOTAL","CHARACTER"
+        printf "%-4s %-7s %-35s %-20s\n",
+               "#","TOTAL","CHARACTER","SERIE"
 }
 
 {
@@ -186,28 +178,47 @@ BEGIN {
     nsfw_g = $5
     name   = $6
 
+    split(name, parts, "/")
+    serie = parts[1]
+    character = parts[2]
+
     sfw = sfw_i + sfw_g
     nsfw = nsfw_i + nsfw_g
     percent = (total > 0) ? (nsfw / total * 100) : 0
 
-    if (dgroup && showp)
-        printf "%-4d %-7d %-7d %-7d %-7d %-7d %6.1f%% %s\n",
-               NR,total,sfw_i,nsfw_i,sfw_g,nsfw_g,percent,name
+    if (spreadsheet) {
+        printf "%d,%d,%d,%d,%d,%d,%.1f,%s,%s\n",
+               NR,total,sfw_i,sfw_g,nsfw_i,nsfw_g,percent,character,serie
+    }
+    else if (dgroup && showp)
+        printf "%-4d %-7d %-7d %-7d %-7d %-7d %6.1f%% %-35s %-20s\n",
+               NR,total,sfw_i,nsfw_i,sfw_g,nsfw_g,percent,character,serie
     else if (dgroup)
-        printf "%-4d %-7d %-7d %-7d %-7d %-7d %s\n",
-               NR,total,sfw_i,nsfw_i,sfw_g,nsfw_g,name
+        printf "%-4d %-7d %-7d %-7d %-7d %-7d %-35s %-20s\n",
+               NR,total,sfw_i,nsfw_i,sfw_g,nsfw_g,character,serie
     else if (details && showp)
-        printf "%-4d %-7d %-7d %-7d %6.1f%% %s\n",
-               NR,total,sfw,nsfw,percent,name
+        printf "%-4d %-7d %-7d %-7d %6.1f%% %-35s %-20s\n",
+               NR,total,sfw,nsfw,percent,character,serie
     else if (details)
-        printf "%-4d %-7d %-7d %-7d %s\n",
-               NR,total,sfw,nsfw,name
+        printf "%-4d %-7d %-7d %-7d %-35s %-20s\n",
+               NR,total,sfw,nsfw,character,serie
     else if (showp)
-        printf "%-4d %-7d %6.1f%% %s\n",
-               NR,total,percent,name
+        printf "%-4d %-7d %6.1f%% %-35s %-20s\n",
+               NR,total,percent,character,serie
     else
-        printf "%-4d %-7d %s\n", NR,total,name
+        printf "%-4d %-7d %-35s %-20s\n",
+               NR,total,character,serie
 
     if (top > 0 && NR >= top)
         exit
-}'
+}
+'
+}
+
+# Run
+if [[ "$spreadsheet" -eq 1 ]]; then
+    run_pipeline > stats.csv
+    echo "Saved to stats.csv"
+else
+    run_pipeline
+fi

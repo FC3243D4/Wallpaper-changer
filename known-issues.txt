@@ -24,13 +24,13 @@ avatar/nsfw-toph-1 green spill in eyes and headband
     16:9 ✅
     16:10
     21:9
-    32:9
+    32:9 ✅
 bleach/nsfw-rukia-2 white spot in hair
     16:9 ✅
     16:10
     21:9
-    32:9
-dandadan/nsfw-momo-ayase-shiratori-1 rename to nsfw-momo-ayase-aira-1
+    32:9 ✅
+dandadan/nsfw-momo-ayase-shiratori-1 rename to nsfw-momoAyase-aira-1
     16:9 ✅
     16:10
     21:9
@@ -39,38 +39,37 @@ dxd/nsfw-xenovia-8 GRID (between legs)
     16:9 ✅
     16:10
     21:9
-    32:9
+    32:9 ✅
 evangelion/nsfw-mari-1 MARK remove residual
     16:9 ✅
     16:10
     21:9
-    32:9
+    32:9 ✅
 mha/nsfw-mirko-4 hue around head
     16:9 ✅
     16:10
     21:9
-    32:9
-naruto/nsfw-tsunade-2 32:9 improve centering -> move a bit to the right
+    32:9 ✅
 nagatoro/nsfw-nagatoro-10 remake
     16:9 ✅
     16:10
     21:9
-    32:9
+    32:9 ✅
 one-punch/nsfw-tatsumaki-3 remake
     16:9 ✅
     16:10
     21:9
-    32:9
+    32:9 ✅
 oregairu/nsfw-yui-4 MARK on apron
     16:9 ✅
     16:10
     21:9
-    32:9
+    32:9 ✅
 spy-x-family/nsfw-yor-9 head
     16:9 ✅
     16:10
     21:9
-    32:9
+    32:9 ✅
 yu-gi-oh/nsfw-giovane-maga-nera NAME rename to darkMagicianGirl
     16:9 ✅
     16:10
@@ -489,62 +488,3 @@ yu-gi-oh/nsfw-giovane-maga-nera NAME rename to darkMagicianGirl
 
         takamine
         |-- takamine/nsfw-takamine-1.png TRANSPARENCY
-
-32-9
-    NSFW
-        alya
-        |-- alya/nsfw-alya-1.png TRANSPARENCY
-
-        black-clover
-        |-- black-clover/nsfw-noelle-mimosa-3.png TRANSPARENCY
-
-        bleach
-        |-- bleach/nsfw-lynette-1.png TRANSPARENCY
-        |-- bleach/nsfw-rangiku-1.png TRANSPARENCY
-        |-- bleach/nsfw-rukia-1.png TRANSPARENCY
-        |-- bleach/nsfw-yoruichi-2.png TRANSPARENCY
-
-        blend-s
-        |-- blend-s/nsfw-maika-kaho-1.png TRANSPARENCY
-
-        dxd
-        |-- dxd/nsfw-rossweisse-1.png TRANSPARENCY
-        |-- dxd/nsfw-rias-38.png TRANSPARENCY
-        |-- dxd/nsfw-rias-koneko-1.png TRANSPARENCY
-
-        fairy-tail
-        |-- fairy-tail/nsfw-aquarius-1.png TRANSPARENCY
-        |-- fairy-tail/nsfw-cana-4.png TRANSPARENCY
-        |-- fairy-tail/nsfw-erza-3.png TRANSPARENCY
-        |-- fairy-tail/nsfw-lucy-3.png TRANSPARENCY
-
-        keijo
-        |-- keijo/nsfw-toyoguchi-1.png TRANSPARENCY
-        |-- keijo/nsfw-sayaka-2.png TRANSPARENCY
-        |-- keijo/nsfw-keijo-group-2.png TRANSPARENCY
-        |-- keijo/nsfw-sayaka-3.png TRANSPARENCY
-
-        kill-la-kill
-        |-- kill-la-kill/nsfw-ryuko-1.png TRANSPARENCY
-
-        konosuba
-        |-- konosuba/nsfw-aqua-4.png TRANSPARENCY
-        |-- konosuba/nsfw-yunyun-1.png TRANSPARENCY
-
-        nagatoro
-        |-- nagatoro/nsfw-nagatoro-10.png TRANSPARENCY
-
-        one-punch
-        |-- one-punch/nsfw-tatsumaki-3.png TRANSPARENCY
-
-        overwatch
-        |-- overwatch/nsfw-widowmaker-1.png TRANSPARENCY
-
-        rent-a-girlfriend
-        |-- rent-a-girlfriend/nsfw-chizuru-3.png TRANSPARENCY
-
-        shokugeki-no-souma
-        |-- shokugeki-no-souma/nsfw-ikumi-2.png TRANSPARENCY
-
-        spy-x-family
-        |-- spy-x-family/nsfw-fiona-yor-1.png TRANSPARENCY

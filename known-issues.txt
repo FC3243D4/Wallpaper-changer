@@ -2,7 +2,7 @@ IMPLEMENT CAMEL CASE TO ALL LEGACY WALLPAPERS
     16:9 ✅
     16:10
     21:9
-    32:9
+    32:9 ✅
 
 bunny-girl-senpai/tomoe-x NAME rename tomoe to tomoeKoga
     16:9 ✅

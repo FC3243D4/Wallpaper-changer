@@ -8,13 +8,12 @@ bunny-girl-senpai/tomoe-x NAME rename tomoe to tomoeKoga
     16:9 ✅
     16:10
     21:9
-    32:9
+    32:9 ✅
 cote/horikita-2 NAME wrongly named hotikita-2
     16:9 ✅
     16:10
     21:9
-    32:9
-nisekoi/chitoge-5 32:9 fix top right
+    32:9 ✅
 persona-5/makoto-1 REMOVE top line
     16:9 ✅
     16:10

@@ -205,9 +205,6 @@ spy-x-family/nsfw-yor-9 head
 
     NSFW
 
-        blend-s
-        |-- blend-s/nsfw-maika-kaho-1.png TRANSPARENCY
-
         dxd
         |-- dxd/nsfw-rias-38.png TRANSPARENCY
         |-- dxd/nsfw-rias-koneko-1.png TRANSPARENCY

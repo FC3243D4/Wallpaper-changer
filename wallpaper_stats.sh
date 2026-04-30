@@ -44,21 +44,21 @@ fi
 run_pipeline() {
 find "$dir" -type f -name "*.png" | awk -F/ -v mode="$mode" -v individual="$individual" '
 
-function camel_to_words(str) {
-    out = ""
-    len = length(str)
-    for (i = 1; i <= len; i++) {
-        c = substr(str, i, 1)
-        prev = (i > 1) ? substr(str, i-1, 1) : ""
-        nxt  = (i < len) ? substr(str, i+1, 1) : ""
+function camel_to_words(str,    _out, _len, _i, _c, _prev, _nxt) {
+    _out = ""
+    _len = length(str)
+    for (_i = 1; _i <= _len; _i++) {
+        _c    = substr(str, _i, 1)
+        _prev = (_i > 1)    ? substr(str, _i-1, 1) : ""
+        _nxt  = (_i < _len) ? substr(str, _i+1, 1) : ""
 
-        if (i > 1 && c ~ /[A-Z]/ && (prev ~ /[a-z0-9]/ || nxt ~ /[a-z]/)) {
-            out = out "-" tolower(c)
+        if (_i > 1 && _c ~ /[A-Z]/ && (_prev ~ /[a-z0-9]/ || _nxt ~ /[a-z]/)) {
+            _out = _out "-" tolower(_c)
         } else {
-            out = out tolower(c)
+            _out = _out tolower(_c)
         }
     }
-    return out
+    return _out
 }
 
 {
@@ -76,10 +76,14 @@ function camel_to_words(str) {
 
     sub(/^nsfw-/, "", file)
 
-    if (!match(file, /-([0-9]+)$/, arr)) next
-    n = arr[1] + 0
+    # mawk-compatible: strip trailing -NUMBER to get n and names_part
+    tmp = file
+    gsub(/[^-]*$/, "", tmp)          # e.g. "bulma-7-" -> keep prefix with trailing dash
+    n_str = substr(file, length(tmp)+1)
+    n = n_str + 0
+    if (n == 0) next                 # no trailing number, skip
 
-    names_part = substr(file, 1, RSTART-1)
+    names_part = substr(file, 1, length(tmp)-1)   # drop trailing dash
     nchars = split(names_part, chars, "-")
 
     if (individual && nchars > 1) next
@@ -109,35 +113,19 @@ function camel_to_words(str) {
 }
 
 END {
-    for (k in max_sfw) {
-        sfw_i = max_sfw[k]
-        nsfw_i = max_nsfw[k]
-        sfw_g = group_sfw[k]
-        nsfw_g = group_nsfw[k]
+    # Collect every key seen across all four maps
+    for (k in max_sfw)    all_keys[k] = 1
+    for (k in max_nsfw)   all_keys[k] = 1
+    for (k in group_sfw)  all_keys[k] = 1
+    for (k in group_nsfw) all_keys[k] = 1
+
+    for (k in all_keys) {
+        sfw_i  = (k in max_sfw)    ? max_sfw[k]    : 0
+        nsfw_i = (k in max_nsfw)   ? max_nsfw[k]   : 0
+        sfw_g  = (k in group_sfw)  ? group_sfw[k]  : 0
+        nsfw_g = (k in group_nsfw) ? group_nsfw[k] : 0
 
         print (sfw_i + sfw_g + nsfw_i + nsfw_g) "|" sfw_i "|" nsfw_i "|" sfw_g "|" nsfw_g "|" k
-    }
-
-    for (k in max_nsfw) {
-        if (!(k in max_sfw)) {
-            sfw_i = 0
-            nsfw_i = max_nsfw[k]
-            sfw_g = group_sfw[k]
-            nsfw_g = group_nsfw[k]
-
-            print (sfw_i + sfw_g + nsfw_i + nsfw_g) "|" sfw_i "|" nsfw_i "|" sfw_g "|" nsfw_g "|" k
-        }
-    }
-
-    for (k in group_sfw) {
-        if (!(k in max_sfw) && !(k in max_nsfw)) {
-            sfw_i = 0
-            nsfw_i = 0
-            sfw_g = group_sfw[k]
-            nsfw_g = group_nsfw[k]
-
-            print (sfw_g + nsfw_g) "|" sfw_i "|" nsfw_i "|" sfw_g "|" nsfw_g "|" k
-        }
     }
 }
 ' | sort -t'|' -nr -k1,1 | awk -F'|' \

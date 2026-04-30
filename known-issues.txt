@@ -204,17 +204,6 @@ spy-x-family/nsfw-yor-9 head
         |-- your-lie-in-april/kaori-6.png TRANSPARENCY
 
     NSFW
-        alya
-        |-- alya/nsfw-alya-1.png TRANSPARENCY
-
-        black-clover
-        |-- black-clover/nsfw-noelle-mimosa-3.png TRANSPARENCY
-
-        bleach
-        |-- bleach/nsfw-lynette-1.png TRANSPARENCY
-        |-- bleach/nsfw-rangiku-1.png TRANSPARENCY
-        |-- bleach/nsfw-rukia-1.png TRANSPARENCY
-        |-- bleach/nsfw-yoruichi-2.png TRANSPARENCY
 
         blend-s
         |-- blend-s/nsfw-maika-kaho-1.png TRANSPARENCY

@@ -42,7 +42,12 @@ if [[ "$details" -eq 1 && "$details_group" -eq 1 ]]; then
 fi
 
 run_pipeline() {
-find "$dir" -type f -name "*.png" | awk -F/ -v mode="$mode" -v individual="$individual" '
+    # Save file list to a temp file so awk can read it twice
+    local filelist
+    filelist=$(mktemp)
+    find "$dir" -type f -name "*.png" > "$filelist"
+
+    awk -F/ -v mode="$mode" -v individual="$individual" '
 
 function camel_to_words(str,    _out, _len, _i, _c, _prev, _nxt) {
     _out = ""
@@ -51,7 +56,6 @@ function camel_to_words(str,    _out, _len, _i, _c, _prev, _nxt) {
         _c    = substr(str, _i, 1)
         _prev = (_i > 1)    ? substr(str, _i-1, 1) : ""
         _nxt  = (_i < _len) ? substr(str, _i+1, 1) : ""
-
         if (_i > 1 && _c ~ /[A-Z]/ && (_prev ~ /[a-z0-9]/ || _nxt ~ /[a-z]/)) {
             _out = _out "-" tolower(_c)
         } else {
@@ -61,59 +65,77 @@ function camel_to_words(str,    _out, _len, _i, _c, _prev, _nxt) {
     return _out
 }
 
+function parse_file(path,    _file, _serie, _is_nsfw, _tmp, _n, _names_part, _nchars, _chars) {
+    _file = path
+    sub(/\.png$/, "", _file)
+    if (_file ~ /-group-/) return 0
+
+    # Extract serie as second-to-last path component
+    _serie = path
+    sub(/\/[^\/]*$/, "", _serie)   # strip filename
+    sub(/.*\//, "", _serie)        # strip everything before last /
+
+    _is_nsfw = (_file ~ /^nsfw-/) || (_file ~ /\/nsfw-/)
+    sub(/^nsfw-/, "", _file)
+    sub(/.*\/nsfw-/, "", _file)    # handle full path prefix
+
+    # Strip the last path component prefix (directory part)
+    sub(/.*\//, "", _file)
+
+    _tmp = _file
+    gsub(/[^-]*$/, "", _tmp)
+    _n = substr(_file, length(_tmp)+1) + 0
+    if (_n == 0) return 0
+
+    _names_part = substr(_file, 1, length(_tmp)-1)
+    _nchars = split(_names_part, _chars, "-")
+
+    # Store results in globals for caller to read
+    g_serie     = _serie
+    g_is_nsfw   = _is_nsfw
+    g_n         = _n
+    g_nchars    = _nchars
+    split(_names_part, g_chars, "-")
+    return 1
+}
+
+NR == FNR {
+    # First pass: build home_serie[pretty] from solo wallpapers only
+    if (!parse_file($0)) next
+    if (g_nchars == 1) {
+        pretty = camel_to_words(g_chars[1])
+        home_serie[pretty] = g_serie
+    }
+    next
+}
+
 {
-    file = $NF
-    sub(/\.png$/, "", file)
+    # Second pass: count wallpapers
+    if (!parse_file($0)) next
 
-    if (file ~ /-group-/) next
+    if (mode == "nsfw" && !g_is_nsfw) next
+    if (mode == "sfw"  &&  g_is_nsfw) next
+    if (individual && g_nchars > 1)   next
 
-    serie = $(NF-1)
+    is_group = (g_nchars > 1)
 
-    is_nsfw = (file ~ /^nsfw-/)
-
-    if (mode == "nsfw" && !is_nsfw) next
-    if (mode == "sfw" && is_nsfw) next
-
-    sub(/^nsfw-/, "", file)
-
-    # mawk-compatible: strip trailing -NUMBER to get n and names_part
-    tmp = file
-    gsub(/[^-]*$/, "", tmp)          # e.g. "bulma-7-" -> keep prefix with trailing dash
-    n_str = substr(file, length(tmp)+1)
-    n = n_str + 0
-    if (n == 0) next                 # no trailing number, skip
-
-    names_part = substr(file, 1, length(tmp)-1)   # drop trailing dash
-    nchars = split(names_part, chars, "-")
-
-    if (individual && nchars > 1) next
-
-    is_group = (nchars > 1)
-
-    for (i = 1; i <= nchars; i++) {
-        char = chars[i]
-        pretty = camel_to_words(char)
-        key = serie "/" pretty
+    for (i = 1; i <= g_nchars; i++) {
+        pretty = camel_to_words(g_chars[i])
+        # Use home serie if known (solo wallpaper exists), else fall back to file folder
+        key_serie = (pretty in home_serie) ? home_serie[pretty] : g_serie
+        key = key_serie "/" pretty
 
         if (is_group) {
-            if (is_nsfw)
-                group_nsfw[key]++
-            else
-                group_sfw[key]++
+            if (g_is_nsfw) group_nsfw[key]++
+            else           group_sfw[key]++
         } else {
-            if (is_nsfw) {
-                if (n > max_nsfw[key])
-                    max_nsfw[key] = n
-            } else {
-                if (n > max_sfw[key])
-                    max_sfw[key] = n
-            }
+            if (g_is_nsfw) { if (g_n > max_nsfw[key]) max_nsfw[key] = g_n }
+            else           { if (g_n > max_sfw[key])  max_sfw[key]  = g_n }
         }
     }
 }
 
 END {
-    # Collect every key seen across all four maps
     for (k in max_sfw)    all_keys[k] = 1
     for (k in max_nsfw)   all_keys[k] = 1
     for (k in group_sfw)  all_keys[k] = 1
@@ -124,11 +146,10 @@ END {
         nsfw_i = (k in max_nsfw)   ? max_nsfw[k]   : 0
         sfw_g  = (k in group_sfw)  ? group_sfw[k]  : 0
         nsfw_g = (k in group_nsfw) ? group_nsfw[k] : 0
-
         print (sfw_i + sfw_g + nsfw_i + nsfw_g) "|" sfw_i "|" nsfw_i "|" sfw_g "|" nsfw_g "|" k
     }
 }
-' | sort -t'|' -nr -k1,1 | awk -F'|' \
+' "$filelist" "$filelist" | sort -t'|' -nr -k1,1 | awk -F'|' \
     -v top="$top_n" \
     -v showp="$show_percentage" \
     -v details="$details" \
@@ -159,25 +180,15 @@ BEGIN {
 }
 
 {
-    total  = $1
-    sfw_i  = $2
-    nsfw_i = $3
-    sfw_g  = $4
-    nsfw_g = $5
-    name   = $6
-
+    total  = $1; sfw_i = $2; nsfw_i = $3; sfw_g = $4; nsfw_g = $5; name = $6
     split(name, parts, "/")
-    serie = parts[1]
-    character = parts[2]
-
-    sfw = sfw_i + sfw_g
-    nsfw = nsfw_i + nsfw_g
+    serie = parts[1]; character = parts[2]
+    sfw = sfw_i + sfw_g; nsfw = nsfw_i + nsfw_g
     percent = (total > 0) ? (nsfw / total * 100) : 0
 
-    if (spreadsheet) {
+    if (spreadsheet)
         printf "%d,%d,%d,%d,%d,%d,%.1f,%s,%s\n",
                NR,total,sfw_i,sfw_g,nsfw_i,nsfw_g,percent,character,serie
-    }
     else if (dgroup && showp)
         printf "%-4d %-7d %-7d %-7d %-7d %-7d %6.1f%% %-35s %-20s\n",
                NR,total,sfw_i,nsfw_i,sfw_g,nsfw_g,percent,character,serie
@@ -197,10 +208,10 @@ BEGIN {
         printf "%-4d %-7d %-35s %-20s\n",
                NR,total,character,serie
 
-    if (top > 0 && NR >= top)
-        exit
+    if (top > 0 && NR >= top) exit
 }
 '
+    rm -f "$filelist"
 }
 
 # Run

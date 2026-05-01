@@ -185,12 +185,6 @@ spy-x-family/nsfw-yor-9 head
 
     NSFW
 
-        fairy-tail
-        |-- fairy-tail/nsfw-aquarius-1.png TRANSPARENCY
-        |-- fairy-tail/nsfw-cana-4.png TRANSPARENCY
-        |-- fairy-tail/nsfw-erza-3.png TRANSPARENCY
-        |-- fairy-tail/nsfw-lucy-3.png TRANSPARENCY
-
         keijo
         |-- keijo/nsfw-keijo-group-2.png TRANSPARENCY
         |-- keijo/nsfw-sayaka-2.png TRANSPARENCY

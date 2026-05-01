@@ -9,26 +9,6 @@ berserk/berserker-3 GRID (remake)
     21:9
     32:9 ✅
 
-avatar/nsfw-toph-1 green spill in eyes and headband
-    16:9 ✅
-    16:10 ✅
-    21:9
-    32:9 ✅
-bleach/nsfw-rukia-2 white spot in hair
-    16:9 ✅
-    16:10 ✅
-    21:9
-    32:9 ✅
-dxd/nsfw-xenovia-8 GRID
-    16:9 ✅
-    16:10 ✅
-    21:9
-    32:9 ✅
-evangelion/nsfw-mari-1 MARK remove residual
-    16:9 ✅
-    16:10 ✅
-    21:9
-    32:9 ✅
 mha/nsfw-mirko-4 hue around head
     16:9 ✅
     16:10 ✅

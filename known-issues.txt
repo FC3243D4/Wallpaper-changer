@@ -9,16 +9,6 @@ berserk/berserker-3 GRID (remake)
     21:9
     32:9 ✅
 
-one-punch/nsfw-tatsumaki-3 remake
-    16:9 ✅
-    16:10 ✅
-    21:9
-    32:9 ✅
-oregairu/nsfw-yui-4 MARK on apron
-    16:9 ✅
-    16:10 ✅
-    21:9
-    32:9 ✅
 spy-x-family/nsfw-yor-9 head
     16:9 ✅
     16:10 ✅
@@ -174,12 +164,6 @@ spy-x-family/nsfw-yor-9 head
         |-- your-lie-in-april/kaori-6.png TRANSPARENCY
 
     NSFW
-
-        one-punch
-        |-- one-punch/nsfw-tatsumaki-3.png TRANSPARENCY
-
-        overwatch
-        |-- overwatch/nsfw-widowmaker-1.png TRANSPARENCY
 
         rent-a-girlfriend
         |-- rent-a-girlfriend/nsfw-chizuru-3.png TRANSPARENCY

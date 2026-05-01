@@ -9,16 +9,6 @@ berserk/berserker-3 GRID (remake)
     21:9
     32:9 ✅
 
-mha/nsfw-mirko-4 hue around head
-    16:9 ✅
-    16:10 ✅
-    21:9
-    32:9 ✅
-nagatoro/nsfw-nagatoro-10 remake
-    16:9 ✅
-    16:10 ✅
-    21:9
-    32:9 ✅
 one-punch/nsfw-tatsumaki-3 remake
     16:9 ✅
     16:10 ✅
@@ -184,9 +174,6 @@ spy-x-family/nsfw-yor-9 head
         |-- your-lie-in-april/kaori-6.png TRANSPARENCY
 
     NSFW
-
-        nagatoro
-        |-- nagatoro/nsfw-nagatoro-10.png TRANSPARENCY
 
         one-punch
         |-- one-punch/nsfw-tatsumaki-3.png TRANSPARENCY

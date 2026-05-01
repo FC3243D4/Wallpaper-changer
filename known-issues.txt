@@ -185,15 +185,6 @@ spy-x-family/nsfw-yor-9 head
 
     NSFW
 
-        keijo
-        |-- keijo/nsfw-keijo-group-2.png TRANSPARENCY
-        |-- keijo/nsfw-sayaka-2.png TRANSPARENCY
-        |-- keijo/nsfw-sayaka-3.png TRANSPARENCY
-        |-- keijo/nsfw-toyoguchi-1.png TRANSPARENCY
-
-        kill-la-kill
-        |-- kill-la-kill/nsfw-ryuko-1.png TRANSPARENCY
-
         konosuba
         |-- konosuba/nsfw-aqua-4.png TRANSPARENCY
         |-- konosuba/nsfw-yunyun-1.png TRANSPARENCY

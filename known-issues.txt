@@ -205,11 +205,6 @@ spy-x-family/nsfw-yor-9 head
 
     NSFW
 
-        dxd
-        |-- dxd/nsfw-rias-38.png TRANSPARENCY
-        |-- dxd/nsfw-rias-koneko-1.png TRANSPARENCY
-        |-- dxd/nsfw-rossweisse-1.png TRANSPARENCY
-
         fairy-tail
         |-- fairy-tail/nsfw-aquarius-1.png TRANSPARENCY
         |-- fairy-tail/nsfw-cana-4.png TRANSPARENCY

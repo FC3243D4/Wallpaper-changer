@@ -185,10 +185,6 @@ spy-x-family/nsfw-yor-9 head
 
     NSFW
 
-        konosuba
-        |-- konosuba/nsfw-aqua-4.png TRANSPARENCY
-        |-- konosuba/nsfw-yunyun-1.png TRANSPARENCY
-
         nagatoro
         |-- nagatoro/nsfw-nagatoro-10.png TRANSPARENCY
 

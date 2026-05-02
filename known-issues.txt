@@ -165,9 +165,6 @@ spy-x-family/nsfw-yor-9 head
 
     NSFW
 
-        rent-a-girlfriend
-        |-- rent-a-girlfriend/nsfw-chizuru-3.png TRANSPARENCY
-
         shokugeki-no-souma
         |-- shokugeki-no-souma/nsfw-ikumi-2.png TRANSPARENCY
 

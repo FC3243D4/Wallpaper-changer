@@ -156,8 +156,3 @@ berserk/berserker-3 GRID (remake)
 
         your-lie-in-april
         |-- your-lie-in-april/kaori-6.png TRANSPARENCY
-
-    NSFW
-
-        takamine
-        |-- takamine/nsfw-takamine-1.png TRANSPARENCY

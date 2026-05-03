@@ -49,6 +49,16 @@ run_pipeline() {
 
     awk -F/ -v mode="$mode" -v individual="$individual" '
 
+BEGIN {
+    # Manual serie overrides: overrides["character-name"] = "serie-name"
+    # Use the pretty (kebab-case) character name as it appears in the output.
+    # These take priority over auto-detected home series and folder fallback.
+    # Example:
+    #   overrides["videl"] = "dragon-ball"
+
+    overrides["ruby"] = "oshi-no-ko"
+}
+
 function camel_to_words(str,    _out, _len, _i, _c, _prev, _nxt) {
     _out = ""
     _len = length(str)
@@ -122,7 +132,7 @@ NR == FNR {
     for (i = 1; i <= g_nchars; i++) {
         pretty = camel_to_words(g_chars[i])
         # Use home serie if known (solo wallpaper exists), else fall back to file folder
-        key_serie = (pretty in home_serie) ? home_serie[pretty] : g_serie
+        key_serie = (pretty in overrides) ? overrides[pretty] : (pretty in home_serie) ? home_serie[pretty] : g_serie
         key = key_serie "/" pretty
 
         if (is_group) {

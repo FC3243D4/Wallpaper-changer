@@ -3,7 +3,7 @@
 flag=$1
 shift
 for folder in "$@"; do
-    ./check_image.sh "$flag" "$folder"
+    ./dev/check_image.sh "$flag" "$folder"
     echo ""
     echo "Finished checking $folder"
     echo "-----------------------------"

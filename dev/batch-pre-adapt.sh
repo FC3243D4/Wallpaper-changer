@@ -7,6 +7,6 @@ pwd
 for dir in $DIR*; do
     if test -d "$dir"; then
         echo "Processing directory: $dir"
-        ./pre-adapt.sh "$dir"
+        ./dev/pre-adapt.sh "$dir"
     fi
 done

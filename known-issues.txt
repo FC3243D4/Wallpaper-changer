@@ -1,0 +1,1 @@
+fix nsfw-vivi-4 window border on left

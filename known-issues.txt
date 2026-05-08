@@ -1,4 +1,0 @@
-fix nsfw-vivi-4 window border on left
-nsfw-nagatoro 6 missing fil in hair
-nsfw-mina-19 bottom
-nsfw-tifa-68 corner

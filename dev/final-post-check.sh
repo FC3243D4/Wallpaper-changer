@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 variations=$(dev/variations-checker.sh)
-if [[ "$variations" == "*<*" ]] || [[ "$variations" == "*>*" ]]; then
+if [[ "$variations" == *"<"* ]] || [[ "$variations" == *">"* ]]; then
     echo "Variations found:"
     echo "$variations"
     exit 1

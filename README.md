@@ -1018,6 +1018,5 @@ any other dependency will be checked by the script and it will inform you if the
 | 965  | 1     | 0              | 0         | 0               | 1          | 100.0        | succubus                    | konosuba                                  | 
 | 966  | 1     | 0              | 0         | 0               | 1          | 100.0        | moeha                       | kaguya-sama                               | 
 | 967  | 1     | 0              | 0         | 0               | 1          | 100.0        | dupli-kate                  | invincible                                | 
-| 968  | 1     | 0              | 0         | 0               | 1          | 100.0        |                             | dxd                                       | 
-| 969  | 1     | 0              | 0         | 0               | 1          | 100.0        | tione                       | danmachi                                  | 
-| 970  | 1     | 0              | 0         | 0               | 1          | 100.0        | tiona                       | danmachi                                  | 
+| 968  | 1     | 0              | 0         | 0               | 1          | 100.0        | tione                       | danmachi                                  | 
+| 969  | 1     | 0              | 0         | 0               | 1          | 100.0        | tiona                       | danmachi                                  | 

@@ -3,7 +3,7 @@ param(
     [string]$WallpaperEngineExe = "C:\Program Files (x86)\Steam\steamapps\common\wallpaper_engine\wallpaper64.exe",
     [string]$CacheFile = "$env:LOCALAPPDATA\wallpaper_cache.json",
     [string]$LastFile = "$env:LOCALAPPDATA\wallpaper_last.txt",
-    [string]$DominantColorScript = "$env:USERPROFILE\wallpaperScripts\getDominantColor.ps1"
+    [string]$DominantColorScript = "$env:USERPROFILE\Documents\wallpaperScripts\getDominantColor.ps1"
 )
 
 # -------------------------

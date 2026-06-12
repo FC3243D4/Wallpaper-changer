@@ -14,13 +14,14 @@ else
 fi
 
 #apply color to logitech G devices
-if ! ratbagctl --version &> /dev/null; then
-  echo "ratbagctl is not installed. Skipping color application for Logitech G devices."
-else
-  echo "ratbagctl detected. Applying dominant color to Logitech G devices..."
-  ratbagctl booming-agouti led 0 set mode on color $color
-  ratbagctl crooning-chinchilla led 0 set mode on color $color
-fi
+devices=($(ratbagctl list | grep -oP '^[\w-]+(?=:)'))
+
+for device in "${devices[@]}"; do
+  profiles=($(ratbagctl "$device" info | grep -oP '^Profile \K\d+'))
+  for profile in "${profiles[@]}"; do
+    ratbagctl "$device" profile $profile led 0 set mode on color $color
+  done
+done
 
 #refresh color pallette
 wallust run -s $HOME/.config/WallpaperChanger/.current_wallpaper

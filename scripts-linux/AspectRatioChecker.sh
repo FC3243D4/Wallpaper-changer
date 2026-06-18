@@ -1,8 +1,5 @@
 #!/usr/bin/env bash
 
-# $1 = width
-# $2 = height
-
 #get resolution width and height of display
 width=$(cut -d 'x' -f1 <<< $1)
 height=$(cut -d 'x' -f2 <<< $1)

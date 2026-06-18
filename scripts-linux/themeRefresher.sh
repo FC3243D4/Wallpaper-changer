@@ -44,19 +44,24 @@ for pid in $(pidof rofi swaync ags swaybg); do
 done
 
 #Restart waybar and kill kded6 to ensure functiin of tray module
-killall waybar
-sleep 0.5
-waybar &
+if [ $XDG_SESSION_DESKTOP == "Hyprland" ]; then
+    killall waybar
+    sleep 0.5
+    waybar &
 
-# relaunch swaync
-sleep 0.3
-swaync >/dev/null 2>&1 &
-# reload swaync
-swaync-client --reload-config
+    # relaunch swaync
+    sleep 0.3
+    swaync >/dev/null 2>&1 &
+    # reload swaync
+    swaync-client --reload-config
+
+    sleep 2
+    echo "killing kded6 to refresh system tray"
+    pkill "kded6"
+else
+    echo "Not running Hyprland, skipping waybar restart."
+fi
+
 
 #reload kitty
 kill -SIGUSR1 $(pidof kitty)
-
-sleep 2
-echo "killing kded6 to refresh system tray"
-pkill "kded6"

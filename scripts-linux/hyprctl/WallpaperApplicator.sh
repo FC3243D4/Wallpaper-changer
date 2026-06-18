@@ -62,12 +62,20 @@ notify-send "Changing wallpaper" "Selected wallpaper: $WallpaperRelativePath" -t
 # 2️⃣ Get connected displays and resolutions and maps them to arrays
 # -----------------------------------------------------------------
 
-#Get connected displays and resolutions and maps them to arrays
-displays=$(hyprctl monitors | awk '/^Monitor/{print $2}')
-mapfile -t -O 1 var < <(echo "$displays")
-
-resolutions=$(hyprctl monitors | awk '/Monitor/{getline; print}')
-mapfile -t -O 1 res < <(echo "$resolutions")
+displays=$(wayland-info 2>/dev/null | awk '
+    /interface: .wl_output./ { in_output=1; next }
+    /^interface:/            { in_output=0 }
+    in_output && /^[[:space:]]*name:/ { name=$2 }
+    in_output && /^[[:space:]]*width:.*height:.*refresh:/ {
+      width=$2; height=$5; refresh=$8
+    }
+    in_output && /flags:.*current/ {
+      print name": "width"x"height" @ "refresh"Hz"
+    }
+  ')
+mapfile -t -O 1 var < <(echo "$displays" | cut -d ':' -f1)
+mapfile -t -O 1 res < <(echo "$displays" | cut -d ':' -f2 | cut -d '@' -f1 | tr -d ' ')
+mapfile -t -O 1 refresh < <(echo "$displays" | cut -d '@' -f2 | tr -d ' ')
 
 # -----------------------------------------------------------------
 # 3️⃣ Loop through displays, get aspect ratio folder, apply wallpaper with awww and set current wallpaper symlink to the one on the primary display
@@ -77,15 +85,19 @@ n=1
 while [[ -n ${var[$n]} ]]; do
     screen=${var[$n]}
 
-    resolutionAndRefreshRate=${res[$n]}
-    resolutionAndRefreshRate=$(echo $resolutionAndRefreshRate | tr -d ' ')
-    
-    refreshRate=$(cut -d '@' -f2 <<< $resolutionAndRefreshRate)
-    refreshRate=$(cut -d 'a' -f1 <<< $refreshRate)
+    echo "-----------------------------------------------------------------"
+    echo "Processing display: $screen"
+    echo "-----------------------------------------------------------------"
+
+    resolution=${res[$n]}
+    refreshRate=${refresh[$n]}
+
+    echo "resolution: $resolution"
+    echo "refresh rate: $refreshRate"
+
     [ -n "${refreshRate##*.*[1-9]*}" ]
     refreshRate=$(echo $(( ${refreshRate%.*} + $? )))
 
-    resolution=$(cut -d '@' -f1 <<< $resolutionAndRefreshRate)
 
     echo "Changing wallpapers on display: $screen"
     echo "with resolution: $resolution"

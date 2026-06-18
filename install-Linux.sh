@@ -133,16 +133,17 @@ else
         WallpapersDirExists=false
     else
         CreatePicturesDir=true
-        read -p "Do you want to copy this repo's wallpapers to the directory? [y/N]" -n 1 -r
-        echo ""
-        echo ""
-        if [[ ! $REPLY =~ ^[Yy]$ ]]
-        then
-            CopyWallpapers=true
-        else
-            CopyWallpapers=false
+        if [ -d ./wallpapers ]; then
+            read -p "Do you want to copy this repo's wallpapers to the directory? [y/N]" -n 1 -r
+            echo ""
+            echo ""
+            if [[ ! $REPLY =~ ^[Yy]$ ]]
+            then
+                CopyWallpapers=false
+            else
+                CopyWallpapers=true
+            fi
         fi
-    fi
 fi
 
 if [ ! -d "$HOME/.config/rofi" ]; then
@@ -216,141 +217,141 @@ if [ "$CopyWallpapers" = true ]; then
     fi
 
     #copy wallpapers x:9
-    if [ -d ./sfw/16-9 ]; then
-        cp -r ./sfw/16-9 $HOME/Pictures/wallpapers/
+    if [ -d ./wallpapers/sfw/16-9 ]; then
+        cp -r ./wallpapers/sfw/16-9 $HOME/Pictures/wallpapers/
     fi
 
-    if [ -d ./sfw/21-9 ]; then
-        cp -r ./sfw/21-9 $HOME/Pictures/wallpapers/
+    if [ -d ./wallpapers/sfw/21-9 ]; then
+        cp -r ./wallpapers/sfw/21-9 $HOME/Pictures/wallpapers/
     fi
 
-    if [ -d ./sfw/32-9 ]; then
-        cp -r ./sfw/32-9 $HOME/Pictures/wallpapers/
+    if [ -d ./wallpapers/sfw/32-9 ]; then
+        cp -r ./wallpapers/sfw/32-9 $HOME/Pictures/wallpapers/
     fi
 
-    if [ -d ./sfw/4-3 ]; then
-        cp -r ./sfw/4-3 $HOME/Pictures/wallpapers/
+    if [ -d ./wallpapers/sfw/4-3 ]; then
+        cp -r ./wallpapers/sfw/4-3 $HOME/Pictures/wallpapers/
     fi
 
     #copy wallpapers x:10
-    if [ -d ./sfw/16-10 ]; then
-        cp -r ./sfw/16-10 $HOME/Pictures/wallpapers/
+    if [ -d ./wallpapers/sfw/16-10 ]; then
+        cp -r ./wallpapers/sfw/16-10 $HOME/Pictures/wallpapers/
     fi
 
-    if [ -d ./sfw/21-10 ]; then
-        cp -r ./sfw/21-10 $HOME/Pictures/wallpapers/
+    if [ -d ./wallpapers/sfw/21-10 ]; then
+        cp -r ./wallpapers/sfw/21-10 $HOME/Pictures/wallpapers/
     fi
 
-    if [ -d ./sfw/32-10 ]; then
-        cp -r ./sfw/32-10 $HOME/Pictures/wallpapers/
+    if [ -d ./wallpapers/sfw/32-10 ]; then
+        cp -r ./wallpapers/sfw/32-10 $HOME/Pictures/wallpapers/
     fi
 
-    if [ -d ./sfw/3-2 ]; then
-        cp -r ./sfw/3-2 $HOME/Pictures/wallpapers/
+    if [ -d ./wallpapers/sfw/3-2 ]; then
+        cp -r ./wallpapers/sfw/3-2 $HOME/Pictures/wallpapers/
     fi
 
     #copy wallpapers 9:x
-    if [ -d ./sfw/9-16 ]; then
-        cp -r ./sfw/9-16 $HOME/Pictures/wallpapers/
+    if [ -d ./wallpapers/sfw/9-16 ]; then
+        cp -r ./wallpapers/sfw/9-16 $HOME/Pictures/wallpapers/
     fi
 
-    if [ -d ./sfw/9-21 ]; then
-        cp -r ./sfw/9-21 $HOME/Pictures/wallpapers/
+    if [ -d ./wallpapers/sfw/9-21 ]; then
+        cp -r ./wallpapers/sfw/9-21 $HOME/Pictures/wallpapers/
     fi
 
-    if [ -d ./sfw/9-32 ]; then
-        cp -r ./sfw/9-32 $HOME/Pictures/wallpapers/
+    if [ -d ./wallpapers/sfw/9-32 ]; then
+        cp -r ./wallpapers/sfw/9-32 $HOME/Pictures/wallpapers/
     fi
 
-    if [ -d ./sfw/3-4 ]; then
-        cp -r ./sfw/3-4 $HOME/Pictures/wallpapers/
+    if [ -d ./wallpapers/sfw/3-4 ]; then
+        cp -r ./wallpapers/sfw/3-4 $HOME/Pictures/wallpapers/
     fi
 
     #copy wallpapers 10:x
-    if [ -d ./sfw/10-16 ]; then
-        cp -r ./sfw/10-16 $HOME/Pictures/wallpapers/
+    if [ -d ./wallpapers/sfw/10-16 ]; then
+        cp -r ./wallpapers/sfw/10-16 $HOME/Pictures/wallpapers/
     fi
 
-    if [ -d ./sfw/10-21 ]; then
-        cp -r ./sfw/10-21 $HOME/Pictures/wallpapers/
+    if [ -d ./wallpapers/sfw/10-21 ]; then
+        cp -r ./wallpapers/sfw/10-21 $HOME/Pictures/wallpapers/
     fi
 
-    if [ -d ./sfw/10-32 ]; then
-        cp -r ./sfw/10-32 $HOME/Pictures/wallpapers/
+    if [ -d ./wallpapers/sfw/10-32 ]; then
+        cp -r ./wallpapers/sfw/10-32 $HOME/Pictures/wallpapers/
     fi
 
-    if [ -d ./sfw/2-3 ]; then
-        cp -r ./sfw/2-3 $HOME/Pictures/wallpapers/
+    if [ -d ./wallpapers/sfw/2-3 ]; then
+        cp -r ./wallpapers/sfw/2-3 $HOME/Pictures/wallpapers/
     fi
 
     #copy nsfw variants
     if [ "$CopyNsfw" = true ]; then
         #copy wallpapers x:9
-        if [ -d ./nsfw/16-9 ]; then
-            cp -r ./nsfw/16-9 $HOME/Pictures/wallpapers/
+        if [ -d ./wallpapers/nsfw/16-9 ]; then
+            cp -r ./wallpapers/nsfw/16-9 $HOME/Pictures/wallpapers/
         fi
 
-        if [ -d ./nsfw/21-9 ]; then
-            cp -r ./nsfw/21-9 $HOME/Pictures/wallpapers/
+        if [ -d ./wallpapers/nsfw/21-9 ]; then
+            cp -r ./wallpapers/nsfw/21-9 $HOME/Pictures/wallpapers/
         fi
 
-        if [ -d ./nsfw/32-9 ]; then
-            cp -r ./nsfw/32-9 $HOME/Pictures/wallpapers/
+        if [ -d ./wallpapers/nsfw/32-9 ]; then
+            cp -r ./wallpapers/nsfw/32-9 $HOME/Pictures/wallpapers/
         fi
 
-        if [ -d ./nsfw/4-3 ]; then
-            cp -r ./nsfw/4-3 $HOME/Pictures/wallpapers/
+        if [ -d ./wallpapers/nsfw/4-3 ]; then
+            cp -r ./wallpapers/nsfw/4-3 $HOME/Pictures/wallpapers/
         fi
 
         #copy wallpapers x:10
-        if [ -d ./nsfw/16-10 ]; then
-            cp -r ./nsfw/16-10 $HOME/Pictures/wallpapers/
+        if [ -d ./wallpapers/nsfw/16-10 ]; then
+            cp -r ./wallpapers/nsfw/16-10 $HOME/Pictures/wallpapers/
         fi
 
-        if [ -d ./nsfw/21-10 ]; then
-            cp -r ./nsfw/21-10 $HOME/Pictures/wallpapers/
+        if [ -d ./wallpapers/nsfw/21-10 ]; then
+            cp -r ./wallpapers/nsfw/21-10 $HOME/Pictures/wallpapers/
         fi
 
-        if [ -d ./nsfw/32-10 ]; then
-            cp -r ./nsfw/32-10 $HOME/Pictures/wallpapers/
+        if [ -d ./wallpapers/nsfw/32-10 ]; then
+            cp -r ./wallpapers/nsfw/32-10 $HOME/Pictures/wallpapers/
         fi
 
-        if [ -d ./nsfw/3-2 ]; then
-            cp -r ./nsfw/3-2 $HOME/Pictures/wallpapers/
+        if [ -d ./wallpapers/nsfw/3-2 ]; then
+            cp -r ./wallpapers/nsfw/3-2 $HOME/Pictures/wallpapers/
         fi
 
         #copy wallpapers 9:x
-        if [ -d ./nsfw/9-16 ]; then
-            cp -r ./nsfw/9-16 $HOME/Pictures/wallpapers/
+        if [ -d ./wallpapers/nsfw/9-16 ]; then
+            cp -r ./wallpapers/nsfw/9-16 $HOME/Pictures/wallpapers/
         fi
 
-        if [ -d ./nsfw/9-21 ]; then
-            cp -r ./nsfw/9-21 $HOME/Pictures/wallpapers/
+        if [ -d ./wallpapers/nsfw/9-21 ]; then
+            cp -r ./wallpapers/nsfw/9-21 $HOME/Pictures/wallpapers/
         fi
 
-        if [ -d ./nsfw/9-32 ]; then
-            cp -r ./nsfw/9-32 $HOME/Pictures/wallpapers/
+        if [ -d ./wallpapers/nsfw/9-32 ]; then
+            cp -r ./wallpapers/nsfw/9-32 $HOME/Pictures/wallpapers/
         fi
 
-        if [ -d ./nsfw/3-4 ]; then
-            cp -r ./nsfw/3-4 $HOME/Pictures/wallpapers/
+        if [ -d ./wallpapers/nsfw/3-4 ]; then
+            cp -r ./wallpapers/nsfw/3-4 $HOME/Pictures/wallpapers/
         fi
 
         #copy wallpapers 10:x
-        if [ -d ./nsfw/10-16 ]; then
-            cp -r ./nsfw/10-16 $HOME/Pictures/wallpapers/
+        if [ -d ./wallpapers/nsfw/10-16 ]; then
+            cp -r ./wallpapers/nsfw/10-16 $HOME/Pictures/wallpapers/
         fi
 
-        if [ -d ./nsfw/10-21 ]; then
-            cp -r ./nsfw/10-21 $HOME/Pictures/wallpapers/
+        if [ -d ./wallpapers/nsfw/10-21 ]; then
+            cp -r ./wallpapers/nsfw/10-21 $HOME/Pictures/wallpapers/
         fi
 
-        if [ -d ./nsfw/10-32 ]; then
-            cp -r ./nsfw/10-32 $HOME/Pictures/wallpapers/
+        if [ -d ./wallpapers/nsfw/10-32 ]; then
+            cp -r ./wallpapers/nsfw/10-32 $HOME/Pictures/wallpapers/
         fi
 
-        if [ -d ./nsfw/2-3 ]; then
-            cp -r ./nsfw/2-3 $HOME/Pictures/wallpapers/
+        if [ -d ./wallpapers/nsfw/2-3 ]; then
+            cp -r ./wallpapers/nsfw/2-3 $HOME/Pictures/wallpapers/
         fi
     fi
 fi

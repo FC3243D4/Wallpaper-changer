@@ -39,26 +39,29 @@ $picturesPath = "$env:USERPROFILE\Pictures"
 $wallpapersPath = "$picturesPath\wallpapers"
 $cachePath = "$env:LOCALAPPDATA\wallpaper_cache.json"
 
-$copyWallpapers = Read-Host "Do you want to copy this repo's wallpapers? (y/n)"
+if ((Test-Path ".\wallpapers")) {
 
-if ($copyWallpapers -ne 'y') {
+    $copyWallpapers = Read-Host "Do you want to copy this repo's wallpapers? (y/n)"
+
+    if ($copyWallpapers -ne 'y') {
     Write-Host "Skipping wallpaper copy. Please ensure you have wallpapers in $wallpapersPath for the script to work." -ForegroundColor Yellow
-} else {
-    Write-Host "Preparing to copy wallpapers..." -ForegroundColor Green
-
-    if (-not (Test-Path $picturesPath)) {
-        New-Item -ItemType Directory -Path $picturesPath -Force | Out-Null
-        Write-Host "Pictures folder created." -ForegroundColor Green
     } else {
-        $picturesCont = @(Get-ChildItem -Path $picturesPath -ErrorAction SilentlyContinue)
-        if ($picturesCont.Count -gt 0) {
-            $confirm = Read-Host "Pictures folder is not empty. Delete contents? (y/n)"
-            if ($confirm -eq 'y') {
-                Remove-Item -Path "$picturesPath\*" -Recurse -Force
-                Write-Host "Pictures folder cleared." -ForegroundColor Green
-            } else {
-                Write-Host "Operation cancelled by user." -ForegroundColor Yellow
-                exit 0
+        Write-Host "Preparing to copy wallpapers..." -ForegroundColor Green
+
+        if (-not (Test-Path $picturesPath)) {
+            New-Item -ItemType Directory -Path $picturesPath -Force | Out-Null
+            Write-Host "Pictures folder created." -ForegroundColor Green
+        } else {
+            $picturesCont = @(Get-ChildItem -Path $picturesPath -ErrorAction SilentlyContinue)
+            if ($picturesCont.Count -gt 0) {
+                $confirm = Read-Host "Pictures folder is not empty. Delete contents? (y/n)"
+                if ($confirm -eq 'y') {
+                    Remove-Item -Path "$picturesPath\*" -Recurse -Force
+                    Write-Host "Pictures folder cleared." -ForegroundColor Green
+                } else {
+                    Write-Host "Operation cancelled by user." -ForegroundColor Yellow
+                    exit 0
+                }
             }
         }
     }
@@ -89,4 +92,4 @@ if ($copyWallpapers -ne 'y') {
         Write-Host "If you want to only use sfw or nsfw wallpapers, you can use the dedicated scripts in $destScripts to do so." -ForegroundColor Green
     }
 }
-Write-Host "Installation complete!" -ForegroundColor Green
+Write-Host "Installation complete! Now add your wallpapers to $wallpapersPath in folders named after their aspect ratios for example: 16-9, 21-9, etc." -ForegroundColor Green

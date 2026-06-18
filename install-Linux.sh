@@ -9,6 +9,7 @@ CopyScripts=true
 WallpapersDirExists=false
 CopyWallpapers=true
 CopyNsfw=false
+wallpapersRepo=false
 
 # -------------------------
 # 1️⃣ CHECK FOR REQUIRED UTILITIES
@@ -134,6 +135,7 @@ else
     else
         CreatePicturesDir=true
         if [ -d ./wallpapers ]; then
+            wallpapersRepo=true
             read -p "Do you want to copy this repo's wallpapers to the directory? [y/N]" -n 1 -r
             echo ""
             echo ""
@@ -411,6 +413,10 @@ else
         echo ""
         echo "In all cases the wallpaper will be applied to all your displays with the correct aspect ratio and the dominant color will be applied to your openrgb supported devices."
         echo ""
+        if [ "$wallpapersRepo" = false ]; then
+            echo "make sure to add your own wallpapers to $HOME/Pictures/wallpapers in folders named after their aspect ratios (16-9, 21-9, ...) to ensure the script works correctly."
+            echo ""
+        fi
         echo "On its first run, the script will create a cache file with the aspect ratios of your wallpapers to speed up the process. If you add or remove wallpaper ratios, make sure to delete the cache file at $HOME/.cache/wallpaper_ratios.cache to ensure the script detects them correctly."
         echo ""
     fi

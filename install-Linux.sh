@@ -128,8 +128,7 @@ else
     read -p "Pictures directory does not exist. This can be because of your system language or because you deleted it. Do you want to create it? [y/N]" -n 1 -r
     echo ""
     echo ""
-    if [[ ! $REPLY =~ ^[Yy]$ ]]
-    then
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
         CopyWallpapers=false
         WallpapersDirExists=false
     else
@@ -139,13 +138,13 @@ else
             read -p "Do you want to copy this repo's wallpapers to the directory? [y/N]" -n 1 -r
             echo ""
             echo ""
-            if [[ ! $REPLY =~ ^[Yy]$ ]]
-            then
+            if [[ ! $REPLY =~ ^[Yy]$ ]]; then
                 CopyWallpapers=false
             else
                 CopyWallpapers=true
             fi
         fi
+    fi
 fi
 
 if [ ! -d "$HOME/.config/rofi" ]; then

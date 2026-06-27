@@ -3,10 +3,48 @@
 # Save Hyprland layout state before any restarts
 "$HOME/.config/WallpaperChanger/hyprMasterLayoutPreservation.sh" save
 
-#Get dominant color from wallpaper
-colorLine="$($HOME/.config/WallpaperChanger/dominantcolor -m 1 -n 2 -e black -p dominant $HOME/.config/WallpaperChanger/.current_wallpaper | grep -E '#')"
-color=$(echo $colorLine | tr -d '#')
-echo "Dominant color: #$color"
+WALLPAPER="$HOME/.config/WallpaperChanger/.current_wallpaper"
+BRIGHTNESS_THRESHOLD=40
+color=""
+
+# Try matugen candidates 0-4 in order
+for i in 0 1 2 3 4; do
+    matugen image "$WALLPAPER" --source-color-index $i --quiet
+
+    candidate=$(cat ~/.cache/matugen/source-color | tr -d '[:space:]')
+    R=$((16#${candidate:0:2}))
+    G=$((16#${candidate:2:2}))
+    B=$((16#${candidate:4:2}))
+    brightness=$(( (R * 299 + G * 587 + B * 114) / 1000 ))
+    echo "Candidate $i: #$candidate (brightness: $brightness)"
+
+    if [ "$brightness" -ge "$BRIGHTNESS_THRESHOLD" ]; then
+        color="$candidate"
+        echo "Using candidate $i: #$color"
+        break
+    fi
+done
+
+# If all candidates were too dark, fall back to dominantcolor
+if [ -z "$color" ]; then
+    echo "All matugen candidates too dark, falling back to dominantcolor..."
+    colorLine="$($HOME/.config/WallpaperChanger/dominantcolor -m 1 -n 2 -e black -p dominant "$WALLPAPER" | grep -E '#')"
+    color=$(echo $colorLine | tr -d '#')
+    matugen color hex "#$color" --quiet
+fi
+
+colorLine="#$color"
+R=$((16#${color:0:2}))
+G=$((16#${color:2:2}))
+B=$((16#${color:4:2}))
+accent="#${color,,}"
+echo "Final color: #$color"
+
+# Validate color before proceeding
+if [ ${#color} -ne 6 ] || ! echo "$color" | grep -qE '^[0-9a-fA-F]{6}$'; then
+    echo "ERROR: Invalid color '$color', aborting theme refresh"
+    exit 1
+fi
 
 #apply color to openrgb
 if ! openrgb --version &> /dev/null; then
@@ -26,32 +64,28 @@ for device in "${devices[@]}"; do
   done
 done
 
-#refresh color pallette
-wallust run -s $HOME/.config/WallpaperChanger/.current_wallpaper
-
-# --- KDE & GTK accent color theming ---
-R=$((16#${color:0:2}))
-G=$((16#${color:2:2}))
-B=$((16#${color:4:2}))
-accent="#${color,,}"
-
 # Ensure colors.css exists to avoid GTK warnings
 touch "$HOME/.config/gtk-3.0/colors.css"
 touch "$HOME/.config/gtk-4.0/colors.css"
 
-# 1. Patch BreezeDark.colors (used by KColorScheme/Breeze style)
+# 1. Patch BreezeDark.colors (always from clean base)
 BREEZE_COLORS="$HOME/.local/share/color-schemes/BreezeDark.colors"
-if [ -f "$BREEZE_COLORS" ]; then
+BREEZE_COLORS_BASE="$HOME/.local/share/color-schemes/BreezeDark.colors.base"
+
+if [ ! -f "$BREEZE_COLORS_BASE" ] && [ -f "$BREEZE_COLORS" ]; then
+    cp "$BREEZE_COLORS" "$BREEZE_COLORS_BASE"
+fi
+
+if [ -f "$BREEZE_COLORS_BASE" ]; then
+    cp "$BREEZE_COLORS_BASE" "$BREEZE_COLORS"
     sed -i "s/^DecorationFocus=.*/DecorationFocus=$R,$G,$B/" "$BREEZE_COLORS"
     sed -i "s/^DecorationHover=.*/DecorationHover=$R,$G,$B/" "$BREEZE_COLORS"
-    # Only patch ForegroundActive in [Colors:View], not globally
     awk -v rgb="$R,$G,$B" '
         /^\[Colors:View\]/ { in_view=1 }
         /^\[/ && !/^\[Colors:View\]/ { in_view=0 }
         in_view && /^ForegroundActive=/ { print "ForegroundActive=" rgb; next }
         { print }
     ' "$BREEZE_COLORS" > /tmp/BreezeDark.colors && mv /tmp/BreezeDark.colors "$BREEZE_COLORS"
-    # Only patch BackgroundNormal in [Colors:Selection]
     awk -v rgb="$R,$G,$B" '
         /^\[Colors:Selection\]/ { in_sel=1 }
         /^\[/ && !/^\[Colors:Selection\]/ { in_sel=0 }
@@ -60,10 +94,17 @@ if [ -f "$BREEZE_COLORS" ]; then
     ' "$BREEZE_COLORS" > /tmp/BreezeDark.colors && mv /tmp/BreezeDark.colors "$BREEZE_COLORS"
 fi
 
-# 2. Patch qt6ct palette (used by qt6ct-style)
+# 2. Patch qt6ct palette (always from clean base)
 QT6CT_CONF="$HOME/.config/qt6ct/colors/BreezeDark.conf"
-if [ -f "$QT6CT_CONF" ]; then
-    sed -i "s/#ff[0-9a-fA-F]\{6\}, #fffcfcfc, #ff2980b9/#ff${color,,}, #fffcfcfc, #ff2980b9/g" "$QT6CT_CONF"
+QT6CT_BASE="$HOME/.config/qt6ct/colors/BreezeDark.conf.base"
+
+if [ ! -f "$QT6CT_BASE" ] && [ -f "$QT6CT_CONF" ]; then
+    cp "$QT6CT_CONF" "$QT6CT_BASE"
+fi
+
+if [ -f "$QT6CT_BASE" ]; then
+    cp "$QT6CT_BASE" "$QT6CT_CONF"
+    sed -i "s/#ff3daee9/#ff${color,,}/g" "$QT6CT_CONF"
 fi
 
 # 3. Patch kdeglobals directly
@@ -77,24 +118,29 @@ kwriteconfig6 --file kdeglobals --group "General" --key "AccentColor" "$R,$G,$B"
 # Signal KDE apps to reload colors live
 qdbus6 org.kde.KGlobalSettings /KGlobalSettings notifyChange 0 0 2>/dev/null || true
 
-# 3b. Patch Breeze-Dark GTK theme user copy
+# 3b. Patch Breeze-Dark GTK theme (always from system copy)
 GTK_BASE="$HOME/.local/share/themes/Breeze-Dark"
 if [ -d "$GTK_BASE" ]; then
-    for css in "$GTK_BASE/gtk-3.0/gtk.css" "$GTK_BASE/gtk-4.0/gtk.css"; do
-        if [ -f "$css" ]; then
-            current=$(grep "theme_selected_bg_color_breeze #" "$css" | grep -oP '#[0-9a-fA-F]{6}' | head -1)
-            if [ -n "$current" ]; then
-                cr=$((16#${current:1:2}))
-                cg=$((16#${current:3:2}))
-                cb=$((16#${current:5:2}))
-                sed -i "s/${current}/#${color,,}/g" "$css"
-                sed -i "s/rgba($cr, $cg, $cb,/rgba($R, $G, $B,/g" "$css"
-            fi
+    for gtk_ver in gtk-3.0 gtk-4.0; do
+        sys_css="/usr/share/themes/Breeze-Dark/$gtk_ver/gtk.css"
+        usr_css="$GTK_BASE/$gtk_ver/gtk.css"
+        if [ -f "$sys_css" ]; then
+            cp "$sys_css" "$usr_css"
+            sed -i "s/theme_view_hover_decoration_color_breeze #[0-9a-fA-F]*/theme_view_hover_decoration_color_breeze #${color,,}/g" "$usr_css"
+            sed -i "s/theme_hovering_selected_bg_color_breeze #[0-9a-fA-F]*/theme_hovering_selected_bg_color_breeze #${color,,}/g" "$usr_css"
+            sed -i "s/theme_selected_bg_color_breeze #[0-9a-fA-F]*/theme_selected_bg_color_breeze #${color,,}/g" "$usr_css"
+            sed -i "s/theme_view_active_decoration_color_breeze #[0-9a-fA-F]*/theme_view_active_decoration_color_breeze #${color,,}/g" "$usr_css"
+            sed -i "s/theme_unfocused_selected_bg_color_alt_breeze #[0-9a-fA-F]*/theme_unfocused_selected_bg_color_alt_breeze #${color,,}/g" "$usr_css"
+            sed -i "s/theme_button_decoration_hover_breeze  #[0-9a-fA-F]*/theme_button_decoration_hover_breeze  #${color,,}/g" "$usr_css"
+            sed -i "s/theme_button_decoration_focus_breeze  #[0-9a-fA-F]*/theme_button_decoration_focus_breeze  #${color,,}/g" "$usr_css"
+            sed -i "s/theme_button_decoration_hover_backdrop_breeze  #[0-9a-fA-F]*/theme_button_decoration_hover_backdrop_breeze  #${color,,}/g" "$usr_css"
+            sed -i "s/theme_button_decoration_focus_backdrop_breeze  #[0-9a-fA-F]*/theme_button_decoration_focus_backdrop_breeze  #${color,,}/g" "$usr_css"
+            sed -i "s/rgba([0-9]*, [0-9]*, [0-9]*,/rgba($R, $G, $B,/g" "$usr_css"
         fi
     done
 fi
 
-# 3c. Patch gtk.css treeview selection color
+# 3c. Patch gtk.css treeview selection color (always fully overwritten)
 cat > "$HOME/.config/gtk-3.0/gtk.css" << EOF
 treeview {
     background-color: #202326;
@@ -128,11 +174,15 @@ rm -rf "$HOME/.cache/gtk-3.0" "$HOME/.cache/gtk-4.0"
 systemctl --user restart xdg-desktop-portal-gtk
 systemctl --user restart xdg-desktop-portal
 
-# 4. Patch icon SVGs in breeze-dark-accent override theme
+# 4. Patch icon SVGs (always from system breeze-dark to avoid double-patching)
 ICON_DIR="$HOME/.local/share/icons/breeze-dark-accent"
 
-cp "$ICON_DIR/places/48/folder.svg" "$ICON_DIR/places/16/folder.svg"
-cp "$ICON_DIR/places/48/folder.svg" "$ICON_DIR/places/24/folder.svg"
+for size in 16 22 24 32 48 64 96; do
+    src="/usr/share/icons/breeze-dark/places/$size/folder.svg"
+    [ -f "$src" ] && cp "$src" "$ICON_DIR/places/$size/folder.svg"
+done
+cp /usr/share/icons/breeze-dark/mimetypes/64/inode-directory.svg \
+   "$ICON_DIR/mimetypes/64/inode-directory.svg" 2>/dev/null
 
 for svg in \
     "$ICON_DIR/places/16/folder.svg" \
@@ -144,7 +194,7 @@ for svg in \
     "$ICON_DIR/places/96/folder.svg" \
     "$ICON_DIR/mimetypes/64/inode-directory.svg"
 do
-    [ -f "$svg" ] && sed -i "s/color: #[0-9a-fA-F]\{6\}/color: $accent/g" "$svg"
+    [ -f "$svg" ] && sed -i "s/ColorScheme-Accent { color: #[0-9a-fA-F]*/ColorScheme-Accent { color: $accent/g" "$svg"
 done
 
 # 5. Patch VS Code color customizations

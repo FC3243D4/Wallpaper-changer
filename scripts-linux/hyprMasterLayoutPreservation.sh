@@ -1,99 +1,108 @@
 #!/usr/bin/env bash
 # hyprMasterLayoutPreservation.sh
-# Saves and restores the master layout state around a process restart.
+# Saves and restores Hyprland master layout state for ALL tiled workspaces.
 #
 # Usage:
-#   hyprMasterLayoutPreservation.sh save <app_class>
-#   hyprMasterLayoutPreservation.sh restore <app_class>
+#   hyprMasterLayoutPreservation.sh save
+#   hyprMasterLayoutPreservation.sh restore
 #
-# Example in themeRefresher.sh:
-#   hyprMasterLayoutPreservation.sh save zen
-#   pkill -f zen-bin && zen-browser &
-#   hyprMasterLayoutPreservation.sh restore zen
+# Place save at the very start of your script (before any restarts),
+# and restore at the very end (after all apps have relaunched).
 
 STATE_FILE="/tmp/hyprLayoutState.txt"
-APP_CLASS="${2:-zen}"
 
 save_layout() {
     hyprctl clients -j | python3 -c "
 import json, sys
 clients = json.load(sys.stdin)
-# Find workspace of the target app
-app_ws = next((c['workspace']['id'] for c in clients
-               if '$APP_CLASS'.lower() in c.get('class','').lower()), None)
-if app_ws is None:
-    exit(1)
-print(app_ws)
-ws_clients = [c for c in clients if c['workspace']['id'] == app_ws]
-master = max(ws_clients, key=lambda x: x['size'][0] * x['size'][1])
-print('master:' + master['address'] + ':' + master['class'])
-slaves = [c for c in ws_clients if c['address'] != master['address']]
-for c in sorted(slaves, key=lambda x: (x['at'][1], x['at'][0])):
-    print('slave:' + c['address'] + ':' + c['class'])
+
+# Group clients by workspace, skip special/scratchpad workspaces (id <= 0)
+workspaces = {}
+for c in clients:
+    ws_id = c['workspace']['id']
+    if ws_id <= 0:
+        continue
+    if ws_id not in workspaces:
+        workspaces[ws_id] = []
+    workspaces[ws_id].append(c)
+
+for ws_id, ws_clients in sorted(workspaces.items()):
+    # Skip workspaces with only one window (nothing to preserve)
+    if len(ws_clients) < 2:
+        continue
+    # Master is the window with largest area
+    master = max(ws_clients, key=lambda x: x['size'][0] * x['size'][1])
+    slaves = [c for c in ws_clients if c['address'] != master['address']]
+    # Only save if it looks like a master layout (master is notably larger)
+    master_area = master['size'][0] * master['size'][1]
+    slave_areas = [c['size'][0] * c['size'][1] for c in slaves]
+    if not slave_areas or master_area <= max(slave_areas):
+        continue
+    print('workspace:' + str(ws_id))
+    print('master:' + master['address'] + ':' + master['class'])
+    for c in sorted(slaves, key=lambda x: (x['at'][1], x['at'][0])):
+        print('slave:' + c['address'] + ':' + c['class'])
+    print('---')
 " > "$STATE_FILE"
 
-    if [ $? -eq 0 ]; then
-        echo "Layout saved to $STATE_FILE"
+    if [ -s "$STATE_FILE" ]; then
+        echo "Layout saved for workspaces:"
+        grep "^workspace:" "$STATE_FILE" | cut -d: -f2
     else
-        echo "No window with class '$APP_CLASS' found, skipping layout save"
+        echo "No master layouts found to save"
         rm -f "$STATE_FILE"
     fi
 }
 
 restore_layout() {
-    if [ ! -f "$STATE_FILE" ]; then
+    if [ ! -f "$STATE_FILE" ] || [ ! -s "$STATE_FILE" ]; then
         echo "No saved layout state found, skipping restore"
         return
     fi
 
-    zen_workspace=$(head -1 "$STATE_FILE")
-    master_class=$(grep "^master:" "$STATE_FILE" | cut -d: -f3)
+    # Parse state file into per-workspace blocks
+    current_ws=""
+    master_class=""
+    declare -a original_classes
 
-    # Build original slave class order
-    original_classes=()
-    while IFS= read -r line; do
-        original_classes+=("$(echo "$line" | cut -d: -f3)")
-    done < <(grep "^slave:" "$STATE_FILE")
+    restore_workspace() {
+        local ws_id="$1"
+        local m_class="$2"
+        local -n o_classes="$3"
 
-    # Wait for app window to appear (max 5 seconds)
-    echo "Waiting for $APP_CLASS to appear..."
-    for i in $(seq 1 10); do
-        sleep 0.5
-        hyprctl clients -j | python3 -c "
-import json,sys
-clients=json.load(sys.stdin)
-exit(0 if any('$APP_CLASS'.lower() in c.get('class','').lower() for c in clients) else 1)" && break
-    done
-    sleep 0.3
+        if [ ${#o_classes[@]} -eq 0 ]; then
+            return
+        fi
 
-    # Step 1: set correct master only if needed
-    current_master=$(hyprctl clients -j | python3 -c "
+        echo "Restoring workspace $ws_id (master: $m_class, slaves: ${o_classes[*]})"
+
+        # Step 1: set correct master only if needed
+        current_master=$(hyprctl clients -j | python3 -c "
 import json, sys
 clients = json.load(sys.stdin)
-ws_clients = [c for c in clients if c['workspace']['id'] == $zen_workspace]
+ws_clients = [c for c in clients if c['workspace']['id'] == $ws_id]
 if not ws_clients:
     exit(1)
 master = max(ws_clients, key=lambda x: x['size'][0] * x['size'][1])
 print(master['class'])
-")
+" 2>/dev/null)
 
-    if ! echo "$current_master" | grep -qi "^${master_class}$"; then
-        echo "Promoting $master_class to master..."
-        hyprctl dispatch "hl.dsp.focus({ window = \"class:$master_class\" })"
-        sleep 0.3
-        hyprctl dispatch 'hl.dsp.layout("swapwithmaster master")'
-        sleep 0.3
-    else
-        echo "$master_class is already master"
-    fi
+        if [ -n "$current_master" ] && ! echo "$current_master" | grep -qi "^${m_class}$"; then
+            echo "  Promoting $m_class to master on ws $ws_id"
+            hyprctl dispatch "hl.dsp.focus({ window = \"class:$m_class\" })"
+            sleep 0.3
+            hyprctl dispatch 'hl.dsp.layout("swapwithmaster master")'
+            sleep 0.3
+        fi
 
-    # Step 2: restore each slave slot in order
-    get_current_slave_slot() {
-        local target_class="$1"
-        hyprctl clients -j | python3 -c "
+        # Step 2: restore each slave slot in order
+        for target_slot in "${!o_classes[@]}"; do
+            target_class="${o_classes[$target_slot]}"
+
+            current_slot=$(hyprctl clients -j | python3 -c "
 import json, sys
 clients = json.load(sys.stdin)
-ws_clients = [c for c in clients if c['workspace']['id'] == $zen_workspace]
+ws_clients = [c for c in clients if c['workspace']['id'] == $ws_id]
 if not ws_clients:
     exit(1)
 master = max(ws_clients, key=lambda x: x['size'][0] * x['size'][1])
@@ -102,36 +111,53 @@ for i, c in enumerate(sorted(slaves, key=lambda x: (x['at'][1], x['at'][0]))):
     if '$target_class'.lower() in c['class'].lower():
         print(i)
         break
-"
+" 2>/dev/null)
+
+            if [ -n "$current_slot" ] && [ "$current_slot" -gt 0 ]; then
+                n_swaps=$(( current_slot - target_slot ))
+                if [ $n_swaps -gt 0 ]; then
+                    echo "  Moving $target_class from slot $current_slot to slot $target_slot"
+                    hyprctl dispatch "hl.dsp.focus({ window = \"class:$target_class\" })"
+                    sleep 0.2
+                    for i in $(seq 1 $n_swaps); do
+                        hyprctl dispatch 'hl.dsp.layout("swapprev")'
+                        sleep 0.2
+                    done
+                fi
+            fi
+        done
     }
 
-    for target_slot in "${!original_classes[@]}"; do
-        target_class="${original_classes[$target_slot]}"
-        current_slot=$(get_current_slave_slot "$target_class")
-
-        if [ -n "$current_slot" ] && [ "$current_slot" -gt 0 ]; then
-            n_swaps=$(( current_slot - target_slot ))
-            if [ $n_swaps -gt 0 ]; then
-                echo "Moving $target_class from slot $current_slot to slot $target_slot ($n_swaps swaps)"
-                hyprctl dispatch "hl.dsp.focus({ window = \"class:$target_class\" })"
-                sleep 0.2
-                for i in $(seq 1 $n_swaps); do
-                    hyprctl dispatch 'hl.dsp.layout("swapprev")'
-                    sleep 0.2
-                done
+    # Read state file and restore each workspace
+    while IFS= read -r line; do
+        if [[ "$line" == workspace:* ]]; then
+            current_ws="${line#workspace:}"
+            master_class=""
+            original_classes=()
+        elif [[ "$line" == master:* ]]; then
+            master_class=$(echo "$line" | cut -d: -f3)
+        elif [[ "$line" == slave:* ]]; then
+            original_classes+=("$(echo "$line" | cut -d: -f3)")
+        elif [[ "$line" == "---" ]]; then
+            # End of workspace block — restore it
+            if [ -n "$current_ws" ] && [ -n "$master_class" ]; then
+                restore_workspace "$current_ws" "$master_class" original_classes
             fi
+            current_ws=""
+            master_class=""
+            original_classes=()
         fi
-    done
+    done < "$STATE_FILE"
 
     rm -f "$STATE_FILE"
-    echo "Layout restored"
+    echo "Layout restore complete"
 }
 
 case "$1" in
     save)    save_layout ;;
     restore) restore_layout ;;
     *)
-        echo "Usage: $0 save|restore <app_class>"
+        echo "Usage: $0 save|restore"
         exit 1
         ;;
 esac

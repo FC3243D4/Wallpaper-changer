@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+# Save Hyprland layout state before any restarts
+"$HOME/.config/WallpaperChanger/hyprMasterLayoutPreservation.sh" save
+
 #Get dominant color from wallpaper
 colorLine="$($HOME/.config/WallpaperChanger/dominantcolor -m 1 -n 2 -e black -p dominant $HOME/.config/WallpaperChanger/.current_wallpaper | grep -E '#')"
 color=$(echo $colorLine | tr -d '#')
@@ -22,9 +25,6 @@ for device in "${devices[@]}"; do
     ratbagctl "$device" profile $profile led 0 set mode on color $color
   done
 done
-
-# Save layout state before any restarts
-"$HOME/.config/WallpaperChanger/hyprMasterLayoutPreservation.sh" save zen
 
 #refresh color pallette
 wallust run -s $HOME/.config/WallpaperChanger/.current_wallpaper
@@ -93,6 +93,29 @@ if [ -d "$GTK_BASE" ]; then
         fi
     done
 fi
+
+# 3c. Patch gtk.css treeview selection color
+cat > "$HOME/.config/gtk-3.0/gtk.css" << EOF
+treeview {
+    background-color: #202326;
+    color: #eff0f1;
+}
+treeview:selected {
+    background-color: #${color,,};
+}
+treeview header button {
+    background-color: #202326;
+    color: #eff0f1;
+    border-color: #2d3036;
+}
+.sidebar {
+    background-color: #202326;
+    color: #eff0f1;
+}
+.sidebar row:selected {
+    background-color: #${color,,};
+}
+EOF
 
 # Nudge GTK apps to reload theme live
 current_theme=$(gsettings get org.gnome.desktop.interface gtk-theme | tr -d "'")
@@ -191,12 +214,26 @@ done
 # 7. Restart Dolphin to pick up new icons
 pkill dolphin && sleep 0.5 && dolphin &
 
-# 8. Restart Zen and restore layout
+# 8. Restart Zen
 if pgrep -f zen-bin > /dev/null; then
     pkill -f zen-bin
     sleep 1
     zen-browser &
-    "$HOME/.config/WallpaperChanger/hyprMasterLayoutPreservation.sh" restore zen
+fi
+
+# 9. Restart Ferdium
+FERDIUM_SETTINGS=~/.config/Ferdium/config/settings.json
+if [ -f "$FERDIUM_SETTINGS" ]; then
+    jq --arg color "$colorLine" \
+        '.accentColor = $color | .progressbarAccentColor = $color' \
+        "$FERDIUM_SETTINGS" > /tmp/ferdium-settings.tmp \
+        && mv /tmp/ferdium-settings.tmp "$FERDIUM_SETTINGS"
+
+    if pgrep -f "electron.*ferdium-bin" > /dev/null; then
+        pkill -f "electron.*ferdium-bin"
+        sleep 1
+        ferdium >/dev/null 2>&1 &disown
+    fi
 fi
 
 # Kill already running processes
@@ -237,3 +274,6 @@ fi
 
 #reload kitty
 kill -SIGUSR1 $(pidof kitty)
+
+# Restore Hyprland layout state after all restarts
+"$HOME/.config/WallpaperChanger/hyprMasterLayoutPreservation.sh" restore

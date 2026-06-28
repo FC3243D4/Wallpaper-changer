@@ -7,10 +7,17 @@
 #   hyprMasterLayoutPreservation.sh restore
 
 STATE_FILE="/tmp/hyprLayoutState.txt"
-CURRENT_WORKSPACE=$(hyprctl activeworkspace -j | jq '.id' )
 
 save_layout() {
-    hyprctl clients -j | python3 -c "
+    local current_ws
+    current_ws=$(hyprctl activeworkspace -j | jq '.id')
+    echo "Current workspace: $current_ws"
+
+    {
+        # Save current workspace at top so restore can return to it
+        echo "current_workspace:$current_ws"
+
+        hyprctl clients -j | python3 -c "
 import json, sys
 clients = json.load(sys.stdin)
 
@@ -41,7 +48,8 @@ for ws_id, ws_clients in sorted(workspaces.items()):
     for c in sorted(slaves, key=lambda x: (x['at'][1], x['at'][0])):
         print('slave:' + c['address'] + ':' + c['class'])
     print('---')
-" > "$STATE_FILE"
+"
+    } > "$STATE_FILE"
 
     if [ -s "$STATE_FILE" ]; then
         echo "Layout saved for workspaces:"
@@ -58,6 +66,11 @@ restore_layout() {
         return
     fi
 
+    # Read saved workspace from state file (captured before any restarts)
+    local saved_workspace
+    saved_workspace=$(grep "^current_workspace:" "$STATE_FILE" | cut -d: -f2)
+    echo "Will return to workspace: $saved_workspace"
+
     restore_workspace() {
         local ws_id="$1"
         local m_class="$2"
@@ -67,13 +80,14 @@ restore_layout() {
 
         # Single window workspace — move it to the correct workspace
         if [ ${#o_classes[@]} -eq 0 ]; then
-            hyprctl dispatch "hl.dsp.window.move({ workspace = $ws_id, window = \"class:$m_class\" })" 2>/dev/null
+            hyprctl dispatch "hl.dsp.window.move({ workspace = $ws_id, window = \"class:$m_class\", silent = true })" 2>/dev/null
             return
         fi
 
-        # Multi-window: first ensure all slaves are on the correct workspace
+        # Multi-window: move all slaves to correct workspace silently
         for slave_class in "${o_classes[@]}"; do
-            current_ws=$(hyprctl clients -j | python3 -c "
+            local slv_ws
+            slv_ws=$(hyprctl clients -j | python3 -c "
 import json, sys
 clients = json.load(sys.stdin)
 for c in clients:
@@ -81,15 +95,16 @@ for c in clients:
         print(c['workspace']['id'])
         break
 " 2>/dev/null)
-            if [ -n "$current_ws" ] && [ "$current_ws" != "$ws_id" ]; then
-                echo "  Moving $slave_class from ws $current_ws to ws $ws_id"
-                hyprctl dispatch "hl.dsp.window.move({ workspace = $ws_id, window = \"class:$slave_class\" })" 2>/dev/null
+            if [ -n "$slv_ws" ] && [ "$slv_ws" != "$ws_id" ]; then
+                echo "  Moving $slave_class from ws $slv_ws to ws $ws_id"
+                hyprctl dispatch "hl.dsp.window.move({ workspace = $ws_id, window = \"class:$slave_class\", silent = true })" 2>/dev/null
                 sleep 0.2
             fi
         done
 
-        # Ensure master is on correct workspace too
-        master_ws=$(hyprctl clients -j | python3 -c "
+        # Move master to correct workspace silently
+        local mstr_ws
+        mstr_ws=$(hyprctl clients -j | python3 -c "
 import json, sys
 clients = json.load(sys.stdin)
 for c in clients:
@@ -97,14 +112,15 @@ for c in clients:
         print(c['workspace']['id'])
         break
 " 2>/dev/null)
-        if [ -n "$master_ws" ] && [ "$master_ws" != "$ws_id" ]; then
-            echo "  Moving master $m_class from ws $master_ws to ws $ws_id"
-            hyprctl dispatch "hl.dsp.window.move({ workspace = $ws_id, window = \"class:$m_class\" })" 2>/dev/null
+        if [ -n "$mstr_ws" ] && [ "$mstr_ws" != "$ws_id" ]; then
+            echo "  Moving master $m_class from ws $mstr_ws to ws $ws_id"
+            hyprctl dispatch "hl.dsp.window.move({ workspace = $ws_id, window = \"class:$m_class\", silent = true })" 2>/dev/null
             sleep 0.2
         fi
 
         # Step 1: set correct master only if needed
-        current_master=$(hyprctl clients -j | python3 -c "
+        local cur_master
+        cur_master=$(hyprctl clients -j | python3 -c "
 import json, sys
 clients = json.load(sys.stdin)
 ws_clients = [c for c in clients if c['workspace']['id'] == $ws_id]
@@ -114,9 +130,9 @@ master = max(ws_clients, key=lambda x: x['size'][0] * x['size'][1])
 print(master['class'])
 " 2>/dev/null)
 
-        if [ -n "$current_master" ] && ! echo "$current_master" | grep -qi "^${m_class}$"; then
+        if [ -n "$cur_master" ] && ! echo "$cur_master" | grep -qi "^${m_class}$"; then
             echo "  Promoting $m_class to master on ws $ws_id"
-            hyprctl dispatch "hl.dsp.focus({ window = \"class:$m_class\" })"
+            hyprctl dispatch "hl.dsp.focus({ window = \"class:$m_class\", silent = true })" 2>/dev/null
             sleep 0.3
             hyprctl dispatch 'hl.dsp.layout("swapwithmaster master")'
             sleep 0.3
@@ -124,9 +140,10 @@ print(master['class'])
 
         # Step 2: restore each slave slot in order
         for target_slot in "${!o_classes[@]}"; do
-            target_class="${o_classes[$target_slot]}"
+            local target_class="${o_classes[$target_slot]}"
 
-            current_slot=$(hyprctl clients -j | python3 -c "
+            local cur_slot
+            cur_slot=$(hyprctl clients -j | python3 -c "
 import json, sys
 clients = json.load(sys.stdin)
 ws_clients = [c for c in clients if c['workspace']['id'] == $ws_id]
@@ -140,11 +157,11 @@ for i, c in enumerate(sorted(slaves, key=lambda x: (x['at'][1], x['at'][0]))):
         break
 " 2>/dev/null)
 
-            if [ -n "$current_slot" ] && [ "$current_slot" -gt 0 ]; then
-                n_swaps=$(( current_slot - target_slot ))
+            if [ -n "$cur_slot" ] && [ "$cur_slot" -gt 0 ]; then
+                local n_swaps=$(( cur_slot - target_slot ))
                 if [ $n_swaps -gt 0 ]; then
-                    echo "  Moving $target_class from slot $current_slot to slot $target_slot"
-                    hyprctl dispatch "hl.dsp.focus({ window = \"class:$target_class\" })"
+                    echo "  Moving $target_class from slot $cur_slot to slot $target_slot"
+                    hyprctl dispatch "hl.dsp.focus({ window = \"class:$target_class\", silent = true })" 2>/dev/null
                     sleep 0.2
                     for i in $(seq 1 $n_swaps); do
                         hyprctl dispatch 'hl.dsp.layout("swapprev")'
@@ -156,30 +173,34 @@ for i, c in enumerate(sorted(slaves, key=lambda x: (x['at'][1], x['at'][0]))):
     }
 
     # Read state file and restore each workspace
-    current_ws=""
-    master_class=""
-    declare -a original_classes
+    local loop_ws=""
+    local loop_master=""
+    declare -a loop_slaves
 
     while IFS= read -r line; do
-        if [[ "$line" == workspace:* ]]; then
-            current_ws="${line#workspace:}"
-            master_class=""
-            original_classes=()
+        if [[ "$line" == current_workspace:* ]]; then
+            continue  # already read above
+        elif [[ "$line" == workspace:* ]]; then
+            loop_ws="${line#workspace:}"
+            loop_master=""
+            loop_slaves=()
         elif [[ "$line" == master:* ]]; then
-            master_class=$(echo "$line" | cut -d: -f3)
+            loop_master=$(echo "$line" | cut -d: -f3)
         elif [[ "$line" == slave:* ]]; then
-            original_classes+=("$(echo "$line" | cut -d: -f3)")
+            loop_slaves+=("$(echo "$line" | cut -d: -f3)")
         elif [[ "$line" == "---" ]]; then
-            if [ -n "$current_ws" ] && [ -n "$master_class" ]; then
-                restore_workspace "$current_ws" "$master_class" original_classes
+            if [ -n "$loop_ws" ] && [ -n "$loop_master" ]; then
+                restore_workspace "$loop_ws" "$loop_master" loop_slaves
             fi
-            current_ws=""
-            master_class=""
-            original_classes=()
+            loop_ws=""
+            loop_master=""
+            loop_slaves=()
         fi
     done < "$STATE_FILE"
 
-    hyprctl dispatch "hl.dsp.focus({ workspace = $CURRENT_WORKSPACE })"
+    # Return to original workspace
+    sleep 0.5
+    hyprctl dispatch "hl.dsp.focus({ workspace = $saved_workspace })"
 
     rm -f "$STATE_FILE"
     echo "Layout restore complete"

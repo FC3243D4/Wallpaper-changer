@@ -4,7 +4,7 @@
 "$HOME/.config/WallpaperChanger/hyprMasterLayoutPreservation.sh" save
 
 WALLPAPER="$HOME/.config/WallpaperChanger/.current_wallpaper"
-BRIGHTNESS_THRESHOLD=40
+BRIGHTNESS_THRESHOLD=20
 color=""
 
 # Find brightest matugen candidate without running full matugen each time
@@ -351,4 +351,4 @@ exit(0 if any('$wclass' in c.get('class','').lower() for c in clients) else 1)
 done
 
 # Restore Hyprland layout state after all restarts
-sleep 0.5 && "$HOME/.config/WallpaperChanger/hyprMasterLayoutPreservation.sh" restore
+sleep 0.2 && "$HOME/.config/WallpaperChanger/hyprMasterLayoutPreservation.sh" restore

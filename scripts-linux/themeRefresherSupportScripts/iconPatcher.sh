@@ -86,6 +86,35 @@ with open('$ICON_DIR/apps/scalable/org.cachyos.hello.svg', 'w') as f:
 print(f'CachyOS icon patched (accent=$accent, highlight={highlight})')
 EOF
 
+# VS Code icon — replace blue gradient with accent color variants
+python3 - << EOF
+import colorsys, sys
+
+def hex_to_hsv(h):
+    h = h.lstrip('#')
+    r, g, b = int(h[0:2],16)/255, int(h[2:4],16)/255, int(h[4:6],16)/255
+    return colorsys.rgb_to_hsv(r, g, b)
+
+def hsv_to_hex(h, s, v):
+    r, g, b = colorsys.hsv_to_rgb(h % 1.0, min(1,s), min(1,v))
+    return '#{:02X}{:02X}{:02X}'.format(int(r*255), int(g*255), int(b*255))
+
+base_h, base_s, base_v = hex_to_hsv('$accent')
+dark  = hsv_to_hex(base_h, base_s, max(0, base_v - 0.15))
+mid   = hsv_to_hex(base_h, base_s, base_v)
+light = hsv_to_hex(base_h, max(0, base_s - 0.2), min(1, base_v + 0.15))
+
+src = '$HOME/.config/WallpaperChanger/themeRefresherSupportScripts/vscode_base_icon.svg'
+with open(src, 'r') as f:
+    content = f.read()
+content = content.replace('#0065A9', dark)
+content = content.replace('#007ACC', mid)
+content = content.replace('#1F9CF0', light)
+with open('$ICON_DIR/apps/scalable/vscode.svg', 'w') as f:
+    f.write(content)
+print(f'VSCode icon patched (dark={dark}, mid={mid}, light={light})')
+EOF
+
 # Clear icon cache
 rm -f "$HOME/.cache/icon-cache.kcache"
 kbuildsycoca6 --noincremental 2>/dev/null

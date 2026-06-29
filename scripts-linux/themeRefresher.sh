@@ -45,6 +45,7 @@ APPS[dolphin]="x|dolphin|dolphin|dolphin|dolphin"
 APPS[zen]="f|zen-bin|zen-bin|zen-browser|zen"
 APPS[ferdium]="f|electron.*ferdium-bin|electron.*ferdium-bin|ferdium|"
 APPS[sourcegit]="x|sourcegit|sourcegit|sourcegit|sourcegit"
+APPS[code]="f|electron.*visual-studio-code|electron.*visual-studio-code|code|Code"
 
 source "$SUPPORT/appRestarter.sh"
 
@@ -66,7 +67,7 @@ exit(0 if any('$wclass' in c.get('class','').lower() for c in clients) else 1)
     done
 
     # Restore Hyprland layout state after all restarts
-    "$SUPPORT/hyprMasterLayoutPreservation.sh" restore
+    sleep 0.2 && "$SUPPORT/hyprMasterLayoutPreservation.sh" restore
 
 elif [ "$XDG_CURRENT_DESKTOP" == "KDE" ]; then
     kquitapp6 plasmashell && sleep 1 && kstart plasmashell &

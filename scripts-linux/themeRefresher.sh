@@ -338,24 +338,24 @@ for app in "${running[@]}"; do
     disown
 done
 
-# Wait for windowed apps to appear in Hyprland before restoring layout
-deadline=$(( $(date +%s) + 10 ))
-while [ $(date +%s) -lt $deadline ]; do
-    all_ready=1
-    for app in "${running[@]}"; do
-        IFS='|' read -r _ _ _ _ wclass <<< "${APPS[$app]}"
-        [ -z "$wclass" ] && continue
-        hyprctl clients -j | python3 -c "
-import json,sys
-clients=json.load(sys.stdin)
-exit(0 if any('$wclass' in c.get('class','').lower() for c in clients) else 1)
-" 2>/dev/null || { all_ready=0; break; }
-    done
-    [ $all_ready -eq 1 ] && break
-    sleep 0.1
-done
-
-# Restore Hyprland layout state after all restarts
 if [ "$XDG_CURRENT_DESKTOP" == "Hyprland"]; then
+    # Wait for windowed apps to appear in Hyprland before restoring layout
+    deadline=$(( $(date +%s) + 10 ))
+    while [ $(date +%s) -lt $deadline ]; do
+        all_ready=1
+        for app in "${running[@]}"; do
+            IFS='|' read -r _ _ _ _ wclass <<< "${APPS[$app]}"
+            [ -z "$wclass" ] && continue
+            hyprctl clients -j | python3 -c "
+    import json,sys
+    clients=json.load(sys.stdin)
+    exit(0 if any('$wclass' in c.get('class','').lower(\) for c in clients) else 1)
+    " 2>/dev/null || { all_ready=0; break; }
+        done
+        [ $all_ready -eq 1 ] && break
+        sleep 0.1
+    done
+
+    # Restore Hyprland layout state after all restarts
     sleep 0.2 && "$HOME/.config/WallpaperChanger/hyprMasterLayoutPreservation.sh" restore
 fi

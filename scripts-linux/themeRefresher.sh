@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 
 # Save Hyprland layout state before any restarts
-"$HOME/.config/WallpaperChanger/hyprMasterLayoutPreservation.sh" save
+if [ "$XDG_CURRENT_DESKTOP" == "Hyprland"]; then
+    "$HOME/.config/WallpaperChanger/hyprMasterLayoutPreservation.sh" save
+fi
 
 WALLPAPER="$HOME/.config/WallpaperChanger/.current_wallpaper"
 BRIGHTNESS_THRESHOLD=20
@@ -64,16 +66,18 @@ if openrgb --version &>/dev/null; then
 fi
 
 # Apply color to Logitech G devices (backgrounded — fire and forget)
-(
-    devices=($(ratbagctl list | grep -oP '^[\w-]+(?=:)'))
-    for device in "${devices[@]}"; do
-        profiles=($(ratbagctl "$device" info | grep -oP '^Profile \K\d+'))
-        for profile in "${profiles[@]}"; do
-            ratbagctl "$device" profile $profile led 0 set mode on color "$color"
+if ratbagctl --version &>/dev/null; then
+    (
+        devices=($(ratbagctl list | grep -oP '^[\w-]+(?=:)'))
+        for device in "${devices[@]}"; do
+            profiles=($(ratbagctl "$device" info | grep -oP '^Profile \K\d+'))
+            for profile in "${profiles[@]}"; do
+                ratbagctl "$device" profile $profile led 0 set mode on color "$color"
+            done
         done
-    done
-) &
-disown
+    ) &
+    disown
+fi
 
 # Ensure GTK colors.css stubs exist to avoid warnings
 touch "$HOME/.config/gtk-3.0/colors.css"
@@ -293,6 +297,7 @@ declare -A APPS
 APPS[dolphin]="x|dolphin|dolphin|dolphin|dolphin"
 APPS[zen]="f|zen-bin|zen-bin|zen-browser|zen"
 APPS[ferdium]="f|electron.*ferdium-bin|electron.*ferdium-bin|ferdium|"
+APPS[sourcegit]="x|sourcegit|sourcegit|sourcegit|sourcegit"
 
 # Collect all running PIDs in one pass
 running=()
@@ -351,4 +356,6 @@ exit(0 if any('$wclass' in c.get('class','').lower() for c in clients) else 1)
 done
 
 # Restore Hyprland layout state after all restarts
-sleep 0.2 && "$HOME/.config/WallpaperChanger/hyprMasterLayoutPreservation.sh" restore
+if [ "$XDG_CURRENT_DESKTOP" == "Hyprland"]; then
+    sleep 0.2 && "$HOME/.config/WallpaperChanger/hyprMasterLayoutPreservation.sh" restore
+fi

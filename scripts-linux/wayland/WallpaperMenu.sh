@@ -1,6 +1,27 @@
 #!/usr/bin/env bash
 # /* ---- 💫 https://github.com/JaKooLit 💫 ---- */
-# This script for selecting wallpapers (SUPER W)
+# This script for selecting wallpapers
+
+get_monitor_info() {
+    if command -v hyprctl &>/dev/null; then
+        focused_monitor=$(hyprctl monitors -j | jq -r '.[] | select(.focused) | .name')
+        scale_factor=$(hyprctl monitors -j | jq -r --arg mon "$focused_monitor" '.[] | select(.name == $mon) | .scale')
+        monitor_height=$(hyprctl monitors -j | jq -r --arg mon "$focused_monitor" '.[] | select(.name == $mon) | .height')
+    elif command -v swaymsg &>/dev/null; then
+        focused_monitor=$(swaymsg -t get_outputs | jq -r '.[] | select(.focused) | .name')
+        scale_factor=$(swaymsg -t get_outputs | jq -r '.[] | select(.focused) | .scale')
+        monitor_height=$(swaymsg -t get_outputs | jq -r '.[] | select(.focused) | .current_mode.height')
+    elif command -v wlr-randr &>/dev/null; then
+        focused_monitor=$(wlr-randr --json | jq -r '.[0].name')
+        scale_factor=$(wlr-randr --json | jq -r '.[0].scale')
+        monitor_height=$(wlr-randr --json | jq -r '.[0].modes[] | select(.current) | .height')
+    else
+        # Fallback: sane defaults, icon size will clamp to 20 anyway
+        focused_monitor="unknown"
+        scale_factor=1
+        monitor_height=1080
+    fi
+}
 
 # WALLPAPERS PATH
 wallDIR="$HOME/Pictures/wallpapers/16-9"
@@ -11,17 +32,13 @@ iDIR="$HOME/.config/swaync/images"
 
 # Variables
 rofi_theme="$HOME/.config/rofi/config-wallpaper.rasi"
-focused_monitor=$(hyprctl monitors -j | jq -r '.[] | select(.focused) | .name')
+get_monitor_info()
 
 # Ensure focused_monitor is detected
 if [[ -z "$focused_monitor" ]]; then
     notify-send -i "$iDIR/error.png" "E-R-R-O-R" "Could not detect focused monitor"
     exit 1
 fi
-
-# Monitor details
-scale_factor=$(hyprctl monitors -j | jq -r --arg mon "$focused_monitor" '.[] | select(.name == $mon) | .scale')
-monitor_height=$(hyprctl monitors -j | jq -r --arg mon "$focused_monitor" '.[] | select(.name == $mon) | .height')
 
 icon_size=$(echo "scale=1; ($monitor_height * 3) / ($scale_factor * 150)" | bc)
 adjusted_icon_size=$(echo "$icon_size" | awk '{if ($1 < 15) $1 = 20; if ($1 > 25) $1 = 25; print $1}')

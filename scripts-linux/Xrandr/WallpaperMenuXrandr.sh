@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# /* ---- 💫 https://github.com/JaKooLit 💫 ---- */
-# This script for selecting wallpapers (SUPER W) with xrandr (for non-hyprland users)
+# This script for selecting wallpapers with xrandr (for non-wayland users)
 
 # WALLPAPERS PATH
 wallDIR="$HOME/Pictures/wallpapers/16-9"

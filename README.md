@@ -8,8 +8,8 @@ make sure that the install.sh file is executable and run it
 chmod +x install-Linux.sh
 ./install-Linux.sh
 ```
-Right now the script depends on the [dotfiles from JaKooLit](https://github.com/JaKooLit/Hyprland-Dots) for the refresh script and many configs, maybe in the future I will try and remove this dependency but for now please install them on your system
-any other dependency will be checked by the script and it will inform you if there are missing ones
+Any dependency will be checked by the script and it will inform you if there are missing ones
+To ensure the script works at its best please remember to configure [matugen](https://github.com/InioX/matugen) on your system
 
 ## Windows
  - make sure you installed [wallpaper engine through steam](https://store.steampowered.com/app/431960/Wallpaper_Engine/) on your C drive, if not the script will fail

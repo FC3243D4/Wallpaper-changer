@@ -195,10 +195,9 @@ if [ "$CopyScripts" = true ]; then
     fi
     #copy display utility agnostic scripts
     cp ./scripts-linux/AspectRatioChecker.sh $HOME/.config/WallpaperChanger/
-    cp ./scripts-linux/dominantcolor $HOME/.config/WallpaperChanger/
     cp ./scripts-linux/themeRefresher.sh $HOME/.config/WallpaperChanger/
-    cp ./scripts-linux/hyprMasterLayoutPreservation.sh $HOME/.config/WallpaperChanger/
     cp ./scripts-linux/generateWallpaperThumbnails.sh $HOME/.config/WallpaperChanger/
+    cp -r .scripts-linux/themeRefresherSupportScripts $HOME/.config/WallpaperChanger/
 
     #make them all executables
     chmod +x $HOME/.config/WallpaperChanger/*
@@ -436,8 +435,8 @@ else
         echo ""
     fi
 fi
-echo "If you use wallpaper menu and have issues with long wait time to complete ist execution try running generateWallpaperThumbnails.sh to see if it is due to the large amount of high res images to load, if this fixes it run this script like this"
+echo "If you use wallpaper menu and have issues with long wait time to complete its execution try running generateWallpaperThumbnails.sh to see if it is due to the large amount of high res images to load, if this fixes it run this script like this"
 echo "./install-linux-sh thumbnails"
-echo "to install an automated watcher"
+echo "to install an automated watcher that will automatically generate the thumbnail for any wallpaper you'll add to the 16-9 folder"
 echo ""
 echo "If you have any issues or want to report them, please open an issue on the github repository"

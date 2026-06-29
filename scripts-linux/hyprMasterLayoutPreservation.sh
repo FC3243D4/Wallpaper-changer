@@ -8,20 +8,22 @@
 
 STATE_FILE="/tmp/hyprLayoutState.txt"
 
+# Classes that should never be moved between workspaces during restore
+# (e.g. terminal emulators that may have multiple instances)
+NEVER_MOVE_CLASSES="kitty"
+
 save_layout() {
     local current_ws
     current_ws=$(hyprctl activeworkspace -j | jq '.id')
     echo "Current workspace: $current_ws"
 
     {
-        # Save current workspace at top so restore can return to it
         echo "current_workspace:$current_ws"
 
         hyprctl clients -j | python3 -c "
 import json, sys
 clients = json.load(sys.stdin)
 
-# Group clients by workspace, skip special/scratchpad workspaces (id <= 0)
 workspaces = {}
 for c in clients:
     ws_id = c['workspace']['id']
@@ -32,7 +34,6 @@ for c in clients:
     workspaces[ws_id].append(c)
 
 for ws_id, ws_clients in sorted(workspaces.items()):
-    # Single window — save workspace assignment only
     if len(ws_clients) == 1:
         c = ws_clients[0]
         print('workspace:' + str(ws_id))
@@ -40,7 +41,6 @@ for ws_id, ws_clients in sorted(workspaces.items()):
         print('---')
         continue
 
-    # Multiple windows — save master/slave order
     master = max(ws_clients, key=lambda x: x['size'][0] * x['size'][1])
     slaves = [c for c in ws_clients if c['address'] != master['address']]
     print('workspace:' + str(ws_id))
@@ -60,13 +60,18 @@ for ws_id, ws_clients in sorted(workspaces.items()):
     fi
 }
 
+# Check if a class is in the never-move list
+is_never_move() {
+    local class="$1"
+    echo "$NEVER_MOVE_CLASSES" | tr ',' '\n' | grep -qi "^${class}$"
+}
+
 restore_layout() {
     if [ ! -f "$STATE_FILE" ] || [ ! -s "$STATE_FILE" ]; then
         echo "No saved layout state found, skipping restore"
         return
     fi
 
-    # Read saved workspace from state file (captured before any restarts)
     local saved_workspace
     saved_workspace=$(grep "^current_workspace:" "$STATE_FILE" | cut -d: -f2)
     echo "Will return to workspace: $saved_workspace"
@@ -78,14 +83,20 @@ restore_layout() {
 
         echo "Restoring workspace $ws_id (master: $m_class)"
 
-        # Single window workspace — move it to the correct workspace
+        # Single window workspace — move it silently (skip if never-move class)
         if [ ${#o_classes[@]} -eq 0 ]; then
-            hyprctl dispatch "hl.dsp.window.move({ workspace = $ws_id, window = \"class:$m_class\", silent = true })" 2>/dev/null
+            if ! is_never_move "$m_class"; then
+                hyprctl dispatch "hl.dsp.window.move({ workspace = $ws_id, window = \"class:$m_class\", silent = true })" 2>/dev/null
+            fi
             return
         fi
 
-        # Multi-window: move all slaves to correct workspace silently
+        # Move slaves to correct workspace (skip never-move classes)
         for slave_class in "${o_classes[@]}"; do
+            if is_never_move "$slave_class"; then
+                echo "  Skipping move for $slave_class (never-move class)"
+                continue
+            fi
             local slv_ws
             slv_ws=$(hyprctl clients -j | python3 -c "
 import json, sys
@@ -102,9 +113,10 @@ for c in clients:
             fi
         done
 
-        # Move master to correct workspace silently
-        local mstr_ws
-        mstr_ws=$(hyprctl clients -j | python3 -c "
+        # Move master to correct workspace (skip if never-move class)
+        if ! is_never_move "$m_class"; then
+            local mstr_ws
+            mstr_ws=$(hyprctl clients -j | python3 -c "
 import json, sys
 clients = json.load(sys.stdin)
 for c in clients:
@@ -112,10 +124,11 @@ for c in clients:
         print(c['workspace']['id'])
         break
 " 2>/dev/null)
-        if [ -n "$mstr_ws" ] && [ "$mstr_ws" != "$ws_id" ]; then
-            echo "  Moving master $m_class from ws $mstr_ws to ws $ws_id"
-            hyprctl dispatch "hl.dsp.window.move({ workspace = $ws_id, window = \"class:$m_class\", silent = true })" 2>/dev/null
-            sleep 0.2
+            if [ -n "$mstr_ws" ] && [ "$mstr_ws" != "$ws_id" ]; then
+                echo "  Moving master $m_class from ws $mstr_ws to ws $ws_id"
+                hyprctl dispatch "hl.dsp.window.move({ workspace = $ws_id, window = \"class:$m_class\", silent = true })" 2>/dev/null
+                sleep 0.2
+            fi
         fi
 
         # Step 1: set correct master only if needed
@@ -179,7 +192,7 @@ for i, c in enumerate(sorted(slaves, key=lambda x: (x['at'][1], x['at'][0]))):
 
     while IFS= read -r line; do
         if [[ "$line" == current_workspace:* ]]; then
-            continue  # already read above
+            continue
         elif [[ "$line" == workspace:* ]]; then
             loop_ws="${line#workspace:}"
             loop_master=""
@@ -198,9 +211,13 @@ for i, c in enumerate(sorted(slaves, key=lambda x: (x['at'][1], x['at'][0]))):
         fi
     done < "$STATE_FILE"
 
-    # Return to original workspace
-    sleep 0.5
-    hyprctl dispatch "hl.dsp.focus({ workspace = $saved_workspace })"
+    # Return to original workspace — retry until it sticks
+    for i in $(seq 1 5); do
+        sleep 0.3
+        hyprctl dispatch "hl.dsp.focus({ workspace = $saved_workspace })"
+        current=$(hyprctl activeworkspace -j | jq '.id')
+        [ "$current" = "$saved_workspace" ] && break
+    done
 
     rm -f "$STATE_FILE"
     echo "Layout restore complete"

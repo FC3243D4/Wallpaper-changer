@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 
+packageList=()
+UseWayland=true
 Stop=false
-HyprctlInstalled=true
 UseXrandr=false
 CreatePicturesDir=false
 ConfigDirExists=false
@@ -15,21 +16,20 @@ wallpapersRepo=false
 # 1️⃣ CHECK FOR REQUIRED UTILITIES
 # -------------------------
 
-
-if hyprctl -v foo &> /dev/null; then
-    HyprctlInstalled=false
-    if ! xrandr -v foo &> /dev/null; then
-        echo "Neither hyprctl nor xrandr is installed. Please install one of them before running this script."
+if "$XDG_SESSION_TYPE" != "wayland"; then
+    UseWayland=false
+    if ! xrandr --version foo &> /dev/null; then
+        echo "You are not using wayland, but you do not have xrandr installed"
         echo ""
         Stop=true
+        packageList=("${packageList[@]}" "xrandr")
     else
-        echo "hyprctl is not installed. The script will need to use xrandr instead."
+        echo "You are not using wayland. The script will need to use xrandr instead."
         echo ""
         UseXrandr=true
     fi
-fi
 
-if xrandr -v foo &> /dev/null; then
+if xrandr --version foo &> /dev/null; then
     if ! xrandr | grep primary &> /dev/null; then
         echo "xrandr is installed but no primary display is set. to ensure the script works correctly, please set a primary display with"
         echo ""
@@ -43,32 +43,28 @@ if xrandr -v foo &> /dev/null; then
     fi
 fi
 
-if magick -v foo &> /dev/null; then
-    echo "ImageMagick is not installed. Please install ImageMagick before running this script."
-    echo ""
+if magick --version foo &> /dev/null; then
     Stop=true
+    packageList=("${packageList[@]}" "imagemagick")
 fi
 
-if wallust -v foo &> /dev/null; then
-    echo "wallust is not installed. Please install wallust before running this script."
-    echo ""
+if matugen --version foo &> /dev/null; then
     Stop=true
+    packageList=("${packageList[@]}" "matugen")
 fi
 
-if awww -v foo &> /dev/null; then
-    echo "awww is not installed. Please install awww before running this script."
-    echo ""
+if awww --version foo &> /dev/null; then
     Stop=true
+    packageList=("${packageList[@]}" "awww")
 fi
 
 # Check if package bc exists
 if ! command -v bc &>/dev/null; then
-    echo "bc missing. Install package bc first"
-    echo ""
     Stop=true
+    packageList=("${packageList[@]}" "bc")
 fi
 
-if openrgb -v foo &> /dev/null ; then
+if openrgb --version foo &> /dev/null ; then
     echo "openrgb is not installed. You will not have the wallpapers dominant color applied to your devices. Please install openrgb if you want this feature."
     echo ""
 fi
@@ -76,6 +72,11 @@ fi
 if [ "$Stop" = true ]; then
     echo "Installation stopped due to the above errors. Please fix them and run the script again."
     echo ""
+    if (( ${#packageList[@]} != 0 )); then
+        echo "to summarize you need these packages installed:"
+        $ printf '%s\n' "${packageList[@]}"
+
+    fi
     exit 1
 fi
 
@@ -177,7 +178,7 @@ if [ "$CopyScripts" = true ]; then
     if [ "$UseXrandr" = true ]; then
         cp ./scripts-linux/Xrandr/* $HOME/.config/WallpaperChanger/
     else
-        cp ./scripts-linux/hyprctl/* $HOME/.config/WallpaperChanger/
+        cp ./scripts-linux/wayland/* $HOME/.config/WallpaperChanger/
     fi
     #copy display utility agnostic scripts
     cp ./scripts-linux/AspectRatioChecker.sh $HOME/.config/WallpaperChanger/

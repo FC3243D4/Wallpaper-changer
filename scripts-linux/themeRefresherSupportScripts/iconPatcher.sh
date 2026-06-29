@@ -2,7 +2,6 @@
 # iconPatcher.sh
 # Patches icon SVGs in breeze-dark-accent with the accent color.
 # Usage: iconPatcher.sh <hex_color>
-# Example: iconPatcher.sh a986d3
 
 color="${1,,}"
 
@@ -13,6 +12,7 @@ fi
 
 accent="#$color"
 ICON_DIR="$HOME/.local/share/icons/breeze-dark-accent"
+SUPPORT="$HOME/.config/WallpaperChanger/themeRefresherSupportScripts"
 
 mkdir -p "$ICON_DIR/apps/16" "$ICON_DIR/apps/22" "$ICON_DIR/apps/24" \
          "$ICON_DIR/apps/32" "$ICON_DIR/apps/48" "$ICON_DIR/apps/64" \
@@ -45,17 +45,17 @@ done
 # org.kde.dolphin — patch ColorScheme-Highlight (multiline)
 python3 - << EOF
 import re
-with open('/usr/share/icons/hicolor/scalable/apps/org.kde.dolphin.svg', 'r') as f:
+with open("/usr/share/icons/hicolor/scalable/apps/org.kde.dolphin.svg", "r") as f:
     content = f.read()
 content = re.sub(
-    r'(\.ColorScheme-Highlight\s*\{[^}]*color:)\s*#[0-9a-fA-F]+',
-    r'\g<1> $accent',
+    r"(\.ColorScheme-Highlight\s*\{[^}]*color:)\s*#[0-9a-fA-F]+",
+    r"\g<1> $accent",
     content,
     flags=re.DOTALL
 )
-with open('$ICON_DIR/apps/scalable/org.kde.dolphin.svg', 'w') as f:
+with open("$ICON_DIR/apps/scalable/org.kde.dolphin.svg", "w") as f:
     f.write(content)
-print('Dolphin icon patched')
+print("Dolphin icon patched")
 EOF
 
 # org.cachyos.hello — replace teal colors with accent + lighter highlight
@@ -63,57 +63,73 @@ python3 - << EOF
 import colorsys
 
 def hex_to_rgb(h):
-    h = h.lstrip('#')
+    h = h.lstrip("#")
     if len(h) == 3:
-        h = ''.join(c*2 for c in h)
+        h = "".join(c*2 for c in h)
     return tuple(int(h[i:i+2], 16)/255 for i in (0, 2, 4))
 
 def rgb_to_hex(r, g, b):
-    return '#{:02x}{:02x}{:02x}'.format(int(r*255), int(g*255), int(b*255))
+    return "#{:02x}{:02x}{:02x}".format(int(r*255), int(g*255), int(b*255))
 
-r, g, b = hex_to_rgb('$accent')
+r, g, b = hex_to_rgb("$accent")
 h, s, v = colorsys.rgb_to_hsv(r, g, b)
 hr, hg, hb = colorsys.hsv_to_rgb(h, max(0, s - 0.3), min(1, v + 0.25))
 highlight = rgb_to_hex(hr, hg, hb)
 
-with open('/usr/share/icons/hicolor/scalable/apps/org.cachyos.hello.svg', 'r') as f:
+with open("/usr/share/icons/hicolor/scalable/apps/org.cachyos.hello.svg", "r") as f:
     content = f.read()
-for old in ['#008066', '#0fc', '#0a8']:
-    content = content.replace(old, '$accent')
-content = content.replace('#0cf', highlight)
-with open('$ICON_DIR/apps/scalable/org.cachyos.hello.svg', 'w') as f:
+for old in ["#008066", "#0fc", "#0a8"]:
+    content = content.replace(old, "$accent")
+content = content.replace("#0cf", highlight)
+with open("$ICON_DIR/apps/scalable/org.cachyos.hello.svg", "w") as f:
     f.write(content)
-print(f'CachyOS icon patched (accent=$accent, highlight={highlight})')
+print(f"CachyOS icon patched (accent=$accent, highlight={highlight})")
 EOF
 
-# VS Code icon — replace blue gradient with accent color variants
-python3 - << EOF
-import colorsys, sys
+# VS Code icon
+src="$SUPPORT/vscode_base_icon.svg"
+if [ -f "$src" ]; then
+    python3 - << EOF
+import colorsys
 
 def hex_to_hsv(h):
-    h = h.lstrip('#')
+    h = h.lstrip("#")
     r, g, b = int(h[0:2],16)/255, int(h[2:4],16)/255, int(h[4:6],16)/255
     return colorsys.rgb_to_hsv(r, g, b)
 
 def hsv_to_hex(h, s, v):
     r, g, b = colorsys.hsv_to_rgb(h % 1.0, min(1,s), min(1,v))
-    return '#{:02X}{:02X}{:02X}'.format(int(r*255), int(g*255), int(b*255))
+    return "#{:02X}{:02X}{:02X}".format(int(r*255), int(g*255), int(b*255))
 
-base_h, base_s, base_v = hex_to_hsv('$accent')
+base_h, base_s, base_v = hex_to_hsv("$color")
 dark  = hsv_to_hex(base_h, base_s, max(0, base_v - 0.15))
 mid   = hsv_to_hex(base_h, base_s, base_v)
 light = hsv_to_hex(base_h, max(0, base_s - 0.2), min(1, base_v + 0.15))
 
-src = '$HOME/.config/WallpaperChanger/themeRefresherSupportScripts/vscode_base_icon.svg'
-with open(src, 'r') as f:
-    content = f.read()
-content = content.replace('#0065A9', dark)
-content = content.replace('#007ACC', mid)
-content = content.replace('#1F9CF0', light)
-with open('$ICON_DIR/apps/scalable/vscode.svg', 'w') as f:
-    f.write(content)
-print(f'VSCode icon patched (dark={dark}, mid={mid}, light={light})')
+with open("$src", "r") as f:
+    svg = f.read()
+svg = svg.replace("#0065A9", dark)
+svg = svg.replace("#007ACC", mid)
+svg = svg.replace("#1F9CF0", light)
+
+with open("$ICON_DIR/apps/scalable/vscode.svg", "w") as f:
+    f.write(svg)
+print(f"VSCode icon patched (dark={dark}, mid={mid}, light={light})")
 EOF
+fi
+
+# SourceGit icon
+src="$SUPPORT/sourcegit_base_icon.svg"
+if [ -f "$src" ]; then
+    python3 - << EOF
+with open("$src", "r") as f:
+    content = f.read()
+content = content.replace("#F05133", "$accent")
+with open("$ICON_DIR/apps/scalable/sourcegit.svg", "w") as f:
+    f.write(content)
+print("SourceGit icon patched")
+EOF
+fi
 
 # Clear icon cache
 rm -f "$HOME/.cache/icon-cache.kcache"

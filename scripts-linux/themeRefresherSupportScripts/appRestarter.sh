@@ -28,6 +28,12 @@ done
 # Kill all PIDs in one syscall
 [ ${#all_pids[@]} -gt 0 ] && kill "${all_pids[@]}" 2>/dev/null
 
+# Wait briefly then force kill anything still alive
+sleep 0.5
+for pid in "${all_pids[@]}"; do
+    kill -0 "$pid" 2>/dev/null && kill -9 "$pid" 2>/dev/null
+done
+
 # Wait for all to die using kill -0 (fast polling)
 if [ ${#all_pids[@]} -gt 0 ]; then
     deadline=$(( $(date +%s) + 5 ))

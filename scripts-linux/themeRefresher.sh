@@ -45,7 +45,8 @@ APPS[dolphin]="x|dolphin|dolphin|dolphin|dolphin"
 APPS[zen]="f|zen-bin|zen-bin|zen-browser|zen"
 APPS[ferdium]="f|electron.*ferdium-bin|electron.*ferdium-bin|ferdium|"
 APPS[sourcegit]="x|sourcegit|sourcegit|sourcegit|sourcegit"
-APPS[code]="f|electron.*visual-studio-code|electron.*visual-studio-code|code|Code"
+APPS[code]="x|code|code|code|code"
+
 
 source "$SUPPORT/appRestarter.sh"
 

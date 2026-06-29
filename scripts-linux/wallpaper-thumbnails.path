@@ -1,0 +1,9 @@
+[Unit]
+Description=Watch for new wallpapers
+
+[Path]
+PathChanged=/home/fc3243d4/Pictures/wallpapers/16-9
+Unit=wallpaper-thumbnails.service
+
+[Install]
+WantedBy=default.target

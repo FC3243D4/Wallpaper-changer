@@ -1,5 +1,13 @@
 #!/usr/bin/env bash
 
+if [ "$1" == "thumbnails" ]; then
+    echo "enabling automated watcher for wallpaper thumbnails..."
+    mkdir -p ~/.config/systemd/user
+    cp ./scripts-linux/wallpaper-thumbnails.* ~/.config/systemd/user
+    systemctl --user enable --now wallpaper-thumbnails.path
+    exit 0
+fi
+
 packageList=()
 UseWayland=true
 Stop=false
@@ -16,9 +24,9 @@ wallpapersRepo=false
 # 1️⃣ CHECK FOR REQUIRED UTILITIES
 # -------------------------
 
-if "$XDG_SESSION_TYPE" != "wayland"; then
+if [ "$XDG_SESSION_TYPE" != "wayland" ]; then
     UseWayland=false
-    if ! xrandr --version foo &> /dev/null; then
+    if ! xrandr -v foo&> /dev/null; then
         echo "You are not using wayland, but you do not have xrandr installed"
         echo ""
         Stop=true
@@ -28,8 +36,9 @@ if "$XDG_SESSION_TYPE" != "wayland"; then
         echo ""
         UseXrandr=true
     fi
+fi
 
-if xrandr --version foo &> /dev/null; then
+if xrandr -v foo &> /dev/null; then
     if ! xrandr | grep primary &> /dev/null; then
         echo "xrandr is installed but no primary display is set. to ensure the script works correctly, please set a primary display with"
         echo ""
@@ -43,28 +52,32 @@ if xrandr --version foo &> /dev/null; then
     fi
 fi
 
-if magick --version foo &> /dev/null; then
+if ! magick --version &> /dev/null; then
+    echo "magick"
     Stop=true
     packageList=("${packageList[@]}" "imagemagick")
 fi
 
-if matugen --version foo &> /dev/null; then
+if ! matugen --version &> /dev/null; then
+    echo "matugen"
     Stop=true
     packageList=("${packageList[@]}" "matugen")
 fi
 
-if awww --version foo &> /dev/null; then
+if ! awww --version &> /dev/null; then
+    echo "awww"
     Stop=true
     packageList=("${packageList[@]}" "awww")
 fi
 
 # Check if package bc exists
 if ! command -v bc &>/dev/null; then
+    echo "bc"
     Stop=true
     packageList=("${packageList[@]}" "bc")
 fi
 
-if openrgb --version foo &> /dev/null ; then
+if ! openrgb --version &> /dev/null ; then
     echo "openrgb is not installed. You will not have the wallpapers dominant color applied to your devices. Please install openrgb if you want this feature."
     echo ""
 fi
@@ -184,6 +197,8 @@ if [ "$CopyScripts" = true ]; then
     cp ./scripts-linux/AspectRatioChecker.sh $HOME/.config/WallpaperChanger/
     cp ./scripts-linux/dominantcolor $HOME/.config/WallpaperChanger/
     cp ./scripts-linux/themeRefresher.sh $HOME/.config/WallpaperChanger/
+    cp ./scripts-linux/hyprMasterLayoutPreservation.sh $HOME/.config/WallpaperChanger/
+    cp ./scripts-linux/generateWallpaperThumbnails.sh $HOME/.config/WallpaperChanger/
 
     #make them all executables
     chmod +x $HOME/.config/WallpaperChanger/*
@@ -421,4 +436,8 @@ else
         echo ""
     fi
 fi
+echo "If you use wallpaper menu and have issues with long wait time to complete ist execution try running generateWallpaperThumbnails.sh to see if it is due to the large amount of high res images to load, if this fixes it run this script like this"
+echo "./install-linux-sh thumbnails"
+echo "to install an automated watcher"
+echo ""
 echo "If you have any issues or want to report them, please open an issue on the github repository"

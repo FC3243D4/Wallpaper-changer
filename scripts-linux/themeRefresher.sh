@@ -34,10 +34,18 @@ matugen color hex "$accent" --quiet
 "$SUPPORT/iconPatcher.sh" "$color"
 
 # 6. Patch app-specific themes
-"$SUPPORT/vscodePatcher.sh" "$color"
-"$SUPPORT/zenPatcher.sh" "$color"
-"$SUPPORT/sourceGitPatcher.sh" "$color"
-"$SUPPORT/ferdiumPatcher.sh" "$color"
+if command -v code >/dev/null 2>&1; then
+    "$SUPPORT/vscodePatcher.sh" "$color"
+fi
+if command -v zen-browser >/dev/null 2>&1; then
+    "$SUPPORT/zenPatcher.sh" "$color"
+fi
+if command -v sourcegit >/dev/null 2>&1; then
+    "$SUPPORT/sourceGitPatcher.sh" "$color"
+fi
+if command -v ferdium >/dev/null 2>&1; then
+    "$SUPPORT/ferdiumPatcher.sh" "$color"
+fi
 
 # 7. Restart apps
 declare -A APPS

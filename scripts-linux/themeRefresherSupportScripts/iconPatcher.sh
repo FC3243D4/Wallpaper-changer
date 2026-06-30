@@ -43,6 +43,7 @@ for size in 16 32 48; do
 done
 
 # org.kde.dolphin — patch ColorScheme-Highlight (multiline)
+if command -v dolphin >/dev/null 2>&1; then
 python3 - << EOF
 import re
 with open("/usr/share/icons/hicolor/scalable/apps/org.kde.dolphin.svg", "r") as f:
@@ -57,8 +58,10 @@ with open("$ICON_DIR/apps/scalable/org.kde.dolphin.svg", "w") as f:
     f.write(content)
 print("Dolphin icon patched")
 EOF
+fi
 
 # org.cachyos.hello — replace teal colors with accent + lighter highlight
+if command -v cachyos-hello >/dev/null 2>&1; then
 python3 - << EOF
 import colorsys
 
@@ -85,10 +88,11 @@ with open("$ICON_DIR/apps/scalable/org.cachyos.hello.svg", "w") as f:
     f.write(content)
 print(f"CachyOS icon patched (accent=$accent, highlight={highlight})")
 EOF
+fi
 
 # VS Code icon
 src="$SUPPORT/vscode_base_icon.svg"
-if [ -f "$src" ]; then
+if [ -f "$src" ] && command -v code >/dev/null 2>&1; then
     python3 - << EOF
 import colorsys
 
@@ -120,7 +124,7 @@ fi
 
 # SourceGit icon
 src="$SUPPORT/sourcegit_base_icon.svg"
-if [ -f "$src" ]; then
+if [ -f "$src" ] && command -v sourcegit >/dev/null 2>&1; then
     python3 - << EOF
 with open("$src", "r") as f:
     content = f.read()

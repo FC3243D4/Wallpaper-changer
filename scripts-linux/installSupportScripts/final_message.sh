@@ -36,7 +36,7 @@ EOF
 
 Heads up: the first run will build a cache of your wallpapers' aspect ratios to speed things up. If you add or remove wallpapers later, delete $HOME/.cache/wallpaper_ratios.cache so the script picks up the changes.
 
-Wallpapers are applied across all connected displays at the correct aspect ratio, and on supported OpenRGB devices the accent color is applied automatically.
+Wallpapers are applied across all connected displays at the correct aspect ratio, and on supported OpenRGB devices the dominant color is applied automatically.
 EOF
     fi
 else
@@ -67,7 +67,7 @@ EOF
 
         cat << EOF
 
-Wallpapers are applied across all connected displays at the correct aspect ratio, and on supported OpenRGB devices the accent color is applied automatically.
+Wallpapers are applied across all connected displays at the correct aspect ratio, and on supported OpenRGB devices the dominant color is applied automatically.
 
 EOF
         if [ "$wallpapersRepo" = false ]; then
@@ -86,7 +86,11 @@ fi
 
 cat << EOF
 If the wallpaper menu feels slow to load, it's likely because it's processing a lot of high-resolution images. Try running generateWallpaperThumbnails.sh first to see if that helps — if it does, you can install a watcher that generates thumbnails automatically for any wallpaper you add to the 16-9 folder, by running:
-./install-Linux.sh thumbnails
+./install-Linux.sh --thumbnails
+
+To update your scripts or wallpapers from the repo in the future without running the full installation again, you can use:
+./install-Linux.sh --update-scripts
+./install-Linux.sh --update-wallpapers
 
 Running into issues, or want to suggest something? Feel free to open an issue on the GitHub repository.
 EOF

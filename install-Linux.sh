@@ -113,7 +113,8 @@ cmd_update_scripts() {
     echo "Scripts updated successfully."
 }
 
-
+cmd_install() {
+    echo "Starting installation process..."
     chmod +x "$SUPPORT"/*
 
     packageList=()
@@ -127,25 +128,25 @@ cmd_update_scripts() {
     CopyNsfw=false
     wallpapersRepo=false
 
-    # 1️⃣ CHECK DEPENDENCIES
+    # 1 CHECK DEPENDENCIES
     if ! source "$SUPPORT/dependency_check.sh"; then
         echo "Dependency check failed. Stopping."
         exit 1
     fi
 
-    # 2️⃣ CHECK FOR EXISTING DIRECTORIES AND FILES
+    # 2 CHECK FOR EXISTING DIRECTORIES AND FILES
     source "$SUPPORT/directory_setup.sh"
 
-    # 3️⃣ SCRIPT INSTALLATION
+    # 3 SCRIPT INSTALLATION
     source "$SUPPORT/script_install.sh"
 
-    # 4️⃣ WALLPAPER INSTALLATION
+    # 4 WALLPAPER INSTALLATION
     source "$SUPPORT/wallpaper_install.sh"
 
-    # 5️⃣ INSTALL THEMES
+    # 5 INSTALL THEMES
     source "$SUPPORT/install_themes.sh"
 
-    # 6️⃣ FINAL MESSAGE
+    # 6 FINAL MESSAGE
     source "$SUPPORT/final_message.sh"
 }
 

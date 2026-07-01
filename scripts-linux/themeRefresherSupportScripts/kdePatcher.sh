@@ -52,14 +52,7 @@ if [ -f "$WALLPAPER_ACCENT_BASE" ]; then
     ' "$WALLPAPER_ACCENT_BASE" > "$WALLPAPER_ACCENT"
 fi
 
-# 3. Patch qt6ct palette (always from clean base)
-QT6CT_CONF="$HOME/.config/qt6ct/colors/BreezeDark.conf"
-QT6CT_BASE="${QT6CT_CONF}.base"
-
-[ ! -f "$QT6CT_BASE" ] && [ -f "$QT6CT_CONF" ] && cp "$QT6CT_CONF" "$QT6CT_BASE"
-[ -f "$QT6CT_BASE" ] && sed "s/#ff3daee9/#ff$color/g" "$QT6CT_BASE" > "$QT6CT_CONF"
-
-# 4. Patch kdeglobals
+# 3. Patch kdeglobals
 kwriteconfig6 --file kdeglobals --group "Colors:View"      --key "DecorationFocus"     "$R,$G,$B"
 kwriteconfig6 --file kdeglobals --group "Colors:View"      --key "DecorationHover"     "$R,$G,$B"
 kwriteconfig6 --file kdeglobals --group "Colors:View"      --key "ForegroundActive"    "$R,$G,$B"

@@ -32,16 +32,34 @@ if [ -d "$HOME/Pictures" ]; then
         echo ""
         if [[ ! $REPLY =~ ^[Yy]$ ]]; then
             WallpapersDirExists=true
-            read -p "Do you still want to copy this repo's wallpapers to the directory? [y/N]" -n 1 -r
-            echo ""
-            echo ""
-            if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-                CopyWallpapers=false
+            if [ -d ./wallpapers ]; then
+                wallpapersRepo=true
+                read -p "Do you still want to copy this repo's wallpapers to the directory? [y/N]" -n 1 -r
+                echo ""
+                echo ""
+                if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+                    CopyWallpapers=false
+                else
+                    CopyWallpapers=true
+                fi
             else
-                CopyWallpapers=true
+                CopyWallpapers=false
             fi
         else
             rm -r "$HOME/Pictures/wallpapers"
+            if [ -d ./wallpapers ]; then
+                wallpapersRepo=true
+                read -p "Do you want to copy this repo's wallpapers to the directory? [y/N]" -n 1 -r
+                echo ""
+                echo ""
+                if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+                    CopyWallpapers=false
+                else
+                    CopyWallpapers=true
+                fi
+            else
+                CopyWallpapers=false
+            fi
         fi
     fi
 else
@@ -63,6 +81,8 @@ else
             else
                 CopyWallpapers=true
             fi
+        else
+            CopyWallpapers=false
         fi
     fi
 fi
@@ -75,8 +95,8 @@ if [ -f "$HOME/.config/rofi/config-wallpaper.rasi" ]; then
     echo ""
     echo ""
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-        cp ./scripts-linux/config-wallpaper.rasi "$HOME/.config/rofi/"
+        cp ./rofi/config-wallpaper.rasi "$HOME/.config/rofi/"
     fi
 else
-    cp ./scripts-linux/config-wallpaper.rasi "$HOME/.config/rofi/"
+    cp ./rofi/config-wallpaper.rasi "$HOME/.config/rofi/"
 fi

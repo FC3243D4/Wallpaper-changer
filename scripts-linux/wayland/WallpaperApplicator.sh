@@ -125,4 +125,4 @@ done
 # 4️⃣ Refresh the theme
 # -----------------------------------------------------------------
 
-$HOME/.config/WallpaperChanger/themeRefresher.sh
+$HOME/.config/WallpaperChanger/themeRefresher.sh --full

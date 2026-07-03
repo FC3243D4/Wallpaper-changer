@@ -13,6 +13,7 @@ fi
 accent="#$color"
 ICON_DIR="$HOME/.local/share/icons/breeze-dark-accent"
 SUPPORT="$HOME/.config/WallpaperChanger/themeRefresherSupportScripts"
+ICONS="$SUPPORT/svg"
 
 mkdir -p "$ICON_DIR/apps/16" "$ICON_DIR/apps/22" "$ICON_DIR/apps/24" \
          "$ICON_DIR/apps/32" "$ICON_DIR/apps/48" "$ICON_DIR/apps/64" \
@@ -138,7 +139,7 @@ patch_desktop_icon "org.cachyos.hello" "*cachyos*hello*.desktop" "org.cachyos.he
 fi
 
 # VS Code icon
-src="$SUPPORT/vscode_base_icon.svg"
+src="$ICONS/vscode_base_icon.svg"
 if [ -f "$src" ] && command -v code >/dev/null 2>&1; then
     python3 - << EOF
 import colorsys
@@ -171,7 +172,7 @@ patch_desktop_icon "vscode" "code.desktop" "visual-studio-code.desktop" "*visual
 fi
 
 # SourceGit icon
-src="$SUPPORT/sourcegit_base_icon.svg"
+src="$ICONS/sourcegit_base_icon.svg"
 if [ -f "$src" ] && command -v sourcegit >/dev/null 2>&1; then
     python3 - << EOF
 with open("$src", "r") as f:
@@ -185,7 +186,7 @@ patch_desktop_icon "sourcegit" "sourcegit.desktop" "*sourcegit*.desktop" "*sourc
 fi
 
 # Discord / Vesktop icon (shared source, separate destinations)
-src="$SUPPORT/discord_base_icon.svg"
+src="$ICONS/discord_base_icon.svg"
 if [ -f "$src" ]; then
     if command -v discord >/dev/null 2>&1; then
         sed "s/#000000/$accent/g" "$src" > "$ICON_DIR/apps/scalable/discord.svg"
@@ -200,7 +201,7 @@ if [ -f "$src" ]; then
 fi
 
 # Terminal emulator icon(s) — patches for any recognized terminal emulator installed
-src="$SUPPORT/terminal_base_icon.svg"
+src="$ICONS/terminal_base_icon.svg"
 if [ -f "$src" ]; then
     for term in kitty alacritty wezterm foot ghostty konsole gnome-terminal terminator tilix xterm urxvt st xfce4-terminal deepin-terminal lxterminal; do
         if command -v "$term" >/dev/null 2>&1; then
@@ -212,11 +213,35 @@ if [ -f "$src" ]; then
 fi
 
 # Zen Browser icon
-src="$SUPPORT/zen_browser_base_icon.svg"
+src="$ICONS/zen_browser_base_icon.svg"
 if [ -f "$src" ] && command -v zen-browser >/dev/null 2>&1; then
     sed "s/fill=\"currentColor\"/fill=\"$accent\"/" "$src" > "$ICON_DIR/apps/scalable/zen.svg"
     echo "Zen Browser icon patched"
     patch_desktop_icon "zen" "zen.desktop" "*zen*browser*.desktop" "*zen-browser*.desktop"
+fi
+
+# Firefox icon
+src="$ICONS/firefox_base_icon.svg"
+if [ -f "$src" ] && command -v firefox >/dev/null 2>&1; then
+    sed "s/#000000/$accent/g" "$src" > "$ICON_DIR/apps/scalable/firefox.svg"
+    echo "Firefox icon patched"
+    patch_desktop_icon "firefox" "firefox.desktop" "*firefox*.desktop"
+fi
+
+# Brave icon
+src="$ICONS/brave_base_icon.svg"
+if [ -f "$src" ] && { command -v brave-browser >/dev/null 2>&1 || command -v brave >/dev/null 2>&1; }; then
+    sed "s/#000000/$accent/g" "$src" > "$ICON_DIR/apps/scalable/brave.svg"
+    echo "Brave icon patched"
+    patch_desktop_icon "brave" "brave-browser.desktop" "brave.desktop" "*brave*.desktop"
+fi
+
+# Chrome icon
+src="$ICONS/chrome_base_icon.svg"
+if [ -f "$src" ] && { command -v google-chrome-stable >/dev/null 2>&1 || command -v google-chrome >/dev/null 2>&1 || command -v chromium >/dev/null 2>&1; }; then
+    sed "s/#000000/$accent/g" "$src" > "$ICON_DIR/apps/scalable/chrome.svg"
+    echo "Chrome icon patched"
+    patch_desktop_icon "chrome" "google-chrome.desktop" "*google-chrome*.desktop" "chromium.desktop" "*chromium*.desktop"
 fi
 
 # Clear icon cache

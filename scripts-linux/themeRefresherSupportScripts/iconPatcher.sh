@@ -18,6 +18,51 @@ mkdir -p "$ICON_DIR/apps/16" "$ICON_DIR/apps/22" "$ICON_DIR/apps/24" \
          "$ICON_DIR/apps/32" "$ICON_DIR/apps/48" "$ICON_DIR/apps/64" \
          "$ICON_DIR/apps/scalable"
 
+DESKTOP_DIRS=(
+    "$HOME/.local/share/applications"
+    "/usr/share/applications"
+    "/usr/local/share/applications"
+    "/var/lib/flatpak/exports/share/applications"
+    "$HOME/.local/share/flatpak/exports/share/applications"
+)
+
+# patch_desktop_icon <icon_name> <glob_pattern> [more_patterns...]
+# Finds .desktop files matching the given glob(s) in known application dirs.
+# If Icon= doesn't already match icon_name, creates/updates a user-level
+# override in ~/.local/share/applications (XDG standard: user overrides win
+# over system files, no root needed, survives package updates).
+patch_desktop_icon() {
+    local icon_name="$1"; shift
+    local patterns=("$@")
+    local matched=0
+    shopt -s nullglob nocaseglob
+    for dir in "${DESKTOP_DIRS[@]}"; do
+        [ -d "$dir" ] || continue
+        for pattern in "${patterns[@]}"; do
+            for file in "$dir"/$pattern; do
+                [ -f "$file" ] || continue
+                matched=1
+                local current
+                current=$(grep -m1 "^Icon=" "$file" | cut -d= -f2-)
+                if [ "$current" != "$icon_name" ]; then
+                    local base="$(basename "$file")"
+                    local override="$HOME/.local/share/applications/$base"
+                    mkdir -p "$HOME/.local/share/applications"
+                    [ -f "$override" ] || cp "$file" "$override"
+                    if grep -q "^Icon=" "$override"; then
+                        sed -i "s|^Icon=.*|Icon=$icon_name|" "$override"
+                    else
+                        echo "Icon=$icon_name" >> "$override"
+                    fi
+                    echo "  .desktop updated: $base (Icon: ${current:-<none>} -> $icon_name)"
+                fi
+            done
+        done
+    done
+    shopt -u nullglob nocaseglob
+    [ "$matched" -eq 0 ] && echo "  no .desktop file found for $icon_name"
+}
+
 # Folder icons
 for size in 16 22 24 32 48 64 96; do
     src="/usr/share/icons/breeze-dark/places/$size/folder.svg"
@@ -58,6 +103,7 @@ with open("$ICON_DIR/apps/scalable/org.kde.dolphin.svg", "w") as f:
     f.write(content)
 print("Dolphin icon patched")
 EOF
+patch_desktop_icon "org.kde.dolphin" "org.kde.dolphin.desktop"
 fi
 
 # org.cachyos.hello — replace teal colors with accent + lighter highlight
@@ -88,6 +134,7 @@ with open("$ICON_DIR/apps/scalable/org.cachyos.hello.svg", "w") as f:
     f.write(content)
 print(f"CachyOS icon patched (accent=$accent, highlight={highlight})")
 EOF
+patch_desktop_icon "org.cachyos.hello" "*cachyos*hello*.desktop" "org.cachyos.hello.desktop"
 fi
 
 # VS Code icon
@@ -120,6 +167,7 @@ with open("$ICON_DIR/apps/scalable/vscode.svg", "w") as f:
     f.write(svg)
 print(f"VSCode icon patched (dark={dark}, mid={mid}, light={light})")
 EOF
+patch_desktop_icon "vscode" "code.desktop" "visual-studio-code.desktop" "*visual-studio-code*.desktop"
 fi
 
 # SourceGit icon
@@ -133,6 +181,7 @@ with open("$ICON_DIR/apps/scalable/sourcegit.svg", "w") as f:
     f.write(content)
 print("SourceGit icon patched")
 EOF
+patch_desktop_icon "sourcegit" "sourcegit.desktop" "*sourcegit*.desktop" "*source-git*.desktop"
 fi
 
 # Discord / Vesktop icon (shared source, separate destinations)
@@ -141,10 +190,12 @@ if [ -f "$src" ]; then
     if command -v discord >/dev/null 2>&1; then
         sed "s/#000000/$accent/g" "$src" > "$ICON_DIR/apps/scalable/discord.svg"
         echo "Discord icon patched"
+        patch_desktop_icon "discord" "discord.desktop" "com.discordapp.Discord.desktop"
     fi
     if command -v vesktop >/dev/null 2>&1; then
         sed "s/#000000/$accent/g" "$src" > "$ICON_DIR/apps/scalable/vesktop.svg"
         echo "Vesktop icon patched"
+        patch_desktop_icon "vesktop" "vesktop.desktop" "*vesktop*.desktop"
     fi
 fi
 
@@ -155,6 +206,7 @@ if [ -f "$src" ]; then
         if command -v "$term" >/dev/null 2>&1; then
             sed "s/#000000/$accent/g" "$src" > "$ICON_DIR/apps/scalable/$term.svg"
             echo "Terminal icon patched ($term)"
+            patch_desktop_icon "$term" "$term.desktop" "*$term*.desktop"
         fi
     done
 fi
@@ -164,6 +216,7 @@ src="$SUPPORT/zen_browser_base_icon.svg"
 if [ -f "$src" ] && command -v zen-browser >/dev/null 2>&1; then
     sed "s/fill=\"currentColor\"/fill=\"$accent\"/" "$src" > "$ICON_DIR/apps/scalable/zen.svg"
     echo "Zen Browser icon patched"
+    patch_desktop_icon "zen" "zen.desktop" "*zen*browser*.desktop" "*zen-browser*.desktop"
 fi
 
 # Clear icon cache

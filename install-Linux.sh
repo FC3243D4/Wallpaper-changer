@@ -110,6 +110,7 @@ cmd_update_scripts() {
 
     chmod +x "$HOME/.config/WallpaperChanger"/*
     chmod +x "$HOME/.config/WallpaperChanger/themeRefresherSupportScripts"/*
+    chmod +x "$HOME/.config/WallpaperChanger/themeRefresherSupportScripts/appPatchers"/*
     echo "Scripts updated successfully."
 }
 

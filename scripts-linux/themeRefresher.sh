@@ -48,16 +48,20 @@ cmd_full() {
 
     # 6. Patch app-specific themes
     if command -v code >/dev/null 2>&1; then
-        "$SUPPORT/vscodePatcher.sh" "$color"
-    fi
-    if command -v zen-browser >/dev/null 2>&1; then
-        "$SUPPORT/zenPatcher.sh" "$color"
+        "$SUPPORT/appPatchers/vscodePatcher.sh" "$color"
     fi
     if command -v sourcegit >/dev/null 2>&1; then
-        "$SUPPORT/sourceGitPatcher.sh" "$color"
+        "$SUPPORT/appPatchers/sourceGitPatcher.sh" "$color"
     fi
     if command -v ferdium >/dev/null 2>&1; then
-        "$SUPPORT/ferdiumPatcher.sh" "$color"
+        "$SUPPORT/appPatchers/ferdiumPatcher.sh" "$color"
+    fi
+    #browser patchers
+    if command -v zen-browser >/dev/null 2>&1; then
+        "$SUPPORT/appPatchers/zenPatcher.sh" "$color"
+    fi
+    if command -v firefox >/dev/null 2>&1; then
+        "$SUPPORT/appPatchers/firefoxPatcher.sh" "$color"
     fi
 
     # 7. Restart apps
@@ -146,16 +150,20 @@ cmd_softrun() {
 
     # 6. Patch app-specific themes
     if command -v code >/dev/null 2>&1; then
-        "$SUPPORT/vscodePatcher.sh" "$color"
-    fi
-    if command -v zen-browser >/dev/null 2>&1; then
-        "$SUPPORT/zenPatcher.sh" "$color"
+        "$SUPPORT/appPatchers/vscodePatcher.sh" "$color"
     fi
     if command -v sourcegit >/dev/null 2>&1; then
-        "$SUPPORT/sourceGitPatcher.sh" "$color"
+        "$SUPPORT/appPatchers/sourceGitPatcher.sh" "$color"
     fi
     if command -v ferdium >/dev/null 2>&1; then
-        "$SUPPORT/ferdiumPatcher.sh" "$color"
+        "$SUPPORT/appPatchers/ferdiumPatcher.sh" "$color"
+    fi
+        #browser patchers
+    if command -v zen-browser >/dev/null 2>&1; then
+        "$SUPPORT/appPatchers/zenPatcher.sh" "$color"
+    fi
+    if command -v firefox >/dev/null 2>&1; then
+        "$SUPPORT/appPatchers/firefoxPatcher.sh" "$color"
     fi
 }
 

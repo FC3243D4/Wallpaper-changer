@@ -12,7 +12,7 @@ fi
 
 accent="#$color"
 VSCODE_SETTINGS="$HOME/.config/Code/User/settings.json"
-VSCODE_BASE_ICON="$HOME/.config/WallpaperChanger/themeRefresherSupportScripts/vscode_base_icon.svg"
+VSCODE_BASE_ICON="$HOME/.config/WallpaperChanger/themeRefresherSupportScripts/svg/vscode_base_icon.svg"
 
 if [ ! -f "$VSCODE_SETTINGS" ]; then
     echo "VS Code settings not found, skipping"

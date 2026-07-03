@@ -31,47 +31,51 @@ _resolve_pkg() {
     case "$PKG_MANAGER" in
         pacman)
             case "$logical" in
-                imagemagick)  echo "imagemagick" ;;
-                rsync)        echo "rsync" ;;
-                bc)           echo "bc" ;;
-                xrandr)       echo "xorg-xrandr" ;;
-                breeze)       echo "breeze" ;;
-                breeze-gtk)   echo "breeze-gtk" ;;
-                breeze-icons) echo "breeze-icons" ;;
-                *)            echo "$logical" ;;
+                imagemagick)    echo "imagemagick" ;;
+                rsync)          echo "rsync" ;;
+                bc)             echo "bc" ;;
+                xrandr)         echo "xorg-xrandr" ;;
+                breeze)         echo "breeze" ;;
+                breeze-gtk)     echo "breeze-gtk" ;;
+                breeze-icons)   echo "breeze-icons" ;;
+                python-pillow)  echo "python-pillow" ;;
+                *)              echo "$logical" ;;
             esac ;;
         apt)
             case "$logical" in
-                imagemagick)  echo "imagemagick" ;;
-                rsync)        echo "rsync" ;;
-                bc)           echo "bc" ;;
-                xrandr)       echo "x11-xserver-utils" ;;
-                breeze)       echo "breeze" ;;
-                breeze-gtk)   echo "breeze-gtk-theme" ;;
-                breeze-icons) echo "breeze-icon-theme" ;;
-                *)            echo "$logical" ;;
+                imagemagick)    echo "imagemagick" ;;
+                rsync)          echo "rsync" ;;
+                bc)             echo "bc" ;;
+                xrandr)         echo "x11-xserver-utils" ;;
+                breeze)         echo "breeze" ;;
+                breeze-gtk)     echo "breeze-gtk-theme" ;;
+                breeze-icons)   echo "breeze-icon-theme" ;;
+                python-pillow)  echo "python3-pil" ;;
+                *)              echo "$logical" ;;
             esac ;;
         dnf)
             case "$logical" in
-                imagemagick)  echo "ImageMagick" ;;
-                rsync)        echo "rsync" ;;
-                bc)           echo "bc" ;;
-                xrandr)       echo "xrandr" ;;
-                breeze)       echo "breeze-cursor-theme" ;;
-                breeze-gtk)   echo "breeze-gtk" ;;
-                breeze-icons) echo "breeze-icon-theme" ;;
-                *)            echo "$logical" ;;
+                imagemagick)    echo "ImageMagick" ;;
+                rsync)          echo "rsync" ;;
+                bc)             echo "bc" ;;
+                xrandr)         echo "xrandr" ;;
+                breeze)         echo "breeze-cursor-theme" ;;
+                breeze-gtk)     echo "breeze-gtk" ;;
+                breeze-icons)   echo "breeze-icon-theme" ;;
+                python-pillow)  echo "python3-pillow" ;;
+                *)              echo "$logical" ;;
             esac ;;
         zypper)
             case "$logical" in
-                imagemagick)  echo "ImageMagick" ;;
-                rsync)        echo "rsync" ;;
-                bc)           echo "bc" ;;
-                xrandr)       echo "xrandr" ;;
-                breeze)       echo "breeze5" ;;
-                breeze-gtk)   echo "breeze5-gtk" ;;
-                breeze-icons) echo "breeze5-icons" ;;
-                *)            echo "$logical" ;;
+                imagemagick)    echo "ImageMagick" ;;
+                rsync)          echo "rsync" ;;
+                bc)             echo "bc" ;;
+                xrandr)         echo "xrandr" ;;
+                breeze)         echo "breeze5" ;;
+                breeze-gtk)     echo "breeze5-gtk" ;;
+                breeze-icons)   echo "breeze5-icons" ;;
+                python-pillow)  echo "python3-Pillow" ;;   # UNVERIFIED — check manually
+                *)              echo "$logical" ;;
             esac ;;
     esac
 }

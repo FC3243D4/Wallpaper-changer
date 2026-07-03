@@ -18,8 +18,8 @@ SUPPORT="$HOME/.config/WallpaperChanger/themeRefresherSupportScripts"
 ICONS="$SUPPORT/svg"
 
 mkdir -p "$ICON_DIR/apps/16" "$ICON_DIR/apps/22" "$ICON_DIR/apps/24" \
-         "$ICON_DIR/apps/32" "$ICON_DIR/apps/48" "$ICON_DIR/apps/64" \
-         "$ICON_DIR/apps/scalable"
+         "$ICON_DIR/apps/32" "$ICON_DIR/apps/44" "$ICON_DIR/apps/48" \
+         "$ICON_DIR/apps/64" "$ICON_DIR/apps/scalable"
 
 DESKTOP_DIRS=(
     "$HOME/.local/share/applications"
@@ -147,6 +147,48 @@ with open("$ICON_DIR/apps/scalable/org.cachyos.hello.svg", "w") as f:
 print(f"CachyOS icon patched (accent=$accent, highlight={highlight})")
 EOF
         patch_desktop_icon "org.cachyos.hello" "*cachyos*hello*.desktop" "org.cachyos.hello.desktop"
+    fi
+}
+
+# CachyOS Kernel Manager — ships PNG-only icons (16/22/32/44px), no scalable
+# SVG upstream, so we can't sed-swap hex codes the way patch_cachyos_hello_icon
+# does. Artwork is effectively single-hue (a green gradient with anti-aliased
+# edges), so ImageMagick's -colorize 100% flattens it to the accent color
+# while preserving the alpha/anti-aliasing shape — no HSV shading needed.
+patch_cachyos_kernel_manager_icon() {
+    if command -v cachyos-kernel-manager >/dev/null 2>&1 && { command -v magick >/dev/null 2>&1 || command -v convert >/dev/null 2>&1; }; then
+        local tool="convert"
+        command -v magick >/dev/null 2>&1 && tool="magick"
+        local patched=0
+        for size in 16 22 32 44; do
+            src="/usr/share/icons/hicolor/${size}x${size}/apps/org.cachyos.KernelManager.png"
+            dst="$ICON_DIR/apps/$size/cachyos-kernel-manager.png"
+            if [ -f "$src" ]; then
+                "$tool" "$src" -fill "$accent" -colorize 100% "$dst"
+                patched=1
+            fi
+        done
+        if [ "$patched" -eq 1 ]; then
+            echo "CachyOS Kernel Manager icon patched"
+            patch_desktop_icon "cachyos-kernel-manager" "org.cachyos.KernelManager.desktop" "*cachyos*kernel*manager*.desktop"
+        else
+            echo "  no CachyOS Kernel Manager icon files found to patch"
+        fi
+    fi
+}
+
+# CachyOS Package Installer (cachyos-pi) — PNG-only icon like Kernel Manager,
+# oddly installed into hicolor/scalable/apps despite being raster (256x256).
+# Same single-hue artwork treatment: -colorize 100% flattens RGB to accent
+# while keeping the alpha channel intact.
+patch_cachyos_pi_icon() {
+    src="/usr/share/icons/hicolor/scalable/apps/cachyos-pi.png"
+    if [ -f "$src" ] && command -v cachyos-pi >/dev/null 2>&1 && { command -v magick >/dev/null 2>&1 || command -v convert >/dev/null 2>&1; }; then
+        local tool="convert"
+        command -v magick >/dev/null 2>&1 && tool="magick"
+        "$tool" "$src" -fill "$accent" -colorize 100% "$ICON_DIR/apps/scalable/cachyos-pi.png"
+        echo "CachyOS Package Installer icon patched"
+        patch_desktop_icon "cachyos-pi" "cachyos-pi.desktop" "*cachyos*pi*.desktop"
     fi
 }
 
@@ -430,12 +472,14 @@ EOF
     fi
 }
 
-patch_plasma_system_monitor_icon() {
-    src="$ICONS/plasma_system_monitor_base_icon.svg"
-    if [ -f "$src" ] && command -v plasma-systemmonitor >/dev/null 2>&1; then
-        sed "s/gray/$accent/g" "$src" > "$ICON_DIR/apps/scalable/plasma-system-monitor.svg"
+patch_system_monitor_icon() {
+    src="$ICONS/system_monitor_base_icon.svg"
+    if [ -f "$src" ] && ( command -v plasma-systemmonitor >/dev/null 2>&1 || 
+                          command -v gnome-system-monitor >/dev/null 2>&1 ); then
+        sed "s/gray/$accent/g" "$src" > "$ICON_DIR/apps/scalable/system-monitor.svg"
         echo "Plasma System Monitor icon patched"
-        patch_desktop_icon "plasma-system-monitor" "plasma-systemmonitor.desktop" "*plasma-systemmonitor*.desktop"
+        patch_desktop_icon "system-monitor" "plasma-systemmonitor.desktop" "*plasma-systemmonitor*.desktop"
+        patch_desktop_icon "system-monitor" "org.gnome.SystemMonitor.desktop" "*SystemMonitor*.desktop"
     fi
 }
 
@@ -488,6 +532,15 @@ patch_nwg_look_icon() {
     fi
 }
 
+patch_nwg_displays_icon() {
+    src="$ICONS/nwg-displays_base_icon.svg"
+    if [ -f "$src" ] && command -v nwg-displays >/dev/null 2>&1; then
+        sed "s/#00aad4/$accent/g" "$src" > "$ICON_DIR/apps/scalable/nwg-displays.svg"
+        echo "nwg-displays icon patched"
+        patch_desktop_icon "nwg-displays" "nwg-displays.desktop" "*nwg-displays*.desktop"
+    fi
+}
+
 patch_vial_icon() {
     src="$ICONS/vial_base_icon.svg"
     if [ -f "$src" ] && command -v Vial >/dev/null 2>&1; then
@@ -530,14 +583,50 @@ patch_ark_icon() {
     fi
 }
 
-# Blackmagic RAW Player icon — bundled with DaVinci Resolve, binary
-# outside $PATH under /opt/resolve/
+# Player icon
 patch_blackmagic_raw_player_icon() {
     src="$ICONS/player_base_icon.svg"
-    if [ -f "$src" ] && [ -x "/opt/resolve/BlackmagicRAWPlayer/BlackmagicRAWPlayer" ]; then
-        sed "s/#000000/$accent/g" "$src" > "$ICON_DIR/apps/scalable/blackmagic-raw-player.svg"
-        echo "Blackmagic RAW Player icon patched"
-        patch_desktop_icon "blackmagic-raw-player" "blackmagicraw-player.desktop"
+    if [ -f "$src" ] && ( [ -x "/opt/resolve/BlackmagicRAWPlayer/BlackmagicRAWPlayer" ] || command -v mpv >/dev/null 2>&1 || 
+                                                                                           command -v vlc >/dev/null 2>&1 ); then
+        sed "s/#000000/$accent/g" "$src" > "$ICON_DIR/apps/scalable/player.svg"
+        echo "Player icon patched"
+        patch_desktop_icon "player" "blackmagicraw-player.desktop"
+        patch_desktop_icon "player" "*mpv*.desktop"
+        patch_desktop_icon "player" "*vlc*.desktop"
+    fi
+}
+
+# Generic settings icon
+# for DaVinci Control Panels Setup and grub-customizer
+patch_generic_settings_icon() {
+    src="$ICONS/settings_base_icon.svg"
+    if [ -f "$src" ] && ( [ -x "/opt/resolve/DaVinci Control Panels Setup/DaVinci Control Panels Setup" ] || command -v grub-customizer >/dev/null 2>&1 || 
+                                                                                                             command -v yad >/dev/null 2>&1 || 
+                                                                                                             command -v lstopo >/dev/null 2>&1 || 
+                                                                                                             command -v nvtop >/dev/null 2>&1 || 
+                                                                                                             command -v qv4l2 >/dev/null 2>&1 || 
+                                                                                                             command -v qvidcap >/dev/null 2>&1 || 
+                                                                                                             command -v assistant6 >/dev/null 2>&1 || 
+                                                                                                             command -v linguist6 >/dev/null 2>&1 || 
+                                                                                                             command -v qdbusviewer6 >/dev/null 2>&1 || 
+                                                                                                             command -v scx-manager >/dev/null 2>&1 || 
+                                                                                                             command -v uuctl >/dev/null 2>&1 || 
+                                                                                                             command -v winetricks >/dev/null 2>&1 ); then
+        sed "s/#000000/$accent/g" "$src" > "$ICON_DIR/apps/scalable/settings.svg"
+        echo "Generic settings icon patched"
+        patch_desktop_icon "settings" "DaVinciControlPanelsSetup.desktop"
+        patch_desktop_icon "settings" "grub-customizer.desktop"
+        patch_desktop_icon "settings" "*yad*.desktop"
+        patch_desktop_icon "settings" "lstopo.desktop"
+        patch_desktop_icon "settings" "nvtop.desktop"
+        patch_desktop_icon "settings" "qv4l2.desktop"
+        patch_desktop_icon "settings" "qvidcap.desktop"
+        patch_desktop_icon "settings" "assistant.desktop"
+        patch_desktop_icon "settings" "linguist.desktop"
+        patch_desktop_icon "settings" "qdbusviewer.desktop"
+        patch_desktop_icon "settings" "*scx-manager*.desktop"
+        patch_desktop_icon "settings" "uuctl.desktop"
+        patch_desktop_icon "settings" "winetricks.desktop"
     fi
 }
 
@@ -560,6 +649,454 @@ patch_blender_icon() {
     fi
 }
 
+patch_bluetooth_icon() {
+    src="$ICONS/bluetooth_base_icon.svg"
+    if [ -f "$src" ] && command -v blueman-manager >/dev/null 2>&1; then
+        sed "s/#000000/$accent/g" "$src" > "$ICON_DIR/apps/scalable/bluetooth.svg"
+        echo "Bluetooth icon patched"
+        patch_desktop_icon "bluetooth" "blueman-manager.desktop"
+    fi
+}
+
+patch_btrfs_icon() {
+    src="$ICONS/btrfs_base_icon.svg"
+    if [ -f "$src" ] && command -v btrfs >/dev/null 2>&1; then
+        sed "s/#000000/$accent/g" "$src" > "$ICON_DIR/apps/scalable/btrfs.svg"
+        echo "Btrfs icon patched"
+        patch_desktop_icon "btrfs" "btrfs-assistant.desktop" "*btrfs*.desktop"
+    fi
+}
+
+patch_cmake_icon() {
+    src="$ICONS/cmake_base_icon.svg"
+    if [ -f "$src" ] && command -v cmake >/dev/null 2>&1; then
+        sed "s/#000000/$accent/g" "$src" > "$ICON_DIR/apps/scalable/cmake.svg"
+        echo "CMake icon patched"
+        patch_desktop_icon "cmake" "cmake-gui.desktop" "*cmake*.desktop"
+    fi
+}
+
+# Conky logomark
+patch_conky_icon() {
+    src="$ICONS/conky_base_icon.svg"
+    if [ -f "$src" ] && command -v conky >/dev/null 2>&1; then
+        python3 - << EOF
+import colorsys, re, base64, io
+
+def hex_to_hsv(h):
+    h = h.lstrip("#")
+    r, g, b = int(h[0:2],16)/255, int(h[2:4],16)/255, int(h[4:6],16)/255
+    return colorsys.rgb_to_hsv(r, g, b)
+
+def hsv_to_hex(h, s, v):
+    r, g, b = colorsys.hsv_to_rgb(h % 1.0, min(1,s), min(1,v))
+    return "#{:02x}{:02x}{:02x}".format(int(r*255), int(g*255), int(b*255))
+
+base_h, base_s, base_v = hex_to_hsv("$color")
+dark   = hsv_to_hex(base_h, base_s, max(0, base_v - 0.15))
+darker = hsv_to_hex(base_h, base_s, max(0, base_v - 0.35))
+light  = hsv_to_hex(base_h, max(0, base_s - 0.35), min(1, base_v + 0.25))
+mid    = "$accent"
+
+with open("$src", "r") as f:
+    svg = f.read()
+
+svg = svg.replace("#B19DCB", light)   # st0 — background quad
+svg = svg.replace("#666699", mid)     # st1 — blue-violet bars (40% opacity)
+svg = svg.replace("#583494", dark)    # st2 — main solid "C" ring
+svg = svg.replace("#3D296D", darker)  # st3 — dark accent rect (40% opacity)
+
+try:
+    from PIL import Image, ImageOps
+    m = re.search(r'xlink:href="data:image/png;base64,([^"]+)"', svg)
+    if m:
+        png_bytes = base64.b64decode(m.group(1))
+        im = Image.open(io.BytesIO(png_bytes)).convert("RGBA")
+        r, g, b, a = im.split()
+        gray = Image.merge("RGB", (r, g, b)).convert("L")
+        tinted = ImageOps.colorize(gray, black="#000000", white=mid).convert("RGBA")
+        tinted.putalpha(a)
+        buf = io.BytesIO()
+        tinted.save(buf, format="PNG")
+        new_b64 = base64.b64encode(buf.getvalue()).decode()
+        svg = svg[:m.start(1)] + new_b64 + svg[m.end(1):]
+        print("  embedded raster retinted")
+    else:
+        print("  no embedded raster found (unexpected)")
+except ImportError:
+    print("  python3-pillow not found — embedded raster left unrecolored")
+
+with open("$ICON_DIR/apps/scalable/conky.svg", "w") as f:
+    f.write(svg)
+print(f"Conky icon patched (dark={dark}, mid={mid}, light={light}, darker={darker})")
+EOF
+
+        patch_desktop_icon "conky" "conky.desktop" "*conky*.desktop"
+    fi
+}
+
+# CoolerControl
+patch_coolercontrol_icon() {
+    src="$ICONS/coolercontrol_base_icon.svg"
+    if [ -f "$src" ] && command -v coolercontrol >/dev/null 2>&1; then
+        sed -e "s/#4d8cff/$accent/g" -e "s/#ff21ff/$accent/g" "$src" > "$ICON_DIR/apps/scalable/coolercontrol.svg"
+        echo "CoolerControl icon patched"
+        patch_desktop_icon "coolercontrol" "org.coolercontrol.CoolerControl.desktop" "*coolercontrol*.desktop"
+    fi
+}
+
+patch_disks_utilities_icon() {
+    src="$ICONS/disks_base_icon.svg"
+    if [ -f "$src" ] && ( command -v gnome-disks >/dev/null 2>&1 || 
+                          command -v gparted >/dev/null 2>&1 || 
+                          command -v kdepartitionmanager >/dev/null 2>&1 || 
+                          command -v kdiskmanager >/dev/null 2>&1 ); then
+        sed "s/#000000/$accent/g" "$src" > "$ICON_DIR/apps/scalable/disks.svg"
+        echo "Disks utilities icon patched"
+        patch_desktop_icon "disks" "org.gnome.DiskUtility.desktop"
+        patch_desktop_icon "disks" "org.kde.filelight.desktop"
+        patch_desktop_icon "disks" "gparted.desktop"
+        patch_desktop_icon "disks" "org.kde.partitionmanager.desktop"
+    fi
+}
+
+# Generic Electron placeholder — simple-icons logo (MIT), no fill attribute
+# by default so inject one rather than sed-swapping a hex. Targets the
+# versioned electronNN runtime packages (electron32, electron35, electron37,
+# ...), which each ship their own generic "Electron NN" .desktop file —
+# the numeric glob means new major versions get covered automatically,
+# no need to touch this when Electron 38/39/etc. show up.
+patch_electron_icon() {
+    src="$ICONS/electron_base_icon.svg"
+    if [ -f "$src" ]; then
+        sed "s|viewBox=\"0 0 24 24\" xmlns|fill=\"$accent\" viewBox=\"0 0 24 24\" xmlns|" "$src" > "$ICON_DIR/apps/scalable/electron.svg"
+        echo "Electron placeholder icon patched"
+        patch_desktop_icon "electron" "electron[0-9]*.desktop"
+        # Point any other unbranded Electron app at the same icon too:
+        # patch_desktop_icon "electron" "some-electron-app.desktop"
+    fi
+}
+
+# Fedora Media Writer — PNG-only icons, no scalable SVG upstream. Two-tone artwork: Fedora blue infinity mark + gray/white USB drive body. A plain ImageMagick -fuzz/-opaque match on the exact blue hex leaves anti-aliased edge pixels untouched (visible residual blue at small sizes); a fuzz wide enough to catch those starts eating into the gray drive body instead.
+patch_fedora_media_writer_icon() {
+    if command -v mediawriter >/dev/null 2>&1; then
+        local patched=0
+        for size in 16 22 24 32 48 64 128 256; do
+            src="/usr/share/icons/hicolor/${size}x${size}/apps/org.fedoraproject.MediaWriter.png"
+            dst="$ICON_DIR/apps/$size/fedora-media-writer.png"
+            if [ -f "$src" ]; then
+                mkdir -p "$ICON_DIR/apps/$size"
+                python3 - << EOF
+try:
+    from PIL import Image
+    import colorsys
+
+    im = Image.open("$src").convert("RGBA")
+    px = im.load()
+    tr, tg, tb = int("$color"[0:2],16)/255, int("$color"[2:4],16)/255, int("$color"[4:6],16)/255
+    th, ts, tv = colorsys.rgb_to_hsv(tr, tg, tb)
+    w, h = im.size
+    for y in range(h):
+        for x in range(w):
+            r, g, b, a = px[x, y]
+            if a == 0:
+                continue
+            hh, s, v = colorsys.rgb_to_hsv(r/255, g/255, b/255)
+            if 0.52 <= hh <= 0.62 and s > 0.15:
+                nr, ng, nb = colorsys.hsv_to_rgb(th, s, v)
+                px[x, y] = (int(nr*255), int(ng*255), int(nb*255), a)
+    im.save("$dst")
+    print("  ${size}px recolored")
+except ImportError:
+    import shutil
+    shutil.copy("$src", "$dst")
+    print("  python3-pillow not found — ${size}px copied unrecolored")
+EOF
+                patched=1
+            fi
+        done
+        if [ "$patched" -eq 1 ]; then
+            echo "Fedora Media Writer icon patched"
+            patch_desktop_icon "fedora-media-writer" "org.fedoraproject.MediaWriter.desktop"
+        fi
+    fi
+}
+
+# Image viewer icon
+patch_image_viewer_icon() {
+    src="$ICONS/image_viewer_base_icon.svg"
+    if [ -f "$src" ] && ( command -v gwenview >/dev/null 2>&1 || 
+                          command -v loupe >/dev/null 2>&1 ); then
+        sed "s/gray/$accent/g" "$src" > "$ICON_DIR/apps/scalable/image_viewer.svg"
+        echo "Gwenview icon patched"
+        patch_desktop_icon "image_viewer" "gwenview.desktop" "*gwenview*.desktop"
+        patch_desktop_icon "image_viewer" "org.gnome.Loupe.desktop" "*org.gnome.Loupe*.desktop"
+    fi
+}
+
+# Hp icons
+patch_hp_icon() {
+    src="$ICONS/hp_base_icon.svg"
+    if [ -f "$src" ] && command -v hp-toolbox >/dev/null 2>&1; then
+        sed "s/#000000/$accent/g" "$src" > "$ICON_DIR/apps/scalable/hp.svg"
+        echo "HP icon patched"
+        patch_desktop_icon "hp" "hp-uiscan.desktop"
+        patch_desktop_icon "hp" "hplip.desktop"
+    fi
+}
+
+# Text editor icon
+patch_text_editor_icon() {
+    src="$ICONS/text_editor_base_icon.svg"
+    if [ -f "$src" ] && ( command -v kate >/dev/null 2>&1 || 
+                          command -v kwrite >/dev/null 2>&1 || 
+                          command -v micro >/dev/null 2>&1 || 
+                          command -v gnome-text-editor >/dev/null 2>&1 || 
+                          command -v xdvi >/dev/null 2>&1 ); then
+        sed "s/gray/$accent/g" "$src" > "$ICON_DIR/apps/scalable/text_editor.svg"
+        echo "Text editor icon patched"
+        patch_desktop_icon "text_editor" "kate.desktop" "*kate*.desktop"
+        patch_desktop_icon "text_editor" "kwrite.desktop" "*kwrite*.desktop"
+        patch_desktop_icon "text_editor" "micro.desktop" "*micro*.desktop"
+        patch_desktop_icon "text_editor" "org.gnome.TextEditor.desktop" "*org.gnome.TextEditor*.desktop"
+        patch_desktop_icon "text_editor" "xdvi.desktop" "*xdvi*.desktop"
+    fi
+}
+
+# Calculator icon
+patch_calculator_icon() {
+    src="$ICONS/calculator_base_icon.svg"
+    if [ -f "$src" ] && ( command -v kcalc >/dev/null 2>&1 || 
+                          command -v qalculate >/dev/null 2>&1 ); then
+        sed "s/#000000/$accent/g" "$src" > "$ICON_DIR/apps/scalable/calculator.svg"
+        echo "Calculator icon patched"
+        patch_desktop_icon "calculator" "kcalc.desktop" "*kcalc*.desktop"
+        patch_desktop_icon "calculator" "qalculate-gtk.desktop"
+    fi
+}
+
+# Brush icon
+patch_brush_icon() {
+    src="$ICONS/brush_base_icon.svg"
+    if [ -f "$src" ] && command -v kvantummanager >/dev/null 2>&1; then
+        sed "s/#000000/$accent/g" "$src" > "$ICON_DIR/apps/scalable/brush.svg"
+        echo "Brush icon patched"
+        patch_desktop_icon "brush" "kvantummanager.desktop"
+    fi
+}
+
+# Lock icon
+patch_lock_icon() {
+    src="$ICONS/lock_base_icon.svg"
+    if [ -f "$src" ] && command -v kwalletd6 >/dev/null 2>&1; then
+        sed "s/#000000/$accent/g" "$src" > "$ICON_DIR/apps/scalable/lock.svg"
+        echo "Lock icon patched"
+        patch_desktop_icon "lock" "*kwalletmanager*.desktop"
+    fi
+}
+
+# Localsend icon
+patch_localsend_icon() {
+    src="$ICONS/localsend_base_icon.svg"
+    if [ -f "$src" ] && command -v localsend >/dev/null 2>&1; then
+        sed "s/#fff/$accent/g" "$src" > "$ICON_DIR/apps/scalable/localsend.svg"
+        echo "Localsend icon patched"
+        patch_desktop_icon "localsend" "localsend.desktop" "*localsend*.desktop"
+    fi
+}
+
+# Printer icon
+patch_printer_icon() {
+    src="$ICONS/printer_base_icon.svg"
+    if [ -f "$src" ] && [ -f /usr/share/applications/cups.desktop ]; then
+        sed "s/none/$accent/g" "$src" > "$ICON_DIR/apps/scalable/printer.svg"
+        echo "Printer icon patched"
+        patch_desktop_icon "printer" "cups.desktop"
+    fi
+}
+
+# Lychee icon
+patch_lychee_icon() {
+    src="$ICONS/lychee_base_icon.svg"
+    if [ -f "$src" ] && command -v lycheeslicer >/dev/null 2>&1; then
+        sed "s/#000000/$accent/g" "$src" > "$ICON_DIR/apps/scalable/lychee.svg"
+        echo "Lychee icon patched"
+        patch_desktop_icon "lychee" "lychee.desktop" "*lychee*.desktop"
+    fi
+}
+
+# Meld icon
+patch_meld_icon() {
+    src="$ICONS/meld_base_icon.svg"
+    if [ -f "$src" ] && command -v meld >/dev/null 2>&1; then
+        sed "s/#000000/$accent/g" "$src" > "$ICON_DIR/apps/scalable/meld.svg"
+        echo "Meld icon patched"
+        patch_desktop_icon "meld" "meld.desktop" "*meld*.desktop"
+    fi
+}
+
+# Neovim icon
+patch_neovim_icon() {
+    src="$ICONS/neovim_base_icon.svg"
+    if [ -f "$src" ] && command -v nvim >/dev/null 2>&1; then
+        sed "s/#000000/$accent/g" "$src" > "$ICON_DIR/apps/scalable/neovim.svg"
+        echo "Neovim icon patched"
+        patch_desktop_icon "neovim" "nvim.desktop" "*nvim*.desktop"
+    fi
+}
+
+# Nvidia X Server Settings icon
+patch_nvidia_settings_icon() {
+    src="$ICONS/nvidia_base_icon.svg"
+    if [ -f "$src" ] && command -v nvidia-settings >/dev/null 2>&1; then
+        sed "s/#000000/$accent/g" "$src" > "$ICON_DIR/apps/scalable/nvidia.svg"
+        echo "Nvidia X Server Settings icon patched"
+        patch_desktop_icon "nvidia" "nvidia-settings.desktop"
+    fi
+}
+
+# Install icon
+patch_install_icon() {
+    src="$ICONS/install_base_icon.svg"
+    if [ -f "$src" ] && ( command -v octopi >/dev/null 2>&1 || 
+                          command -v shelly >/dev/null 2>&1 ); then
+        sed "s/#000000/$accent/g" "$src" > "$ICON_DIR/apps/scalable/install.svg"
+        echo "Install icon patched"
+        patch_desktop_icon "install" "*octopi*.desktop"
+        patch_desktop_icon "install" "*shelly*.desktop"
+    fi
+}
+
+# Cloud storage icon
+patch_cloud_storage_icon() {
+    src="$ICONS/cloud_storage_base_icon.svg"
+    if [ -f "$src" ] && command -v onedrive >/dev/null 2>&1; then
+        sed "s/#000000/$accent/g" "$src" > "$ICON_DIR/apps/scalable/cloud_storage.svg"
+        echo "Cloud storage icon patched"
+        patch_desktop_icon "cloud_storage" "*onedrive*.desktop"
+    fi
+}
+
+# Code icon
+patch_code_icon() {
+    src="$ICONS/code_base_icon.svg"
+    if [ -f "$src" ] && ( [ -d "/usr/lib/jvm" ] || command -v designer6 >/dev/null 2>&1 ); then
+        sed "s/#000000/$accent/g" "$src" > "$ICON_DIR/apps/scalable/code.svg"
+        echo "Code icon patched"
+        patch_desktop_icon "code" "*jdk*.desktop"
+        patch_desktop_icon "code" "*designer*.desktop"
+    fi
+}
+
+# Gaming icon
+patch_gaming_icon() {
+    src="$ICONS/gaming_base_icon.svg"
+    if [ -f "$src" ] && ( command -v heroic >/dev/null 2>&1 || 
+                          command -v lutris >/dev/null 2>&1 || 
+                          command -v goverlay >/dev/null 2>&1 || 
+                          command -v protonplus >/dev/null 2>&1 || 
+                          command -v protontricks >/dev/null 2>&1 ); then
+        sed "s/#000000/$accent/g" "$src" > "$ICON_DIR/apps/scalable/gaming.svg"
+        echo "Gaming icon patched"
+        patch_desktop_icon "gaming" "lutris.desktop" "*lutris*.desktop"
+        patch_desktop_icon "gaming" "heroic.desktop" "*heroic*.desktop"
+        patch_desktop_icon "gaming" "goverlay.desktop" "*goverlay*.desktop"
+        patch_desktop_icon "gaming" "protonplus.desktop" "*protonplus*.desktop"
+        patch_desktop_icon "gaming" "protontricks.desktop" "*protontricks*.desktop"
+    fi
+}
+
+# Launcher icon
+patch_launcher_icon() {
+    src="$ICONS/launcher_base_icon.svg"
+    if [ -f "$src" ] && command -v rofi >/dev/null 2>&1; then
+        sed "s/#000000/$accent/g" "$src" > "$ICON_DIR/apps/scalable/launcher.svg"
+        echo "Launcher icon patched"
+        patch_desktop_icon "launcher" "rofi.desktop" "*rofi*.desktop"
+    fi
+}
+
+# Logitech icon
+patch_logitech_icon() {
+    src="$ICONS/logitech_base_icon.svg"
+    if [ -f "$src" ] && command -v solaar >/dev/null 2>&1; then
+        sed "s/#000000/$accent/g" "$src" > "$ICON_DIR/apps/scalable/logitech.svg"
+        echo "Logitech icon patched"
+        patch_desktop_icon "logitech" "solaar.desktop" "*solaar*.desktop"
+    fi
+}
+
+# Screenshot icon
+patch_screenshot_icon() {
+    src="$ICONS/screenshot_base_icon.svg"
+    if [ -f "$src" ] && command -v spectacle >/dev/null 2>&1; then
+        sed "s/#000000/$accent/g" "$src" > "$ICON_DIR/apps/scalable/screenshot.svg"
+        echo "Screenshot icon patched"
+        patch_desktop_icon "screenshot" "spectacle.desktop" "*spectacle*.desktop"
+    fi
+}
+
+# Spotify icon
+patch_spotify_icon() {
+    src="$ICONS/spotify_base_icon.svg"
+    if [ -f "$src" ] && command -v spotify >/dev/null 2>&1; then
+        sed "s/#000000/$accent/g" "$src" > "$ICON_DIR/apps/scalable/spotify.svg"
+        echo "Spotify icon patched"
+        patch_desktop_icon "spotify" "spotify.desktop" "*spotify*.desktop"
+    fi
+}
+
+# Elgato icon
+patch_elgato_icon() {
+    src="$ICONS/elgato_base_icon.svg"
+    if [ -f "$src" ] && command -v streamcontroller >/dev/null 2>&1; then
+        sed "s/#000000/$accent/g" "$src" > "$ICON_DIR/apps/scalable/elgato.svg"
+        echo "Elgato icon patched"
+        patch_desktop_icon "elgato" "streamcontroller.desktop" "*streamcontroller*.desktop"
+    fi
+}
+
+# Vim icon
+patch_vim_icon() {
+    src="$ICONS/vim_base_icon.svg"
+    if [ -f "$src" ] && command -v vim >/dev/null 2>&1; then
+        sed "s/#000000/$accent/g" "$src" > "$ICON_DIR/apps/scalable/vim.svg"
+        echo "Vim icon patched"
+        patch_desktop_icon "vim" "vim.desktop" "*vim*.desktop"
+    fi
+}
+
+# Volume icon
+patch_volume_icon() {
+    src="$ICONS/volume_base_icon.svg"
+    if [ -f "$src" ] && command -v pavucontrol >/dev/null 2>&1; then
+        sed "s/none/$accent/g" "$src" > "$ICON_DIR/apps/scalable/volume.svg"
+        sed "s/#000000/$accent/g" "$src" > "$ICON_DIR/apps/scalable/volume.svg"
+        echo "Volume icon patched"
+        patch_desktop_icon "volume" "pavucontrol.desktop" "*pavucontrol*.desktop"
+    fi
+}
+
+# Location icon
+patch_location_icon() {
+    src="$ICONS/location_base_icon.svg"
+    if [ -f "$src" ] && command -v xgps >/dev/null 2>&1; then
+        sed "s/#000000/$accent/g" "$src" > "$ICON_DIR/apps/scalable/location.svg"
+        echo "Location icon patched"
+        patch_desktop_icon "location" "xgps.desktop" "*xgps*.desktop"
+    fi
+}
+
+# Led icon
+patch_led_icon() {
+    src="$ICONS/led_base_icon.svg"
+    if [ -f "$src" ] && command -v openrgb >/dev/null 2>&1; then
+        sed "s/#000000/$accent/g" "$src" > "$ICON_DIR/apps/scalable/led.svg"
+        echo "LED icon patched"
+        patch_desktop_icon "led" "openrgb.desktop" "*openrgb*.desktop"
+    fi
+}
+
 cleanup_icon_cache() {
     rm -f "$HOME/.cache/icon-cache.kcache"
     kbuildsycoca6 --noincremental 2>/dev/null
@@ -572,6 +1109,8 @@ patch_system_file_manager_icon
 patch_preferences_system_icon
 patch_dolphin_icon
 patch_cachyos_hello_icon
+patch_cachyos_kernel_manager_icon
+patch_cachyos_pi_icon
 patch_vscode_icon
 patch_sourcegit_icon
 patch_discord_vesktop_icons
@@ -586,19 +1125,55 @@ patch_nativmix_icon
 patch_ferdium_icon
 patch_piper_icon
 patch_orcaslicer_icon
-patch_plasma_system_monitor_icon
+patch_system_monitor_icon
 patch_onlyoffice_icon
 patch_obs_studio_icon
 patch_davinci_resolve_icon
 patch_kde_connect_icon
 patch_nwg_look_icon
+patch_nwg_displays_icon
 patch_vial_icon
 patch_network_icons
 patch_arduino_ide_icon
 patch_ark_icon
 patch_blackmagic_raw_player_icon
 patch_blackmagic_raw_speedtest_icon
+patch_generic_settings_icon
 patch_blender_icon
+patch_bluetooth_icon
+patch_btrfs_icon
+patch_cmake_icon
+patch_conky_icon
+patch_coolercontrol_icon
+patch_disks_utilities_icon
+patch_electron_icon
+patch_fedora_media_writer_icon
+patch_image_viewer_icon
+patch_hp_icon
+patch_text_editor_icon
+patch_calculator_icon
+patch_brush_icon
+patch_lock_icon
+patch_localsend_icon
+patch_printer_icon
+patch_lychee_icon
+patch_meld_icon
+patch_neovim_icon
+patch_nvidia_settings_icon
+patch_install_icon
+patch_cloud_storage_icon
+patch_code_icon
+patch_gaming_icon
+patch_launcher_icon
+patch_logitech_icon
+patch_screenshot_icon
+patch_spotify_icon
+patch_elgato_icon
+patch_vim_icon
+patch_volume_icon
+patch_location_icon
+patch_led_icon
+
 cleanup_icon_cache
 
 echo "Icons patched with $accent"

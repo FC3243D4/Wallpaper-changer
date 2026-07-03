@@ -55,6 +55,10 @@ if ! command -v bc &>/dev/null; then
     echo "bc"
     packageList+=("bc")
 fi
+if ! python3 -c "import PIL" &>/dev/null; then
+    echo "python-pillow"
+    packageList+=("python-pillow")
+fi
 if ! openrgb --version &> /dev/null; then
     echo "openrgb is not installed. You will not have the wallpaper's dominant color applied to your devices. Please install openrgb if you want this feature."
     echo ""

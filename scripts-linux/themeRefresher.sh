@@ -55,6 +55,10 @@ cmd_full() {
     fi
     if command -v ferdium >/dev/null 2>&1; then
         "$SUPPORT/appPatchers/ferdiumPatcher.sh" "$color"
+        "$SUPPORT/appPatchers/ferdiumIconPatcher.sh" "$color"
+    fi
+    if command -v vesktop >/dev/null 2>&1; then
+    "$SUPPORT/appPatchers/discordPatcher.sh" "$color"
     fi
     #browser patchers
     if command -v zen-browser >/dev/null 2>&1; then
@@ -71,6 +75,7 @@ cmd_full() {
     APPS[ferdium]="f|electron.*ferdium-bin|electron.*ferdium-bin|ferdium|"
     APPS[sourcegit]="x|sourcegit|sourcegit|sourcegit|sourcegit"
     APPS[code]="x|code|code|code|code"
+    APPS[vesktop]="x|vesktop|vesktop|vesktop|vesktop"
 
 
     source "$SUPPORT/appRestarter.sh"
@@ -157,8 +162,12 @@ cmd_softrun() {
     fi
     if command -v ferdium >/dev/null 2>&1; then
         "$SUPPORT/appPatchers/ferdiumPatcher.sh" "$color"
+        "$SUPPORT/appPatchers/ferdiumIconPatcher.sh" "$color"
     fi
-        #browser patchers
+    if command -v vesktop >/dev/null 2>&1; then
+    "$SUPPORT/appPatchers/discordPatcher.sh" "$color"
+    fi
+    #browser patchers
     if command -v zen-browser >/dev/null 2>&1; then
         "$SUPPORT/appPatchers/zenPatcher.sh" "$color"
     fi

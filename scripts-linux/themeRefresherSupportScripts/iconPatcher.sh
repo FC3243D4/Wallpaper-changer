@@ -135,6 +135,37 @@ print("SourceGit icon patched")
 EOF
 fi
 
+# Discord / Vesktop icon (shared source, separate destinations)
+src="$SUPPORT/discord_base_icon.svg"
+if [ -f "$src" ]; then
+    if command -v discord >/dev/null 2>&1; then
+        sed "s/#000000/$accent/g" "$src" > "$ICON_DIR/apps/scalable/discord.svg"
+        echo "Discord icon patched"
+    fi
+    if command -v vesktop >/dev/null 2>&1; then
+        sed "s/#000000/$accent/g" "$src" > "$ICON_DIR/apps/scalable/vesktop.svg"
+        echo "Vesktop icon patched"
+    fi
+fi
+
+# Terminal emulator icon(s) — patches for any recognized terminal emulator installed
+src="$SUPPORT/terminal_base_icon.svg"
+if [ -f "$src" ]; then
+    for term in kitty alacritty wezterm foot ghostty konsole gnome-terminal terminator tilix xterm urxvt st xfce4-terminal deepin-terminal lxterminal; do
+        if command -v "$term" >/dev/null 2>&1; then
+            sed "s/#000000/$accent/g" "$src" > "$ICON_DIR/apps/scalable/$term.svg"
+            echo "Terminal icon patched ($term)"
+        fi
+    done
+fi
+
+# Zen Browser icon
+src="$SUPPORT/zen_browser_base_icon.svg"
+if [ -f "$src" ] && command -v zen-browser >/dev/null 2>&1; then
+    sed "s/fill=\"currentColor\"/fill=\"$accent\"/" "$src" > "$ICON_DIR/apps/scalable/zen.svg"
+    echo "Zen Browser icon patched"
+fi
+
 # Clear icon cache
 rm -f "$HOME/.cache/icon-cache.kcache"
 kbuildsycoca6 --noincremental 2>/dev/null

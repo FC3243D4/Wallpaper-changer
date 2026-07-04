@@ -1097,6 +1097,42 @@ patch_led_icon() {
     fi
 }
 
+# Wlogout icons
+patch_wlogout_icons() {
+    wlogout_icons_dir="$HOME/.config/wlogout/icons"
+    if command -v wlogout >/dev/null 2>&1; then
+        mkdir -p "$wlogout_icons_dir"
+
+        # "Off"/standard state: same hue as accent, dimmed via reduced saturation + value, so it reads as "the same color, turned down" rather than an unrelated gray.
+        standard=$(python3 -c "
+import colorsys
+h = '$accent'.lstrip('#')
+r, g, b = int(h[0:2],16)/255, int(h[2:4],16)/255, int(h[4:6],16)/255
+hh, s, v = colorsys.rgb_to_hsv(r, g, b)
+nr, ng, nb = colorsys.hsv_to_rgb(hh, s * 0.5, v * 0.35)
+print('#{:02x}{:02x}{:02x}'.format(int(nr*255), int(ng*255), int(nb*255)))
+")
+
+        # Hovered (full accent)
+        sed "s/#000000/$accent/g"      "$ICONS/lock_base_icon.svg"     > "$wlogout_icons_dir/lock-hovered.svg"
+        sed "s/#000000/$accent/g"   "$ICONS/reboot_base_icon.svg"   > "$wlogout_icons_dir/reboot-hovered.svg"
+        sed "s/#000000/$accent/g"   "$ICONS/power_base_icon.svg"    > "$wlogout_icons_dir/power-hovered.svg"
+        sed "s/#000000/$accent/g"   "$ICONS/logout_base_icon.svg"   > "$wlogout_icons_dir/logout-hovered.svg"
+        sed "s/#000000/$accent/g"   "$ICONS/sleep_base_icon.svg"    > "$wlogout_icons_dir/sleep-hovered.svg"
+        sed "s/#000000/$accent/g"   "$ICONS/suspend_base_icon.svg"  > "$wlogout_icons_dir/suspend-hovered.svg"
+
+        # Standard (dimmed)
+        sed "s/#000000/$standard/g"    "$ICONS/lock_base_icon.svg"     > "$wlogout_icons_dir/lock-standard.svg"
+        sed "s/#000000/$standard/g" "$ICONS/reboot_base_icon.svg"   > "$wlogout_icons_dir/reboot-standard.svg"
+        sed "s/#000000/$standard/g" "$ICONS/power_base_icon.svg"    > "$wlogout_icons_dir/power-standard.svg"
+        sed "s/#000000/$standard/g" "$ICONS/logout_base_icon.svg"   > "$wlogout_icons_dir/logout-standard.svg"
+        sed "s/#000000/$standard/g" "$ICONS/sleep_base_icon.svg"    > "$wlogout_icons_dir/sleep-standard.svg"
+        sed "s/#000000/$standard/g" "$ICONS/suspend_base_icon.svg"  > "$wlogout_icons_dir/suspend-standard.svg"
+
+        echo "Wlogout icons patched (standard=$standard, hovered=$accent)"
+    fi
+}
+
 cleanup_icon_cache() {
     rm -f "$HOME/.cache/icon-cache.kcache"
     kbuildsycoca6 --noincremental 2>/dev/null
@@ -1173,6 +1209,7 @@ patch_vim_icon
 patch_volume_icon
 patch_location_icon
 patch_led_icon
+patch_wlogout_icons
 
 cleanup_icon_cache
 

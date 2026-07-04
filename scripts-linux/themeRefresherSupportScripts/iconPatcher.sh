@@ -909,7 +909,7 @@ patch_localsend_icon() {
 patch_printer_icon() {
     src="$ICONS/printer_base_icon.svg"
     if [ -f "$src" ] && [ -f /usr/share/applications/cups.desktop ]; then
-        sed "s/none/$accent/g" "$src" > "$ICON_DIR/apps/scalable/printer.svg"
+        sed "s/#000000/$accent/g" "$src" > "$ICON_DIR/apps/scalable/printer.svg"
         echo "Printer icon patched"
         patch_desktop_icon "printer" "cups.desktop"
     fi

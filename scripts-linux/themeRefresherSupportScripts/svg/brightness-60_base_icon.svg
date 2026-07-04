@@ -1,4 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-  <circle cx="12" cy="12" r="4" fill="#000000"/>
-  <line x1="12.00" y1="5.50" x2="12.00" y2="2.50" stroke="#000000" stroke-width="2" stroke-linecap="round" opacity="1.0"/><line x1="16.60" y1="7.40" x2="18.72" y2="5.28" stroke="#000000" stroke-width="2" stroke-linecap="round" opacity="1.0"/><line x1="18.50" y1="12.00" x2="21.50" y2="12.00" stroke="#000000" stroke-width="2" stroke-linecap="round" opacity="1.0"/><line x1="16.60" y1="16.60" x2="18.72" y2="18.72" stroke="#000000" stroke-width="2" stroke-linecap="round" opacity="1.0"/><line x1="12.00" y1="18.50" x2="12.00" y2="21.50" stroke="#000000" stroke-width="2" stroke-linecap="round" opacity="1.0"/><line x1="7.40" y1="16.60" x2="5.28" y2="18.72" stroke="#000000" stroke-width="2" stroke-linecap="round" opacity="0.2"/><line x1="5.50" y1="12.00" x2="2.50" y2="12.00" stroke="#000000" stroke-width="2" stroke-linecap="round" opacity="0.2"/><line x1="7.40" y1="7.40" x2="5.28" y2="5.28" stroke="#000000" stroke-width="2" stroke-linecap="round" opacity="0.2"/>
+<svg width="256" height="256" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M8 12a4 4 0 1 0 8 0a4 4 0 1 0 -8 0" />
+  <line x1="12" y1="3" x2="12" y2="4" opacity="1.0"/>
+  <line x1="18.4" y1="5.6" x2="17.7" y2="6.3" opacity="1.0"/>
+  <line x1="20" y1="12" x2="21" y2="12" opacity="1.0"/>
+  <line x1="17.7" y1="17.7" x2="18.4" y2="18.4" opacity="1.0"/>
+  <line x1="12" y1="20" x2="12" y2="21" opacity="1.0"/>
+  <line x1="6.3" y1="17.7" x2="5.6" y2="18.4" opacity="0.2"/>
+  <line x1="3" y1="12" x2="4" y2="12" opacity="0.2"/>
+  <line x1="5.6" y1="5.6" x2="6.3" y2="6.3" opacity="0.2"/>
 </svg>

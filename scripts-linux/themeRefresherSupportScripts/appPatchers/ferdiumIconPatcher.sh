@@ -88,6 +88,15 @@ for recipe_dir in "$FERDIUM_RECIPES"/*/; do
     # that reference over file://. Harmless to remove; doesn't affect the icon.
     # Then patch flat-hex, near-black gray, and currentColor conventions —
     # whichever the source icon actually uses, this covers it.
+    #
+    # Two currentColor conventions exist in the icon set:
+    #   - filled icons: fill="currentColor"  -> recolor the fill
+    #   - Tabler-style stroke icons: fill="none" stroke="currentColor" -> recolor
+    #     only the stroke, fill must stay "none" or the icon renders as a
+    #     solid blob instead of an outline
+    # currentColor is never resolved as-is: Ferdium loads these via a
+    # file:// defaultIcon URI, which Electron renders without inheriting any
+    # page color context, so an untouched currentColor falls back to black.
     python3 - "$src" "$dst" "$accent" << 'EOF'
 import re
 import sys
@@ -100,6 +109,7 @@ content = re.sub(r"<!DOCTYPE[^>]*>", "", content, flags=re.DOTALL)
 content = re.sub(r"#000000", accent, content, flags=re.IGNORECASE)
 content = re.sub(r"#0f0f0f", accent, content, flags=re.IGNORECASE)
 content = content.replace('fill="currentColor"', f'fill="{accent}"')
+content = content.replace('stroke="currentColor"', f'stroke="{accent}"')
 
 with open(dst, "w") as f:
     f.write(content)

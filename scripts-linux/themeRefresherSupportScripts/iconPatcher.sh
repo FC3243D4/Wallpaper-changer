@@ -195,33 +195,8 @@ patch_cachyos_pi_icon() {
 patch_vscode_icon() {
     src="$ICONS/vscode_base_icon.svg"
     if [ -f "$src" ] && command -v code >/dev/null 2>&1; then
-        python3 - << EOF
-import colorsys
-
-def hex_to_hsv(h):
-    h = h.lstrip("#")
-    r, g, b = int(h[0:2],16)/255, int(h[2:4],16)/255, int(h[4:6],16)/255
-    return colorsys.rgb_to_hsv(r, g, b)
-
-def hsv_to_hex(h, s, v):
-    r, g, b = colorsys.hsv_to_rgb(h % 1.0, min(1,s), min(1,v))
-    return "#{:02X}{:02X}{:02X}".format(int(r*255), int(g*255), int(b*255))
-
-base_h, base_s, base_v = hex_to_hsv("$color")
-dark  = hsv_to_hex(base_h, base_s, max(0, base_v - 0.15))
-mid   = hsv_to_hex(base_h, base_s, base_v)
-light = hsv_to_hex(base_h, max(0, base_s - 0.2), min(1, base_v + 0.15))
-
-with open("$src", "r") as f:
-    svg = f.read()
-svg = svg.replace("#0065A9", dark)
-svg = svg.replace("#007ACC", mid)
-svg = svg.replace("#1F9CF0", light)
-
-with open("$ICON_DIR/apps/scalable/vscode.svg", "w") as f:
-    f.write(svg)
-print(f"VSCode icon patched (dark={dark}, mid={mid}, light={light})")
-EOF
+        sed "s/currentColor/$accent/g" "$src" > "$ICON_DIR/apps/scalable/vscode.svg"
+        echo "VS Code icon patched"
         patch_desktop_icon "vscode" "code.desktop" "visual-studio-code.desktop" "*visual-studio-code*.desktop"
     fi
 }
@@ -301,12 +276,12 @@ patch_discord_vesktop_icons() {
     src="$ICONS/discord_base_icon.svg"
     if [ -f "$src" ]; then
         if command -v discord >/dev/null 2>&1; then
-            sed "s/#000000/$accent/g" "$src" > "$ICON_DIR/apps/scalable/discord.svg"
+            sed "s/currentColor/$accent/g" "$src" > "$ICON_DIR/apps/scalable/discord.svg"
             echo "Discord icon patched"
             patch_desktop_icon "discord" "discord.desktop" "com.discordapp.Discord.desktop"
         fi
         if command -v vesktop >/dev/null 2>&1; then
-            sed "s/#000000/$accent/g" "$src" > "$ICON_DIR/apps/scalable/vesktop.svg"
+            sed "s/currentColor/$accent/g" "$src" > "$ICON_DIR/apps/scalable/vesktop.svg"
             echo "Vesktop icon patched"
             patch_desktop_icon "vesktop" "vesktop.desktop" "*vesktop*.desktop"
             patch_vesktop_tray_icon "$src"
@@ -320,7 +295,7 @@ patch_terminal_icons() {
     if [ -f "$src" ]; then
         for term in kitty alacritty wezterm foot ghostty konsole gnome-terminal terminator tilix xterm urxvt st xfce4-terminal deepin-terminal lxterminal; do
             if command -v "$term" >/dev/null 2>&1; then
-                sed "s/#000000/$accent/g" "$src" > "$ICON_DIR/apps/scalable/$term.svg"
+                sed "s/currentColor/$accent/g" "$src" > "$ICON_DIR/apps/scalable/$term.svg"
                 echo "Terminal icon patched ($term)"
                 patch_desktop_icon "$term" "$term.desktop" "*$term*.desktop"
             fi
@@ -340,7 +315,7 @@ patch_zen_browser_icon() {
 patch_firefox_icon() {
     src="$ICONS/firefox_base_icon.svg"
     if [ -f "$src" ] && command -v firefox >/dev/null 2>&1; then
-        sed "s/#000000/$accent/g" "$src" > "$ICON_DIR/apps/scalable/firefox.svg"
+        sed "s/currentColor/$accent/g" "$src" > "$ICON_DIR/apps/scalable/firefox.svg"
         echo "Firefox icon patched"
         patch_desktop_icon "firefox" "firefox.desktop" "*firefox*.desktop"
     fi
@@ -358,7 +333,7 @@ patch_brave_icon() {
 patch_chrome_icon() {
     src="$ICONS/chrome_base_icon.svg"
     if [ -f "$src" ] && { command -v google-chrome-stable >/dev/null 2>&1 || command -v google-chrome >/dev/null 2>&1 || command -v chromium >/dev/null 2>&1; }; then
-        sed "s/#000000/$accent/g" "$src" > "$ICON_DIR/apps/scalable/chrome.svg"
+        sed "s/currentColor/$accent/g" "$src" > "$ICON_DIR/apps/scalable/chrome.svg"
         echo "Chrome icon patched"
         patch_desktop_icon "chrome" "google-chrome.desktop" "*google-chrome*.desktop" "chromium.desktop" "*chromium*.desktop"
     fi
@@ -476,7 +451,7 @@ patch_system_monitor_icon() {
     src="$ICONS/system_monitor_base_icon.svg"
     if [ -f "$src" ] && ( command -v plasma-systemmonitor >/dev/null 2>&1 || 
                           command -v gnome-system-monitor >/dev/null 2>&1 ); then
-        sed "s/gray/$accent/g" "$src" > "$ICON_DIR/apps/scalable/system-monitor.svg"
+        sed "s/currentColor/$accent/g" "$src" > "$ICON_DIR/apps/scalable/system-monitor.svg"
         echo "Plasma System Monitor icon patched"
         patch_desktop_icon "system-monitor" "plasma-systemmonitor.desktop" "*plasma-systemmonitor*.desktop"
         patch_desktop_icon "system-monitor" "org.gnome.SystemMonitor.desktop" "*SystemMonitor*.desktop"
@@ -487,7 +462,7 @@ patch_system_monitor_icon() {
 patch_onlyoffice_icon() {
     src="$ICONS/onlyoffice_base_icon.svg"
     if [ -f "$src" ] && command -v onlyoffice-desktopeditors >/dev/null 2>&1; then
-        sed "s|<svg role=\"img\" viewBox=\"0 0 24 24\" xmlns=\"http://www.w3.org/2000/svg\">|<svg role=\"img\" fill=\"$accent\" viewBox=\"0 0 24 24\" xmlns=\"http://www.w3.org/2000/svg\">|" "$src" > "$ICON_DIR/apps/scalable/onlyoffice.svg"
+        sed "s/currentColor/$accent/g" "$src" > "$ICON_DIR/apps/scalable/onlyoffice.svg"
         echo "OnlyOffice icon patched"
         patch_desktop_icon "onlyoffice" "onlyoffice-desktopeditors.desktop" "*onlyoffice*.desktop"
     fi
@@ -517,25 +492,16 @@ patch_davinci_resolve_icon() {
 patch_kde_connect_icon() {
     src="$ICONS/kde_connect_base_icon.svg"
     if [ -f "$src" ] && command -v kdeconnect-app >/dev/null 2>&1; then
-        sed "s/#000000/$accent/g" "$src" > "$ICON_DIR/apps/scalable/kdeconnect.svg"
+        sed "s/currentColor/$accent/g" "$src" > "$ICON_DIR/apps/scalable/kdeconnect.svg"
         echo "KDE Connect icon patched"
         patch_desktop_icon "kdeconnect" "kdeconnect-app.desktop" "*kdeconnect*app*.desktop"
-    fi
-}
-
-patch_nwg_look_icon() {
-    src="$ICONS/nwg-look_base_icon.svg"
-    if [ -f "$src" ] && command -v nwg-look >/dev/null 2>&1; then
-        sed "s/#00aad4/$accent/g" "$src" > "$ICON_DIR/apps/scalable/nwg-look.svg"
-        echo "nwg-look icon patched"
-        patch_desktop_icon "nwg-look" "nwg-look.desktop" "*nwg-look*.desktop"
     fi
 }
 
 patch_nwg_displays_icon() {
     src="$ICONS/nwg-displays_base_icon.svg"
     if [ -f "$src" ] && command -v nwg-displays >/dev/null 2>&1; then
-        sed "s/#00aad4/$accent/g" "$src" > "$ICON_DIR/apps/scalable/nwg-displays.svg"
+        sed "s/currentColor/$accent/g" "$src" > "$ICON_DIR/apps/scalable/nwg-displays.svg"
         echo "nwg-displays icon patched"
         patch_desktop_icon "nwg-displays" "nwg-displays.desktop" "*nwg-displays*.desktop"
     fi
@@ -556,7 +522,7 @@ patch_vial_icon() {
 patch_network_icons() {
     src="$ICONS/network_base_icon.svg"
     if [ -f "$src" ]; then
-        sed "s/#000000/$accent/g" "$src" > "$ICON_DIR/apps/scalable/network.svg"
+        sed "s/currentColor/$accent/g" "$src" > "$ICON_DIR/apps/scalable/network.svg"
         echo "Network icon patched"
         patch_desktop_icon "network" "nm-connection-editor.desktop"
         patch_desktop_icon "network" "avahi-discover.desktop"
@@ -577,7 +543,7 @@ patch_arduino_ide_icon() {
 patch_ark_icon() {
     src="$ICONS/zip_base_icon.svg"
     if [ -f "$src" ] && command -v ark >/dev/null 2>&1; then
-        sed "s/#000000/$accent/g" "$src" > "$ICON_DIR/apps/scalable/ark.svg"
+        sed "s/currentColor/$accent/g" "$src" > "$ICON_DIR/apps/scalable/ark.svg"
         echo "Ark icon patched"
         patch_desktop_icon "ark" "ark.desktop" "*ark*.desktop"
     fi
@@ -588,7 +554,7 @@ patch_player_icon() {
     src="$ICONS/player_base_icon.svg"
     if [ -f "$src" ] && ( [ -x "/opt/resolve/BlackmagicRAWPlayer/BlackmagicRAWPlayer" ] || command -v mpv >/dev/null 2>&1 || 
                                                                                            command -v vlc >/dev/null 2>&1 ); then
-        sed "s/#000000/$accent/g" "$src" > "$ICON_DIR/apps/scalable/player.svg"
+        sed "s/currentColor/$accent/g" "$src" > "$ICON_DIR/apps/scalable/player.svg"
         echo "Player icon patched"
         patch_desktop_icon "player" "blackmagicraw-player.desktop"
         patch_desktop_icon "player" "*mpv*.desktop"
@@ -612,7 +578,7 @@ patch_generic_settings_icon() {
                                                                                                              command -v scx-manager >/dev/null 2>&1 || 
                                                                                                              command -v uuctl >/dev/null 2>&1 || 
                                                                                                              command -v winetricks >/dev/null 2>&1 ); then
-        sed "s/#000000/$accent/g" "$src" > "$ICON_DIR/apps/scalable/settings.svg"
+        sed "s/currentColor/$accent/g" "$src" > "$ICON_DIR/apps/scalable/settings.svg"
         echo "Generic settings icon patched"
         patch_desktop_icon "settings" "DaVinciControlPanelsSetup.desktop"
         patch_desktop_icon "settings" "grub-customizer.desktop"
@@ -634,7 +600,7 @@ patch_generic_settings_icon() {
 patch_blackmagic_raw_speedtest_icon() {
     src="$ICONS/speedtest_base_icon.svg"
     if [ -f "$src" ] && [ -x "/opt/resolve/BlackmagicRAWSpeedTest/BlackmagicRAWSpeedTest" ]; then
-        sed "s/#000000/$accent/g" "$src" > "$ICON_DIR/apps/scalable/blackmagic-raw-speedtest.svg"
+        sed "s/currentColor/$accent/g" "$src" > "$ICON_DIR/apps/scalable/blackmagic-raw-speedtest.svg"
         echo "Blackmagic RAW Speed Test icon patched"
         patch_desktop_icon "blackmagic-raw-speedtest" "blackmagicraw-speedtest.desktop"
     fi
@@ -643,7 +609,7 @@ patch_blackmagic_raw_speedtest_icon() {
 patch_blender_icon() {
     src="$ICONS/blender_base_icon.svg"
     if [ -f "$src" ] && command -v blender >/dev/null 2>&1; then
-        sed "s/#000000/$accent/g" "$src" > "$ICON_DIR/apps/scalable/blender.svg"
+        sed "s/currentColor/$accent/g" "$src" > "$ICON_DIR/apps/scalable/blender.svg"
         echo "Blender icon patched"
         patch_desktop_icon "blender" "blender.desktop" "*blender*.desktop"
     fi
@@ -652,7 +618,7 @@ patch_blender_icon() {
 patch_bluetooth_icon() {
     src="$ICONS/bluetooth_base_icon.svg"
     if [ -f "$src" ] && command -v blueman-manager >/dev/null 2>&1; then
-        sed "s/#000000/$accent/g" "$src" > "$ICON_DIR/apps/scalable/bluetooth.svg"
+        sed "s/currentColor/$accent/g" "$src" > "$ICON_DIR/apps/scalable/bluetooth.svg"
         echo "Bluetooth icon patched"
         patch_desktop_icon "bluetooth" "blueman-manager.desktop"
     fi
@@ -751,7 +717,7 @@ patch_disks_utilities_icon() {
                           command -v gparted >/dev/null 2>&1 || 
                           command -v kdepartitionmanager >/dev/null 2>&1 || 
                           command -v kdiskmanager >/dev/null 2>&1 ); then
-        sed "s/#000000/$accent/g" "$src" > "$ICON_DIR/apps/scalable/disks.svg"
+        sed "s/currentColor/$accent/g" "$src" > "$ICON_DIR/apps/scalable/disks.svg"
         echo "Disks utilities icon patched"
         patch_desktop_icon "disks" "org.gnome.DiskUtility.desktop"
         patch_desktop_icon "disks" "org.kde.filelight.desktop"
@@ -779,46 +745,11 @@ patch_electron_icon() {
 
 # Fedora Media Writer — PNG-only icons, no scalable SVG upstream. Two-tone artwork: Fedora blue infinity mark + gray/white USB drive body. A plain ImageMagick -fuzz/-opaque match on the exact blue hex leaves anti-aliased edge pixels untouched (visible residual blue at small sizes); a fuzz wide enough to catch those starts eating into the gray drive body instead.
 patch_fedora_media_writer_icon() {
+    src="$ICONS/fedora_media_writer_base_icon.svg"
     if command -v mediawriter >/dev/null 2>&1; then
-        local patched=0
-        for size in 16 22 24 32 48 64 128 256; do
-            src="/usr/share/icons/hicolor/${size}x${size}/apps/org.fedoraproject.MediaWriter.png"
-            dst="$ICON_DIR/apps/$size/fedora-media-writer.png"
-            if [ -f "$src" ]; then
-                mkdir -p "$ICON_DIR/apps/$size"
-                python3 - << EOF
-try:
-    from PIL import Image
-    import colorsys
-
-    im = Image.open("$src").convert("RGBA")
-    px = im.load()
-    tr, tg, tb = int("$color"[0:2],16)/255, int("$color"[2:4],16)/255, int("$color"[4:6],16)/255
-    th, ts, tv = colorsys.rgb_to_hsv(tr, tg, tb)
-    w, h = im.size
-    for y in range(h):
-        for x in range(w):
-            r, g, b, a = px[x, y]
-            if a == 0:
-                continue
-            hh, s, v = colorsys.rgb_to_hsv(r/255, g/255, b/255)
-            if 0.52 <= hh <= 0.62 and s > 0.15:
-                nr, ng, nb = colorsys.hsv_to_rgb(th, s, v)
-                px[x, y] = (int(nr*255), int(ng*255), int(nb*255), a)
-    im.save("$dst")
-    print("  ${size}px recolored")
-except ImportError:
-    import shutil
-    shutil.copy("$src", "$dst")
-    print("  python3-pillow not found — ${size}px copied unrecolored")
-EOF
-                patched=1
-            fi
-        done
-        if [ "$patched" -eq 1 ]; then
-            echo "Fedora Media Writer icon patched"
-            patch_desktop_icon "fedora-media-writer" "org.fedoraproject.MediaWriter.desktop"
-        fi
+        sed "s/currentColor/$accent/g" "$src" > "$ICON_DIR/apps/scalable/fedora-media-writer.svg"
+        echo "Fedora Media Writer icon patched"
+        patch_desktop_icon "fedora-media-writer" "org.fedoraproject.MediaWriter.desktop"
     fi
 }
 
@@ -827,7 +758,7 @@ patch_image_viewer_icon() {
     src="$ICONS/image_viewer_base_icon.svg"
     if [ -f "$src" ] && ( command -v gwenview >/dev/null 2>&1 || 
                           command -v loupe >/dev/null 2>&1 ); then
-        sed "s/gray/$accent/g" "$src" > "$ICON_DIR/apps/scalable/image_viewer.svg"
+        sed "s/currentColor/$accent/g" "$src" > "$ICON_DIR/apps/scalable/image_viewer.svg"
         echo "Gwenview icon patched"
         patch_desktop_icon "image_viewer" "gwenview.desktop" "*gwenview*.desktop"
         patch_desktop_icon "image_viewer" "org.gnome.Loupe.desktop" "*org.gnome.Loupe*.desktop"
@@ -868,7 +799,7 @@ patch_calculator_icon() {
     src="$ICONS/calculator_base_icon.svg"
     if [ -f "$src" ] && ( command -v kcalc >/dev/null 2>&1 || 
                           command -v qalculate >/dev/null 2>&1 ); then
-        sed "s/#000000/$accent/g" "$src" > "$ICON_DIR/apps/scalable/calculator.svg"
+        sed "s/currentColor/$accent/g" "$src" > "$ICON_DIR/apps/scalable/calculator.svg"
         echo "Calculator icon patched"
         patch_desktop_icon "calculator" "kcalc.desktop" "*kcalc*.desktop"
         patch_desktop_icon "calculator" "qalculate-gtk.desktop"
@@ -878,10 +809,11 @@ patch_calculator_icon() {
 # Brush icon
 patch_brush_icon() {
     src="$ICONS/brush_base_icon.svg"
-    if [ -f "$src" ] && command -v kvantummanager >/dev/null 2>&1; then
-        sed "s/#000000/$accent/g" "$src" > "$ICON_DIR/apps/scalable/brush.svg"
+    if [ -f "$src" ] && (command -v kvantummanager >/dev/null 2>&1 || command -v nwg-look >/dev/null 2>&1); then
+        sed "s/currentColor/$accent/g" "$src" > "$ICON_DIR/apps/scalable/brush.svg"
         echo "Brush icon patched"
         patch_desktop_icon "brush" "kvantummanager.desktop"
+        patch_desktop_icon "brush" "*nwg-look*.desktop"
     fi
 }
 
@@ -889,7 +821,7 @@ patch_brush_icon() {
 patch_lock_icon() {
     src="$ICONS/lock_base_icon.svg"
     if [ -f "$src" ] && command -v kwalletd6 >/dev/null 2>&1; then
-        sed "s/#000000/$accent/g" "$src" > "$ICON_DIR/apps/scalable/lock.svg"
+        sed "s/currentColor/$accent/g" "$src" > "$ICON_DIR/apps/scalable/lock.svg"
         echo "Lock icon patched"
         patch_desktop_icon "lock" "*kwalletmanager*.desktop"
     fi
@@ -909,7 +841,7 @@ patch_localsend_icon() {
 patch_printer_icon() {
     src="$ICONS/printer_base_icon.svg"
     if [ -f "$src" ] && [ -f /usr/share/applications/cups.desktop ]; then
-        sed "s/#000000/$accent/g" "$src" > "$ICON_DIR/apps/scalable/printer.svg"
+        sed "s/currentColor/$accent/g" "$src" > "$ICON_DIR/apps/scalable/printer.svg"
         echo "Printer icon patched"
         patch_desktop_icon "printer" "cups.desktop"
     fi
@@ -960,7 +892,7 @@ patch_install_icon() {
     src="$ICONS/install_base_icon.svg"
     if [ -f "$src" ] && ( command -v octopi >/dev/null 2>&1 || 
                           command -v shelly >/dev/null 2>&1 ); then
-        sed "s/#000000/$accent/g" "$src" > "$ICON_DIR/apps/scalable/install.svg"
+        sed "s/currentColor/$accent/g" "$src" > "$ICON_DIR/apps/scalable/install.svg"
         echo "Install icon patched"
         patch_desktop_icon "install" "*octopi*.desktop"
         patch_desktop_icon "install" "*shelly*.desktop"
@@ -971,7 +903,7 @@ patch_install_icon() {
 patch_cloud_storage_icon() {
     src="$ICONS/cloud_storage_base_icon.svg"
     if [ -f "$src" ] && command -v onedrive >/dev/null 2>&1; then
-        sed "s/#000000/$accent/g" "$src" > "$ICON_DIR/apps/scalable/cloud_storage.svg"
+        sed "s/currentColor/$accent/g" "$src" > "$ICON_DIR/apps/scalable/cloud_storage.svg"
         echo "Cloud storage icon patched"
         patch_desktop_icon "cloud_storage" "*onedrive*.desktop"
     fi
@@ -981,7 +913,7 @@ patch_cloud_storage_icon() {
 patch_code_icon() {
     src="$ICONS/code_base_icon.svg"
     if [ -f "$src" ] && ( [ -d "/usr/lib/jvm" ] || command -v designer6 >/dev/null 2>&1 ); then
-        sed "s/#000000/$accent/g" "$src" > "$ICON_DIR/apps/scalable/code.svg"
+        sed "s/currentColor/$accent/g" "$src" > "$ICON_DIR/apps/scalable/code.svg"
         echo "Code icon patched"
         patch_desktop_icon "code" "*jdk*.desktop"
         patch_desktop_icon "code" "*designer*.desktop"
@@ -996,7 +928,7 @@ patch_gaming_icon() {
                           command -v goverlay >/dev/null 2>&1 || 
                           command -v protonplus >/dev/null 2>&1 || 
                           command -v protontricks >/dev/null 2>&1 ); then
-        sed "s/#000000/$accent/g" "$src" > "$ICON_DIR/apps/scalable/gaming.svg"
+        sed "s/currentColor/$accent/g" "$src" > "$ICON_DIR/apps/scalable/gaming.svg"
         echo "Gaming icon patched"
         patch_desktop_icon "gaming" "lutris.desktop" "*lutris*.desktop"
         patch_desktop_icon "gaming" "heroic.desktop" "*heroic*.desktop"
@@ -1010,7 +942,7 @@ patch_gaming_icon() {
 patch_launcher_icon() {
     src="$ICONS/launcher_base_icon.svg"
     if [ -f "$src" ] && command -v rofi >/dev/null 2>&1; then
-        sed "s/#000000/$accent/g" "$src" > "$ICON_DIR/apps/scalable/launcher.svg"
+        sed "s/currentColor/$accent/g" "$src" > "$ICON_DIR/apps/scalable/launcher.svg"
         echo "Launcher icon patched"
         patch_desktop_icon "launcher" "rofi.desktop" "*rofi*.desktop"
     fi
@@ -1030,7 +962,7 @@ patch_logitech_icon() {
 patch_screenshot_icon() {
     src="$ICONS/screenshot_base_icon.svg"
     if [ -f "$src" ] && command -v spectacle >/dev/null 2>&1; then
-        sed "s/#000000/$accent/g" "$src" > "$ICON_DIR/apps/scalable/screenshot.svg"
+        sed "s/currentColor/$accent/g" "$src" > "$ICON_DIR/apps/scalable/screenshot.svg"
         echo "Screenshot icon patched"
         patch_desktop_icon "screenshot" "spectacle.desktop" "*spectacle*.desktop"
     fi
@@ -1070,8 +1002,7 @@ patch_vim_icon() {
 patch_volume_icon() {
     src="$ICONS/volume_base_icon.svg"
     if [ -f "$src" ] && command -v pavucontrol >/dev/null 2>&1; then
-        sed "s/none/$accent/g" "$src" > "$ICON_DIR/apps/scalable/volume.svg"
-        sed "s/#000000/$accent/g" "$src" > "$ICON_DIR/apps/scalable/volume.svg"
+        sed "s/currentColor/$accent/g" "$src" > "$ICON_DIR/apps/scalable/volume.svg"
         echo "Volume icon patched"
         patch_desktop_icon "volume" "pavucontrol.desktop" "*pavucontrol*.desktop"
     fi
@@ -1081,7 +1012,7 @@ patch_volume_icon() {
 patch_location_icon() {
     src="$ICONS/location_base_icon.svg"
     if [ -f "$src" ] && command -v xgps >/dev/null 2>&1; then
-        sed "s/#000000/$accent/g" "$src" > "$ICON_DIR/apps/scalable/location.svg"
+        sed "s/currentColor/$accent/g" "$src" > "$ICON_DIR/apps/scalable/location.svg"
         echo "Location icon patched"
         patch_desktop_icon "location" "xgps.desktop" "*xgps*.desktop"
     fi
@@ -1091,7 +1022,7 @@ patch_location_icon() {
 patch_led_icon() {
     src="$ICONS/led_base_icon.svg"
     if [ -f "$src" ] && command -v openrgb >/dev/null 2>&1; then
-        sed "s/#000000/$accent/g" "$src" > "$ICON_DIR/apps/scalable/led.svg"
+        sed "s/currentColor/$accent/g" "$src" > "$ICON_DIR/apps/scalable/led.svg"
         echo "LED icon patched"
         patch_desktop_icon "led" "openrgb.desktop" "*openrgb*.desktop"
     fi
@@ -1114,20 +1045,20 @@ print('#{:02x}{:02x}{:02x}'.format(int(nr*255), int(ng*255), int(nb*255)))
 ")
 
         # Hovered (full accent)
-        sed "s/#000000/$accent/g"      "$ICONS/lock_base_icon.svg"     > "$wlogout_icons_dir/lock-hovered.svg"
-        sed "s/#000000/$accent/g"   "$ICONS/reboot_base_icon.svg"   > "$wlogout_icons_dir/reboot-hovered.svg"
-        sed "s/#000000/$accent/g"   "$ICONS/power_base_icon.svg"    > "$wlogout_icons_dir/power-hovered.svg"
-        sed "s/#000000/$accent/g"   "$ICONS/logout_base_icon.svg"   > "$wlogout_icons_dir/logout-hovered.svg"
-        sed "s/#000000/$accent/g"   "$ICONS/sleep_base_icon.svg"    > "$wlogout_icons_dir/sleep-hovered.svg"
-        sed "s/#000000/$accent/g"   "$ICONS/suspend_base_icon.svg"  > "$wlogout_icons_dir/suspend-hovered.svg"
+        sed "s/currentColor/$accent/g"   "$ICONS/lock_base_icon.svg"     > "$wlogout_icons_dir/lock-hovered.svg"
+        sed "s/currentColor/$accent/g"   "$ICONS/reboot_base_icon.svg"   > "$wlogout_icons_dir/reboot-hovered.svg"
+        sed "s/currentColor/$accent/g"   "$ICONS/power_base_icon.svg"    > "$wlogout_icons_dir/power-hovered.svg"
+        sed "s/currentColor/$accent/g"   "$ICONS/logout_base_icon.svg"   > "$wlogout_icons_dir/logout-hovered.svg"
+        sed "s/currentColor/$accent/g"   "$ICONS/sleep_base_icon.svg"    > "$wlogout_icons_dir/sleep-hovered.svg"
+        sed "s/currentColor/$accent/g"   "$ICONS/suspend_base_icon.svg"  > "$wlogout_icons_dir/suspend-hovered.svg"
 
         # Standard (dimmed)
-        sed "s/#000000/$standard/g"    "$ICONS/lock_base_icon.svg"     > "$wlogout_icons_dir/lock-standard.svg"
-        sed "s/#000000/$standard/g" "$ICONS/reboot_base_icon.svg"   > "$wlogout_icons_dir/reboot-standard.svg"
-        sed "s/#000000/$standard/g" "$ICONS/power_base_icon.svg"    > "$wlogout_icons_dir/power-standard.svg"
-        sed "s/#000000/$standard/g" "$ICONS/logout_base_icon.svg"   > "$wlogout_icons_dir/logout-standard.svg"
-        sed "s/#000000/$standard/g" "$ICONS/sleep_base_icon.svg"    > "$wlogout_icons_dir/sleep-standard.svg"
-        sed "s/#000000/$standard/g" "$ICONS/suspend_base_icon.svg"  > "$wlogout_icons_dir/suspend-standard.svg"
+        sed "s/currentColor/$standard/g" "$ICONS/lock_base_icon.svg"     > "$wlogout_icons_dir/lock-standard.svg"
+        sed "s/currentColor/$standard/g" "$ICONS/reboot_base_icon.svg"   > "$wlogout_icons_dir/reboot-standard.svg"
+        sed "s/currentColor/$standard/g" "$ICONS/power_base_icon.svg"    > "$wlogout_icons_dir/power-standard.svg"
+        sed "s/currentColor/$standard/g" "$ICONS/logout_base_icon.svg"   > "$wlogout_icons_dir/logout-standard.svg"
+        sed "s/currentColor/$standard/g" "$ICONS/sleep_base_icon.svg"    > "$wlogout_icons_dir/sleep-standard.svg"
+        sed "s/currentColor/$standard/g" "$ICONS/suspend_base_icon.svg"  > "$wlogout_icons_dir/suspend-standard.svg"
 
         echo "Wlogout icons patched (standard=$standard, hovered=$accent)"
     fi
@@ -1163,7 +1094,7 @@ patch_osd_icons() {
         for out_name in "${!osd_icons[@]}"; do
             src="$ICONS/${osd_icons[$out_name]}_base_icon.svg"
             if [ -f "$src" ]; then
-                sed -e "s/currentColor/$accent/g" -e "s/#000000/$accent/g" "$src" > "$swaync_icons_dir/${out_name}.svg"
+                sed -e "s/currentColor/$accent/g" "$src" > "$swaync_icons_dir/${out_name}.svg"
                 patched=$((patched + 1))
             fi
         done
@@ -1172,7 +1103,7 @@ patch_osd_icons() {
         for out_name in error note; do
             src="$ICONS/${out_name}_base_icon.svg"
             if [ -f "$src" ]; then
-                sed "s/#000000/$notif_red/g" "$src" > "$swaync_icons_dir/${out_name}.svg"
+                sed "s/currentColor/$notif_red/g" "$src" > "$swaync_icons_dir/${out_name}.svg"
                 patched=$((patched + 1))
             fi
         done
@@ -1218,7 +1149,6 @@ patch_onlyoffice_icon
 patch_obs_studio_icon
 patch_davinci_resolve_icon
 patch_kde_connect_icon
-patch_nwg_look_icon
 patch_nwg_displays_icon
 patch_vial_icon
 patch_network_icons

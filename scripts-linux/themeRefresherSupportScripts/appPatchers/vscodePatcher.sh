@@ -22,27 +22,10 @@ fi
 # Patch VSCode source SVG (requires ownership of /usr/share/code)
 if [ -f "$VSCODE_BASE_ICON" ]; then
     python3 - << EOF
-import colorsys
-
-def hex_to_hsv(h):
-    h = h.lstrip('#')
-    r, g, b = int(h[0:2],16)/255, int(h[2:4],16)/255, int(h[4:6],16)/255
-    return colorsys.rgb_to_hsv(r, g, b)
-
-def hsv_to_hex(h, s, v):
-    r, g, b = colorsys.hsv_to_rgb(h % 1.0, min(1,s), min(1,v))
-    return '#{:02X}{:02X}{:02X}'.format(int(r*255), int(g*255), int(b*255))
-
-base_h, base_s, base_v = hex_to_hsv("$color")
-dark  = hsv_to_hex(base_h, base_s, max(0, base_v - 0.15))
-mid   = hsv_to_hex(base_h, base_s, base_v)
-light = hsv_to_hex(base_h, max(0, base_s - 0.2), min(1, base_v + 0.15))
 
 with open("$VSCODE_BASE_ICON", "r") as f:
     svg = f.read()
-svg = svg.replace("#0065A9", dark)
-svg = svg.replace("#007ACC", mid)
-svg = svg.replace("#1F9CF0", light)
+svg = svg.replace("currentColor", "$accent")
 
 targets = [
     "/usr/share/code/resources/app/out/media/code-icon.svg",

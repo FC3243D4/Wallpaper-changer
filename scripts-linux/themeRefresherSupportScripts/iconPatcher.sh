@@ -1133,6 +1133,57 @@ print('#{:02x}{:02x}{:02x}'.format(int(nr*255), int(ng*255), int(nb*255)))
     fi
 }
 
+# Swaync icons
+patch_osd_icons() {
+    local swaync_icons_dir="$HOME/.config/swaync/icons"
+    local notif_red="#e74c3c"  # adjust to taste — not accent-derived, always red
+    if command -v swaync >/dev/null 2>&1; then
+        mkdir -p "$swaync_icons_dir"
+
+        declare -A osd_icons=(
+            [microphone]="microphone"
+            [microphone-mute]="microphone-mute"
+            [music]="music"
+            [picture]="picture"
+            [timer]="timer"
+            [volume-high]="volume-high"
+            [volume-mid]="volume-mid"
+            [volume-low]="volume-low"
+            [volume-mute]="volume-mute"
+            [brightness-20]="brightness-20"
+            [brightness-40]="brightness-40"
+            [brightness-60]="brightness-60"
+            [brightness-80]="brightness-80"
+            [brightness-100]="brightness-100"
+            [ok]="ok"
+        )
+
+        local patched=0
+        for out_name in "${!osd_icons[@]}"; do
+            src="$ICONS/${osd_icons[$out_name]}_base_icon.svg"
+            if [ -f "$src" ]; then
+                sed -e "s/currentColor/$accent/g" -e "s/#000000/$accent/g" "$src" > "$swaync_icons_dir/${out_name}.svg"
+                patched=$((patched + 1))
+            fi
+        done
+
+        # Error/note icons: always red, independent of the accent color
+        for out_name in error note; do
+            src="$ICONS/${out_name}_base_icon.svg"
+            if [ -f "$src" ]; then
+                sed "s/#000000/$notif_red/g" "$src" > "$swaync_icons_dir/${out_name}.svg"
+                patched=$((patched + 1))
+            fi
+        done
+
+        if [ "$patched" -gt 0 ]; then
+            echo "OSD icons patched ($patched/16)"
+        else
+            echo "  no OSD base icons found to patch"
+        fi
+    fi
+}
+
 cleanup_icon_cache() {
     rm -f "$HOME/.cache/icon-cache.kcache"
     kbuildsycoca6 --noincremental 2>/dev/null
@@ -1210,6 +1261,7 @@ patch_volume_icon
 patch_location_icon
 patch_led_icon
 patch_wlogout_icons
+patch_osd_icons
 
 cleanup_icon_cache
 

@@ -1156,6 +1156,7 @@ patch_osd_icons() {
             [brightness-80]="brightness-80"
             [brightness-100]="brightness-100"
             [ok]="ok"
+            [wallpaper_changer]="wallpaper_changer"
         )
 
         local patched=0

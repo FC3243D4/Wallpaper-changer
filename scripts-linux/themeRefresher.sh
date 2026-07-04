@@ -100,9 +100,7 @@ exit(0 if any('$wclass' in c.get('class','').lower() for c in clients) else 1)
         # Restore Hyprland layout state after all restarts
         sleep 0.2 && "$SUPPORT/hyprMasterLayoutPreservation.sh" restore
 
-        if ! pidof waybar >/dev/null; then
-            waybar & disown
-        fi
+        $SUPPORT/waybarCheck.sh
 
     elif [ "$XDG_CURRENT_DESKTOP" == "KDE" ]; then
         kquitapp6 plasmashell && sleep 1 && kstart plasmashell &
@@ -173,6 +171,13 @@ cmd_softrun() {
     fi
     if command -v firefox >/dev/null 2>&1; then
         "$SUPPORT/appPatchers/firefoxPatcher.sh" "$color"
+    fi
+
+    if [ "$XDG_CURRENT_DESKTOP" == "Hyprland" ]; then
+        $SUPPORT/waybarCheck.sh
+    elif [ "$XDG_CURRENT_DESKTOP" == "KDE" ]; then
+        kquitapp6 plasmashell && sleep 1 && kstart plasmashell &
+        disown
     fi
 }
 

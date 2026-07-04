@@ -177,21 +177,6 @@ patch_cachyos_kernel_manager_icon() {
     fi
 }
 
-# CachyOS Package Installer (cachyos-pi) — PNG-only icon like Kernel Manager,
-# oddly installed into hicolor/scalable/apps despite being raster (256x256).
-# Same single-hue artwork treatment: -colorize 100% flattens RGB to accent
-# while keeping the alpha channel intact.
-patch_cachyos_pi_icon() {
-    src="/usr/share/icons/hicolor/scalable/apps/cachyos-pi.png"
-    if [ -f "$src" ] && command -v cachyos-pi >/dev/null 2>&1 && { command -v magick >/dev/null 2>&1 || command -v convert >/dev/null 2>&1; }; then
-        local tool="convert"
-        command -v magick >/dev/null 2>&1 && tool="magick"
-        "$tool" "$src" -fill "$accent" -colorize 100% "$ICON_DIR/apps/scalable/cachyos-pi.png"
-        echo "CachyOS Package Installer icon patched"
-        patch_desktop_icon "cachyos-pi" "cachyos-pi.desktop" "*cachyos*pi*.desktop"
-    fi
-}
-
 patch_vscode_icon() {
     src="$ICONS/vscode_base_icon.svg"
     if [ -f "$src" ] && command -v code >/dev/null 2>&1; then
@@ -891,11 +876,13 @@ patch_nvidia_settings_icon() {
 patch_install_icon() {
     src="$ICONS/install_base_icon.svg"
     if [ -f "$src" ] && ( command -v octopi >/dev/null 2>&1 || 
-                          command -v shelly >/dev/null 2>&1 ); then
+                          command -v shelly >/dev/null 2>&1 ||
+                          command -v cachyos-pi >/dev/null 2>&1); then
         sed "s/currentColor/$accent/g" "$src" > "$ICON_DIR/apps/scalable/install.svg"
         echo "Install icon patched"
         patch_desktop_icon "install" "*octopi*.desktop"
         patch_desktop_icon "install" "*shelly*.desktop"
+        patch_desktop_icon "install" "cachyos-pi.desktop" "*cachyos*pi*.desktop"
     fi
 }
 
@@ -1129,7 +1116,6 @@ patch_preferences_system_icon
 patch_dolphin_icon
 patch_cachyos_hello_icon
 patch_cachyos_kernel_manager_icon
-patch_cachyos_pi_icon
 patch_vscode_icon
 patch_sourcegit_icon
 patch_discord_vesktop_icons

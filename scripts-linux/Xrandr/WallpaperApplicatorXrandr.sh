@@ -56,7 +56,7 @@ else
     WallpaperRelativePath=$1
 fi
 
-notify-send -i "$HOME/.config/swaync/icons/wallpaper_changer.svg" "Changing wallpaper" "Selected wallpaper: $WallpaperRelativePath" -t 3000
+notify-send -i "$wallDIR$WallpaperRelativePath" "Changing wallpaper" "Selected wallpaper: $WallpaperRelativePath" -t 3000
 
 # -----------------------------------------------------------------
 # 2️⃣ Get connected displays and resolutions and maps them to arrays

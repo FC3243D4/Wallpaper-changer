@@ -584,7 +584,7 @@ patch_ark_icon() {
 }
 
 # Player icon
-patch_blackmagic_raw_player_icon() {
+patch_player_icon() {
     src="$ICONS/player_base_icon.svg"
     if [ -f "$src" ] && ( [ -x "/opt/resolve/BlackmagicRAWPlayer/BlackmagicRAWPlayer" ] || command -v mpv >/dev/null 2>&1 || 
                                                                                            command -v vlc >/dev/null 2>&1 ); then
@@ -1224,7 +1224,7 @@ patch_vial_icon
 patch_network_icons
 patch_arduino_ide_icon
 patch_ark_icon
-patch_blackmagic_raw_player_icon
+patch_player_icon
 patch_blackmagic_raw_speedtest_icon
 patch_generic_settings_icon
 patch_blender_icon

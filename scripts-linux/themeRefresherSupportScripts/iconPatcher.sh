@@ -517,7 +517,7 @@ patch_davinci_resolve_icon() {
 patch_kde_connect_icon() {
     src="$ICONS/kde_connect_base_icon.svg"
     if [ -f "$src" ] && command -v kdeconnect-app >/dev/null 2>&1; then
-        sed "s/none/$accent/g" "$src" > "$ICON_DIR/apps/scalable/kdeconnect.svg"
+        sed "s/#000000/$accent/g" "$src" > "$ICON_DIR/apps/scalable/kdeconnect.svg"
         echo "KDE Connect icon patched"
         patch_desktop_icon "kdeconnect" "kdeconnect-app.desktop" "*kdeconnect*app*.desktop"
     fi
@@ -544,7 +544,7 @@ patch_nwg_displays_icon() {
 patch_vial_icon() {
     src="$ICONS/vial_base_icon.svg"
     if [ -f "$src" ] && command -v Vial >/dev/null 2>&1; then
-        sed "s/none/$accent/g" "$src" > "$ICON_DIR/apps/scalable/vial.svg"
+        sed "s/#000000/$accent/g" "$src" > "$ICON_DIR/apps/scalable/vial.svg"
         echo "Vial icon patched"
         patch_desktop_icon "vial" "Vial.desktop"
     fi

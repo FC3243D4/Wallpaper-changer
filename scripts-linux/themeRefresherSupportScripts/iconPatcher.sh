@@ -909,24 +909,6 @@ patch_code_icon() {
     fi
 }
 
-# Gaming icon
-patch_gaming_icon() {
-    src="$ICONS/gaming_base_icon.svg"
-    if [ -f "$src" ] && ( command -v heroic >/dev/null 2>&1 || 
-                          command -v lutris >/dev/null 2>&1 || 
-                          command -v goverlay >/dev/null 2>&1 || 
-                          command -v protonplus >/dev/null 2>&1 || 
-                          command -v protontricks >/dev/null 2>&1 ); then
-        sed "s/currentColor/$accent/g" "$src" > "$ICON_DIR/apps/scalable/gaming.svg"
-        echo "Gaming icon patched"
-        patch_desktop_icon "gaming" "lutris.desktop" "*lutris*.desktop"
-        patch_desktop_icon "gaming" "heroic.desktop" "*heroic*.desktop"
-        patch_desktop_icon "gaming" "goverlay.desktop" "*goverlay*.desktop"
-        patch_desktop_icon "gaming" "protonplus.desktop" "*protonplus*.desktop"
-        patch_desktop_icon "gaming" "protontricks.desktop" "*protontricks*.desktop"
-    fi
-}
-
 # Launcher icon
 patch_launcher_icon() {
     src="$ICONS/launcher_base_icon.svg"
@@ -1169,7 +1151,6 @@ patch_nvidia_settings_icon
 patch_install_icon
 patch_cloud_storage_icon
 patch_code_icon
-patch_gaming_icon
 patch_launcher_icon
 patch_logitech_icon
 patch_screenshot_icon

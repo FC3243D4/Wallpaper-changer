@@ -45,6 +45,7 @@ cmd_full() {
 
     # 5. Patch icons
     "$SUPPORT/iconPatcher.sh" "$color"
+    "$SUPPORT/gamesIconPatcher.sh" "$color"
 
     # 6. Patch app-specific themes
     if command -v code >/dev/null 2>&1; then

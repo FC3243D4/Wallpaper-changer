@@ -748,6 +748,7 @@ patch_image_viewer_icon() {
         echo "Gwenview icon patched"
         patch_desktop_icon "image_viewer" "gwenview.desktop" "*gwenview*.desktop"
         patch_desktop_icon "image_viewer" "org.gnome.Loupe.desktop" "*org.gnome.Loupe*.desktop"
+        patch_desktop_icon "image_viewer" "swappy.desktop" "*swappy*.desktop"
     fi
 }
 

@@ -578,6 +578,7 @@ patch_generic_settings_icon() {
         patch_desktop_icon "settings" "*scx-manager*.desktop"
         patch_desktop_icon "settings" "uuctl.desktop"
         patch_desktop_icon "settings" "winetricks.desktop"
+        patch_desktop_icon "settings" "kdesystemsettings.desktop"
     fi
 }
 

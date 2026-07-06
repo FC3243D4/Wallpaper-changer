@@ -18,11 +18,11 @@
        id="linearGradient3"
        inkscape:collect="always">
       <stop
-         style="stop-color:#4d8cff;stop-opacity:1;"
+         style="stop-color:currentColor;stop-opacity:1;"
          offset="0"
          id="stop3" />
       <stop
-         style="stop-color:#ff21ff;stop-opacity:1;"
+         style="stop-color:currentColor;stop-opacity:1;"
          offset="1"
          id="stop4" />
     </linearGradient>
@@ -65,11 +65,11 @@
          id="a">
         <stop
            offset="0"
-           stop-color="#4d8cff"
+           stop-color="currentColor"
            id="stop1" />
         <stop
            offset="1"
-           stop-color="#ff21ff"
+           stop-color="currentColor"
            id="stop2" />
       </linearGradient>
     </defs>

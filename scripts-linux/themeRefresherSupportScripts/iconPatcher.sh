@@ -181,6 +181,7 @@ declare -A ICON_OVERRIDES=(
     ["spectacle"]="screenshot"
 
     ["streamcontroller"]="elgato"
+    ["opendeck"]="elgato"
 
     ["pulseaudio_volume_control"]="volume"
 
@@ -475,6 +476,165 @@ patch_all_desktop_icons() {
     echo
     echo "Engine summary: $custom custom/override, $games_fallback game fallback," \
          "$by_category by category, $catchall catch-all, $untouched untouched."
+}
+
+# ---------------------------------------------------------------------------
+# Full breeze-dark theme pass — recolors every upstream breeze-dark SVG that
+# references ColorScheme-Accent or ColorScheme-Highlight (folders, places,
+# status/battery/network icons, bookmark stars, category icons, etc.), plus
+# ColorScheme-Text specifically within status/devices/actions (breeze's flat
+# monochrome "symbolic" tray/status glyphs — wifi, bluetooth, volume,
+# security, display, etc. — otherwise show up unthemed). ColorScheme-Text
+# elsewhere (mimetypes, generic UI chrome) and semantic Positive/Neutral/
+# NegativeText status colors are left untouched — those resolve for free
+# via index.theme's Inherits=breeze-dark chain, or carry meaning
+# (success/error/warning) that shouldn't be overridden by accent.
+#
+# Run this BEFORE the dedicated per-app functions and the generic engine,
+# so hand-curated Tabler-based app icons always win over anything this
+# pass writes for the same path.
+# ---------------------------------------------------------------------------
+patch_full_breeze_theme() {
+    local SRC="/usr/share/icons/breeze-dark"
+    [ -d "$SRC" ] || { echo "  breeze-dark not found, skipping full-theme pass"; return 1; }
+
+    # Single python3 process walks + rewrites the whole tree — spawning one
+    # interpreter per matched icon (the previous approach) is what made this
+    # take minutes; breeze-dark has hundreds of Accent/Highlight icons, and
+    # python's ~50-100ms startup cost times hundreds of files adds up fast.
+    local dirs_file
+    dirs_file=$(mktemp)
+
+    python3 - "$SRC" "$ICON_DIR" "$accent" "$dirs_file" << 'PYEOF'
+import os, re, sys
+
+src_root, dst_root, accent, dirs_file = sys.argv[1:5]
+
+# Accent/Highlight: recolored everywhere in the theme, as before.
+accent_pattern = re.compile(
+    r"(\.ColorScheme-(?:Accent|Highlight)\s*\{[^}]*?color:)\s*#[0-9a-fA-F]{3,8}",
+    re.DOTALL,
+)
+
+# Text: breeze uses this for its monochrome "symbolic" icons too (status
+# tray glyphs — wifi, bluetooth, volume, security, display, etc.), which
+# is why they show up unthemed otherwise. Only recolor Text in directories
+# where that flat mono style is the norm, so generic UI/mimetype icons
+# that rely on Text-for-contrast elsewhere in the theme stay untouched.
+text_pattern = re.compile(
+    r"(\.ColorScheme-Text\s*\{[^}]*?color:)\s*#[0-9a-fA-F]{3,8}",
+    re.DOTALL,
+)
+TEXT_RECOLOR_DIRS = ("status", "devices", "actions")
+
+count = 0
+written_dirs = set()
+
+for dirpath, _, filenames in os.walk(src_root):
+    rel_dir = os.path.relpath(dirpath, src_root)
+    top_dir = rel_dir.split(os.sep, 1)[0]
+    allow_text = top_dir in TEXT_RECOLOR_DIRS
+
+    for fname in filenames:
+        if not fname.endswith(".svg"):
+            continue
+        src_path = os.path.join(dirpath, fname)
+        with open(src_path, "r", errors="ignore") as fh:
+            content = fh.read()
+
+        has_accent = "ColorScheme-Accent" in content or "ColorScheme-Highlight" in content
+        has_text = allow_text and "ColorScheme-Text" in content
+        if not has_accent and not has_text:
+            continue
+
+        new_content = content
+        if has_accent:
+            new_content = accent_pattern.sub(r"\g<1> " + accent, new_content)
+        if has_text:
+            new_content = text_pattern.sub(r"\g<1> " + accent, new_content)
+
+        rel = os.path.relpath(src_path, src_root)
+        dst_path = os.path.join(dst_root, rel)
+        os.makedirs(os.path.dirname(dst_path), exist_ok=True)
+        with open(dst_path, "w") as fh:
+            fh.write(new_content)
+        written_dirs.add(os.path.dirname(rel))
+        count += 1
+
+with open(dirs_file, "w") as fh:
+    fh.write("\n".join(sorted(written_dirs)))
+
+print(f"Full breeze-dark pass: {count} icons recolored (accent={accent})")
+PYEOF
+
+    if [ -s "$dirs_file" ]; then
+        local written_dirs=()
+        mapfile -t written_dirs < "$dirs_file"
+        update_index_theme_directories "${written_dirs[@]}"
+    fi
+    rm -f "$dirs_file"
+}
+
+# update_index_theme_directories <dir1> [dir2] ...
+# Ensures each given directory (relative, e.g. "status/22") has a section
+# in breeze-dark-accent/index.theme, copying its Size/Type/Context stanza
+# from breeze-dark's own index.theme (source of truth for correctness),
+# and keeps the top-level Directories= list in sync. Idempotent — safe to
+# call on every run, only ever adds sections, never removes.
+update_index_theme_directories() {
+    local theme_file="$ICON_DIR/index.theme"
+    local src_theme="/usr/share/icons/breeze-dark/index.theme"
+    [ -f "$theme_file" ] || { echo "  $theme_file missing, skipping index.theme sync"; return 1; }
+    [ -f "$src_theme" ]  || { echo "  breeze-dark/index.theme not found, skipping sync"; return 1; }
+
+    python3 - "$theme_file" "$src_theme" "$@" << 'PYEOF'
+import configparser, sys
+
+theme_file, src_theme, *new_dirs = sys.argv[1:]
+
+def load(path):
+    cp = configparser.ConfigParser(strict=False)
+    cp.optionxform = str  # preserve case
+    cp.read(path)
+    return cp
+
+local = load(theme_file)
+src = load(src_theme)
+
+existing = [d.strip() for d in local["Icon Theme"].get("Directories", "").split(",") if d.strip()]
+existing_set = set(existing)
+
+added = []
+for d in new_dirs:
+    if d in existing_set:
+        continue
+    if d not in src:
+        print(f"  '{d}' has no section in upstream index.theme, skipping")
+        continue
+    local[d] = dict(src[d])
+    existing.append(d)
+    existing_set.add(d)
+    added.append(d)
+
+local["Icon Theme"]["Directories"] = ",".join(existing)
+
+# Rewrite by hand to control section order (Icon Theme first, as convention expects)
+with open(theme_file, "w") as f:
+    f.write("[Icon Theme]\n")
+    for k, v in local["Icon Theme"].items():
+        f.write(f"{k}={v}\n")
+    for section in local.sections():
+        if section == "Icon Theme":
+            continue
+        f.write(f"\n[{section}]\n")
+        for k, v in local[section].items():
+            f.write(f"{k}={v}\n")
+
+if added:
+    print(f"  index.theme: added {len(added)} directories: {', '.join(added)}")
+else:
+    print("  index.theme: no new directories needed")
+PYEOF
 }
 
 # ===========================================================================
@@ -902,7 +1062,12 @@ if [ "$DRY_RUN" -eq 1 ]; then
     exit 0
 fi
 
-# Dedicated functions first, so the engine knows what's already handled
+# Full breeze-dark theme pass first — recolors every accent/highlight icon
+# across the whole upstream theme. Dedicated + engine passes below write
+# on top of this, so hand-curated app icons still take priority.
+patch_full_breeze_theme
+
+# Dedicated functions next, so the engine knows what's already handled
 patch_folder_icons
 patch_inode_directory_icon
 patch_system_file_manager_icon

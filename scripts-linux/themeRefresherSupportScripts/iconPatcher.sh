@@ -652,6 +652,30 @@ patch_folder_icons() {
     done
 }
 
+# Replace the Places-panel Trash icon (user-trash / user-trash-full)
+# outright with the symbolic action icon (trash-empty-symbolic), rather
+# than recoloring breeze's own places/user-trash.svg artwork. Uses the
+# same ColorScheme-Text token as the status/devices/actions fix above, so
+# recolored independently here rather than depending on
+# patch_full_breeze_theme having already generated a copy. Vector SVG, so
+# one file copied into every size directory renders correctly regardless
+# of nominal size.
+patch_trash_icon() {
+    local src="/usr/share/icons/breeze-dark/actions/24/trash-empty-symbolic.svg"
+    if [ ! -f "$src" ]; then
+        echo "  trash-empty-symbolic.svg not found, skipping trash icon"
+        return 1
+    fi
+    for size in 16 22 24 32 48 64 96; do
+        for name in user-trash user-trash-full; do
+            dst="$ICON_DIR/places/$size/$name.svg"
+            mkdir -p "$(dirname "$dst")"
+            sed "s/ColorScheme-Text { color: #[0-9a-fA-F]*/ColorScheme-Text { color: $accent/g" "$src" > "$dst"
+        done
+    done
+    echo "Trash icon replaced with symbolic version (accent=$accent)"
+}
+
 patch_inode_directory_icon() {
     src="/usr/share/icons/breeze-dark/mimetypes/64/inode-directory.svg"
     dst="$ICON_DIR/mimetypes/64/inode-directory.svg"
@@ -1069,6 +1093,7 @@ patch_full_breeze_theme
 
 # Dedicated functions next, so the engine knows what's already handled
 patch_folder_icons
+patch_trash_icon
 patch_inode_directory_icon
 patch_system_file_manager_icon
 patch_preferences_system_icon

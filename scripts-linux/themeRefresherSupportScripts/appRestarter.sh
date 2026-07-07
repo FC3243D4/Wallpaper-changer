@@ -20,6 +20,7 @@ for app in "${!APPS[@]}"; do
         mapfile -t apids < <(pgrep -x "$detect" 2>/dev/null)
     fi
     if [ ${#apids[@]} -gt 0 ]; then
+        echo "$app running"
         running+=("$app")
         all_pids+=("${apids[@]}")
     fi

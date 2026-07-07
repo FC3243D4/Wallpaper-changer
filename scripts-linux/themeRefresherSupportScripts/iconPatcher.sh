@@ -1087,6 +1087,9 @@ patch_all_desktop_icons
 patch_wlogout_icons
 patch_osd_icons
 
+# Tray icons — split into its own file, see trayIconPatcher.sh
+"$SUPPORT/trayIconPatcher.sh" "$color"
+
 update-desktop-database "$HOME/.local/share/applications" 2>/dev/null
 
 cleanup_icon_cache

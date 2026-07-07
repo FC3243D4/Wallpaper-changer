@@ -1,0 +1,582 @@
+#!/usr/bin/env bash
+# trayIconPatcher.sh
+# Themes system-tray icons for apps that don't pick up breeze-dark-accent's
+# regular app-icon theming automatically — either because they draw their
+# tray icon from their own bundled asset (not looked up by name through the
+# icon theme), or because they expect a literal file path in their own
+# config the way Vesktop does.
+#
+# Split out from iconPatcher.sh because these apps each need a different,
+# fairly hand-rolled approach rather than the generic .desktop-driven engine.
+#
+# Usage: trayIconPatcher.sh <hex_color> [--list]
+#   --list   only discover/report what would be touched for blueman and
+#            onedrivegui (no files written). Use this first on a new
+#            machine to confirm the discovered icon names look right
+#            before doing a real run.
+#
+# Called automatically from iconPatcher.sh at the very end of its run, so
+# the accent-colored app SVGs in $ICON_DIR/apps/scalable/ already exist by
+# the time this runs.
+
+color="${1,,}"
+LIST_ONLY=0
+[ "${2:-}" = "--list" ] && LIST_ONLY=1
+
+if [ -z "$color" ]; then
+    echo "Usage: $0 <hex_color> [--list]" >&2
+    exit 1
+fi
+
+accent="#$color"
+SUPPORT="$HOME/.config/WallpaperChanger/themeRefresherSupportScripts"
+ICONS="$SUPPORT/svg"
+GAME_ICONS="$ICONS/games"
+ICON_DIR="$HOME/.local/share/icons/breeze-dark-accent"
+TRAY_DIR="$SUPPORT/tray-icons"
+mkdir -p "$TRAY_DIR"
+
+# ---------------------------------------------------------------------------
+# Match waybar's text color exactly, not just "the same seed".
+#
+# $color/$accent here is the raw hex colorChooser.sh sampled from the
+# wallpaper. But waybar's @color4 (used for textcolor2 in ML4W-modern.css)
+# is matugen's *resolved* colors.primary.default — a tonally-adjusted
+# Material/HCT derivative of that seed, not the seed itself. Icons colored
+# with the raw seed and waybar text colored with the resolved primary are
+# two different colors that happen to be close, which is exactly why the
+# mismatch was "extremely visible" sitting right next to each other in the
+# tray. Since matugen already runs before iconPatcher.sh in
+# themeRefresher.sh, the rendered file already has the real value — read
+# it back rather than re-deriving it here.
+#
+# Only affects tray icons. Everything else in the pipeline (breeze theme,
+# KDE colorscheme, GTK, RGB devices) still uses the raw seed as before.
+WAYBAR_COLORS_RENDERED="$HOME/.config/waybar/matugen/colors-waybar.css"
+if [ -f "$WAYBAR_COLORS_RENDERED" ]; then
+    waybar_accent=$(grep -m1 -oP '@define-color\s+color4\s+\K#[0-9a-fA-F]{6}' "$WAYBAR_COLORS_RENDERED")
+    if [ -n "$waybar_accent" ]; then
+        accent="$waybar_accent"
+        color="${accent#\#}"
+        color="${color,,}"
+        echo "  tray icons: using waybar's resolved color4 ($accent) instead of the raw wallpaper seed"
+    else
+        echo "  tray icons: color4 not found in $WAYBAR_COLORS_RENDERED, falling back to raw seed color"
+    fi
+else
+    echo "  tray icons: $WAYBAR_COLORS_RENDERED not found, falling back to raw seed color"
+fi
+
+# ---------------------------------------------------------------------------
+# Shared helper — find the already-themed app SVG if iconPatcher.sh's main
+# engine already generated one this run; otherwise recolor the raw base
+# icon on the fly (lets this script also be run standalone/out of order).
+# ---------------------------------------------------------------------------
+resolve_themed_svg() {
+    local name="$1"
+    if [ -f "$ICON_DIR/apps/scalable/$name.svg" ]; then
+        echo "$ICON_DIR/apps/scalable/$name.svg"
+        return 0
+    fi
+    local base=""
+    [ -f "$GAME_ICONS/${name}_base_icon.svg" ] && base="$GAME_ICONS/${name}_base_icon.svg"
+    [ -z "$base" ] && [ -f "$ICONS/${name}_base_icon.svg" ] && base="$ICONS/${name}_base_icon.svg"
+    [ -z "$base" ] && return 1
+
+    local tmp
+    tmp=$(mktemp --suffix=.svg)
+    sed "s/currentColor/$accent/g" "$base" > "$tmp"
+    echo "$tmp"
+}
+
+# fix_system_dir_permissions <dir> <label>
+# One-time chown of a package-owned directory to the current user, so
+# subsequent writes need no sudo at all — until the next package update
+# resets ownership back to root, at which point this just redoes it.
+# Non-blocking: uses `sudo -n`, so it fails fast instead of hanging when
+# there's no cached credential/interactive terminal (see: the hang bug
+# from an earlier version of this pattern).
+fix_system_dir_permissions() {
+    local dir="$1" label="$2"
+    [ -w "$dir" ] && return 0
+    echo "  $label: $dir is root-owned, attempting one-time chown..."
+    if sudo -n chown -R "$USER" "$dir" 2>/dev/null; then
+        echo "  $label: ownership fixed — future runs won't need sudo."
+        echo "  (if theming silently stops updating after a $label package"
+        echo "   update, that's this directory getting reset to root again — just"
+        echo "   re-run this script and it'll redo the chown.)"
+        return 0
+    fi
+    echo "  $label: couldn't chown automatically (needs an interactive sudo prompt)."
+    echo "  Run this once yourself, then re-run this script:"
+    echo "    sudo chown -R \$USER $dir"
+    return 1
+}
+
+# rasterize_tray_png <name> <src_svg> [size]
+# Writes $TRAY_DIR/<name>-tray.png at the given size (default 24 — a common
+# panel tray size; bump per-app below if yours renders too small/blurry).
+rasterize_tray_png() {
+    local name="$1" src="$2" size="${3:-24}"
+    if ! command -v rsvg-convert >/dev/null 2>&1; then
+        echo "  rsvg-convert not found — install librsvg to generate tray PNGs" >&2
+        return 1
+    fi
+    rsvg-convert -w "$size" -h "$size" "$src" -o "$TRAY_DIR/${name}-tray.png"
+}
+
+# ===========================================================================
+# 1. Apps with an existing custom themed icon in the main pipeline.
+#    Each of these just needs rasterizing to a tray-sized PNG. Wiring that
+#    PNG into the app itself is app-specific — see the TODO in each.
+# ===========================================================================
+
+patch_nativmix_tray() {
+    command -v nativmix >/dev/null 2>&1 || return 0
+
+    # Confirmed via nativmix's own source (utils/paths.py get_icon_path()):
+    # the tray icon always reads this exact file directly, and only falls
+    # back to QIcon.fromTheme("nativmix") if it's missing — so as long as
+    # this file exists (it does, via the AUR package), theming the icon
+    # theme entry alone is never enough; this file has to be overwritten.
+    local target="/usr/share/nativmix/assets/icon.png"
+    [ -f "$target" ] || {
+        echo "  nativmix: $target not found (package layout may have changed)"
+        return 1
+    }
+
+    local svg
+    svg=$(resolve_themed_svg "nativmix-alt") || svg=$(resolve_themed_svg "nativmix") || {
+        echo "  nativmix: no themed base icon found, skipping tray"; return 1
+    }
+
+    if [ "$LIST_ONLY" -eq 1 ]; then
+        echo "nativmix: would overwrite $target with themed nativmix-alt/nativmix icon"
+        return 0
+    fi
+
+    command -v rsvg-convert >/dev/null 2>&1 || {
+        echo "  nativmix: rsvg-convert not found, cannot rasterize"; return 1
+    }
+
+    fix_system_dir_permissions "$(dirname "$target")" "nativmix" || return 1
+
+    local backup="${target}.orig"
+    [ -f "$backup" ] || cp "$target" "$backup"
+
+    rsvg-convert -w 256 -h 256 "$svg" -o "$target" \
+        && echo "NativMix tray icon patched in place ($target)"
+}
+
+patch_ferdium_tray() {
+    command -v ferdium >/dev/null 2>&1 || return 0
+
+    # Confirmed via `pacman -Ql ferdium-bin`: real Linux tray assets bundled
+    # at this path, root-owned (AUR package installs to /opt). No per-user
+    # config indirection like Vesktop's trayIconPath — these files are what
+    # Ferdium actually loads.
+    local tray_dir="/opt/ferdium-bin/assets/images/tray/linux"
+    [ -d "$tray_dir" ] || {
+        echo "  ferdium: $tray_dir not found (package layout may have changed)"
+        return 1
+    }
+
+    local svg
+    svg=$(resolve_themed_svg "ferdium") || { echo "  ferdium: no themed base icon found, skipping tray"; return 1; }
+
+    # tray/tray-indirect/tray-unread all get the same plain accent icon —
+    # Ferdium doesn't expose a separate unread-badge asset to composite
+    # onto here the way Vesktop's settings.json flow does. Say the word if
+    # you'd like a red-dot badge burned into tray-unread.png specifically.
+    local names=(tray tray-indirect tray-unread)
+
+    if [ "$LIST_ONLY" -eq 1 ]; then
+        echo "ferdium: would overwrite in $tray_dir:"
+        for n in "${names[@]}"; do
+            printf '  %s.png / %s@2x.png\n' "$n" "$n"
+        done
+        return 0
+    fi
+
+    command -v rsvg-convert >/dev/null 2>&1 || {
+        echo "  ferdium: rsvg-convert not found, cannot rasterize"; return 1
+    }
+    fix_system_dir_permissions "$tray_dir" "ferdium" || return 1
+
+    local patched=0
+    for n in "${names[@]}"; do
+        for variant in "$n.png" "$n@2x.png"; do
+            local f="$tray_dir/$variant"
+            [ -f "$f" ] || continue
+            local backup="${f}.orig"
+            [ -f "$backup" ] || cp "$f" "$backup"
+
+            local dims size
+            if command -v identify >/dev/null 2>&1; then
+                dims=$(identify -format "%wx%h" "$backup" 2>/dev/null)
+            elif command -v magick >/dev/null 2>&1; then
+                dims=$(magick identify -format "%wx%h" "$backup" 2>/dev/null)
+            fi
+            size="${dims%x*}"
+            [ -z "$size" ] && size=22
+
+            rsvg-convert -w "$size" -h "$size" "$svg" -o "$f" && patched=$((patched + 1))
+        done
+    done
+    echo "Ferdium tray icons patched in place ($patched files, $tray_dir)"
+}
+
+patch_localsend_tray() {
+    command -v localsend >/dev/null 2>&1 || return 0
+
+    # Confirmed via `pacman -Ql localsend`: real tray assets live in its
+    # Flutter asset bundle. logo-32-black/-white are the light/dark tray
+    # variants (standard cross-platform tray convention); logo-32.png is
+    # the plain fallback. Recolor all three since we can't tell at rest
+    # which one LocalSend's tray plugin actually selects at runtime.
+    local img_dir="/usr/lib/localsend/data/flutter_assets/assets/img"
+    [ -d "$img_dir" ] || {
+        echo "  localsend: $img_dir not found (package layout may have changed)"
+        return 1
+    }
+
+    local svg
+    svg=$(resolve_themed_svg "localsend") || { echo "  localsend: no themed base icon found, skipping tray"; return 1; }
+
+    local names=(logo-32.png logo-32-black.png logo-32-white.png)
+
+    if [ "$LIST_ONLY" -eq 1 ]; then
+        echo "localsend: would overwrite in $img_dir:"
+        printf '  %s\n' "${names[@]}"
+        return 0
+    fi
+
+    command -v rsvg-convert >/dev/null 2>&1 || {
+        echo "  localsend: rsvg-convert not found, cannot rasterize"; return 1
+    }
+    fix_system_dir_permissions "$img_dir" "localsend" || return 1
+
+    local patched=0
+    for n in "${names[@]}"; do
+        local f="$img_dir/$n"
+        [ -f "$f" ] || continue
+        local backup="${f}.orig"
+        [ -f "$backup" ] || cp "$f" "$backup"
+        rsvg-convert -w 32 -h 32 "$svg" -o "$f" && patched=$((patched + 1))
+    done
+    echo "LocalSend tray icons patched in place ($patched/${#names[@]}, $img_dir)"
+}
+
+patch_streamcontroller_tray() {
+    command -v streamcontroller >/dev/null 2>&1 || return 0
+
+    # Confirmed via src/tray.py: it sets its own DBus StatusNotifierItem
+    # IconThemePath to /usr/lib/streamcontroller/Assets/icons (bypassing
+    # the active icon theme entirely) and requests icon name
+    # "com.core447.StreamController" — which resolves to exactly these two
+    # files, per the standard hicolor apps/<size> layout.
+    local icon_base="/usr/lib/streamcontroller/Assets/icons/hicolor"
+    local targets=(
+        "$icon_base/48x48/apps/com.core447.StreamController.png"
+        "$icon_base/512x512/apps/com.core447.StreamController.png"
+    )
+
+    local svg
+    svg=$(resolve_themed_svg "elgato") || { echo "  streamcontroller: no themed base icon found, skipping tray"; return 1; }
+
+    if [ "$LIST_ONLY" -eq 1 ]; then
+        echo "streamcontroller: would overwrite:"
+        printf '  %s\n' "${targets[@]}"
+        return 0
+    fi
+
+    command -v rsvg-convert >/dev/null 2>&1 || {
+        echo "  streamcontroller: rsvg-convert not found, cannot rasterize"; return 1
+    }
+    fix_system_dir_permissions "$icon_base" "streamcontroller" || return 1
+
+    local patched=0
+    for f in "${targets[@]}"; do
+        [ -f "$f" ] || { echo "  streamcontroller: $f not found, skipping"; continue; }
+        local backup="${f}.orig"
+        [ -f "$backup" ] || cp "$f" "$backup"
+        # Size comes from the directory name (48x48 / 512x512).
+        local size
+        size=$(basename "$(dirname "$(dirname "$f")")")
+        size="${size%%x*}"
+        rsvg-convert -w "$size" -h "$size" "$svg" -o "$f" && patched=$((patched + 1))
+    done
+    echo "StreamController tray icon patched in place ($patched/${#targets[@]})"
+}
+
+# ===========================================================================
+# 2. Blueman — no per-app config; blueman-applet looks up fixed icon names
+#    (blueman-tray-full, blueman-tray-disabled, blueman-tray-plugged, etc.)
+#    through the active icon theme. Fix: find blueman's real icon files,
+#    recolor them the same way patch_folder_icons/patch_dolphin_icon do for
+#    breeze, and drop the results into breeze-dark-accent at the matching
+#    relative path so theme lookup resolves to the tinted version first.
+# ===========================================================================
+
+patch_blueman_tray() {
+    command -v blueman-applet >/dev/null 2>&1 || return 0
+
+    local search_dirs=(
+        "/usr/share/icons/hicolor"
+        "/usr/share/pixmaps"
+        "/usr/share/blueman/icons"
+    )
+    local found=()
+    for dir in "${search_dirs[@]}"; do
+        [ -d "$dir" ] || continue
+        while IFS= read -r f; do
+            found+=("$f")
+        done < <(find "$dir" -iname "*blueman-tray*" -type f 2>/dev/null)
+    done
+
+    if [ "${#found[@]}" -eq 0 ]; then
+        echo "  blueman: no blueman-tray-* icon files found under ${search_dirs[*]}"
+        echo "  (run 'find / -iname \"*blueman-tray*\" 2>/dev/null' once to locate them,"
+        echo "   then adjust search_dirs in patch_blueman_tray)"
+        return 1
+    fi
+
+    # Full substitution with the same bluetooth icon already used for the
+    # "Bluetooth Manager" app icon elsewhere in iconPatcher.sh, rather than
+    # tinting blueman's own vendor art — vendor blueman-tray icons are a
+    # filled badge shape, so a plain -colorize just turns into a flat blob
+    # instead of a recognizable glyph.
+    local src_svg
+    src_svg=$(resolve_themed_svg "bluetooth") || {
+        echo "  blueman: $ICONS/bluetooth_base_icon.svg not found, can't substitute — falling back to plain recolor"
+        src_svg=""
+    }
+
+    if [ "$LIST_ONLY" -eq 1 ]; then
+        echo "blueman: would replace ${#found[@]} file(s) with bluetooth_base_icon.svg:"
+        printf '  %s\n' "${found[@]}"
+        return 0
+    fi
+
+    local tool=""
+    command -v magick >/dev/null 2>&1 && tool="magick"
+    [ -z "$tool" ] && command -v convert >/dev/null 2>&1 && tool="convert"
+
+    local tmp_svg=""
+    if [ -n "$src_svg" ]; then
+        # resolve_themed_svg already returns accent-colored content (either
+        # the engine's already-generated app icon, or a freshly recolored
+        # temp copy of the base SVG) — just use it directly.
+        tmp_svg="$src_svg"
+    fi
+
+    local patched=0
+    for f in "${found[@]}"; do
+        case "$f" in
+            *hicolor*)
+                rel="${f#/usr/share/icons/hicolor/}"
+                dst="$ICON_DIR/$rel"
+                ;;
+            *)
+                # pixmaps/blueman's own dir — no theme-relative path, so
+                # just mirror basename under a flat "blueman" subfolder.
+                dst="$ICON_DIR/blueman/$(basename "$f")"
+                ;;
+        esac
+        mkdir -p "$(dirname "$dst")"
+
+        if [ -n "$tmp_svg" ]; then
+            if [[ "$f" == *.svg ]]; then
+                cp "$tmp_svg" "$dst"
+            elif command -v rsvg-convert >/dev/null 2>&1; then
+                # Size comes from the hicolor directory name (e.g. 24x24);
+                # default to 48 for anything outside that layout (pixmaps).
+                local size=48
+                if [[ "$f" == *hicolor/*x*/status* ]]; then
+                    local sizedir="${f#/usr/share/icons/hicolor/}"
+                    size="${sizedir%%x*}"
+                fi
+                rsvg-convert -w "$size" -h "$size" "$tmp_svg" -o "$dst"
+            else
+                echo "  blueman: rsvg-convert not found, skipping raster icon $f"
+                continue
+            fi
+        elif [[ "$f" == *.svg ]]; then
+            sed "s/currentColor/$accent/g" "$f" > "$dst" 2>/dev/null \
+                || cp "$f" "$dst"
+        elif [ -n "$tool" ]; then
+            "$tool" "$f" -fill "$accent" -colorize 100% "$dst"
+        else
+            echo "  blueman: no ImageMagick found, skipping raster icon $f"
+            continue
+        fi
+        patched=$((patched + 1))
+    done
+    # Only clean up if resolve_themed_svg gave us a throwaway temp file —
+    # never delete the permanent $ICON_DIR/apps/scalable/bluetooth.svg.
+    case "$tmp_svg" in
+        "$ICON_DIR"/*) : ;;   # permanent — leave it alone
+        "") : ;;
+        *) rm -f "$tmp_svg" ;;
+    esac
+    echo "Blueman tray icons patched ($patched/${#found[@]})"
+}
+
+# ===========================================================================
+# 3. OneDriveGUI — confirmed via `pacman -Ql onedrivegui`: ships as loose
+#    PNGs under /usr/lib/OneDriveGUI/resources/images/, loaded directly by
+#    path (no icon-theme lookup, no user-facing config for this). That
+#    directory is owned by the onedrivegui package, not $HOME.
+#
+#    Only the actual tray/cloud-state icons are touched. The status-dot
+#    indicators (green/red circle) and in-window UI buttons (account,
+#    folder, gear, play, pause, quit, ...) are deliberately left alone —
+#    the former carry connected/disconnected meaning, the latter aren't
+#    the tray icon at all.
+# ===========================================================================
+
+ONEDRIVEGUI_IMAGES_DIR="/usr/lib/OneDriveGUI/resources/images"
+
+# The three real tray states — fully replaced with your own custom SVGs
+# (found the same way as every other custom icon in iconPatcher.sh: under
+# $ICONS/<name>_base_icon.svg, using currentColor). "warning" is a best
+# guess at which vendor file maps to that state — confirm once you see it
+# light up in practice, and swap the key below if it's actually
+# icons8-cloud-stop-80.png instead.
+declare -A ONEDRIVEGUI_SVG_OVERRIDES=(
+    ["icons8-cloud-done-80.png"]="cloud-check:accent"      # ok/synced
+    ["warning.png"]="cloud-exclamation:#f39c12"            # warning
+    ["icons8-cloud-error-80.png"]="cloud-x:#e74c3c"        # error
+    ["icons8-cloud-sync-80.png"]="cloud-cog:accent"        # syncing
+)
+
+# Everything else cloud-related that isn't one of the three states above —
+# these get a plain accent recolor of the existing vendor art rather than a
+# full SVG replacement (no custom icon requested for these).
+declare -A ONEDRIVEGUI_COLORIZE_ONLY=(
+    ["icons8-cloud-80.png"]="accent"        # idle
+    ["icons8-cloud-stop-80.png"]="accent"   # paused (unless this is actually "warning" — see above)
+)
+
+# One-time permission fix: chown the vendor images dir to the current user
+# so no further sudo is needed until the next onedrivegui package update
+# resets ownership back to root (that's a pacman/AUR upgrade behavior, not
+# something this script can prevent — just re-run it when that happens).
+# One-time permission fix: chown the vendor images dir to the current user
+# so no further sudo is needed until the next onedrivegui package update
+# resets ownership back to root (that's a pacman/AUR upgrade behavior, not
+# something this script can prevent — just re-run it when that happens).
+fix_onedrivegui_permissions() {
+    fix_system_dir_permissions "$ONEDRIVEGUI_IMAGES_DIR" "onedrivegui"
+}
+
+patch_onedrivegui_tray() {
+    command -v onedrivegui >/dev/null 2>&1 || return 0
+    [ -d "$ONEDRIVEGUI_IMAGES_DIR" ] || {
+        echo "  onedrivegui: $ONEDRIVEGUI_IMAGES_DIR not found (package layout may have changed)"
+        return 1
+    }
+
+    if [ "$LIST_ONLY" -eq 1 ]; then
+        echo "onedrivegui: custom SVG replacements:"
+        for name in "${!ONEDRIVEGUI_SVG_OVERRIDES[@]}"; do
+            IFS=':' read -r icon_name target <<< "${ONEDRIVEGUI_SVG_OVERRIDES[$name]}"
+            [ "$target" = "accent" ] && target="$accent"
+            printf '  %-28s -> %s_base_icon.svg (%s)\n' "$name" "$icon_name" "$target"
+        done
+        echo "onedrivegui: plain recolor (existing vendor art):"
+        for name in "${!ONEDRIVEGUI_COLORIZE_ONLY[@]}"; do
+            local target="${ONEDRIVEGUI_COLORIZE_ONLY[$name]}"
+            [ "$target" = "accent" ] && target="$accent"
+            printf '  %-28s -> %s\n' "$name" "$target"
+        done
+        echo "  (left alone: icons8-green-circle-48.png, icons8-red-circle-48.png, and"
+        echo "   in-window UI icons like account/folder/gear/play/pause/quit)"
+        return 0
+    fi
+
+    local tool=""
+    command -v magick >/dev/null 2>&1 && tool="magick"
+    [ -z "$tool" ] && command -v convert >/dev/null 2>&1 && tool="convert"
+    if [ -z "$tool" ]; then
+        echo "  onedrivegui: ImageMagick not found, cannot recolor icons"
+        return 1
+    fi
+    command -v rsvg-convert >/dev/null 2>&1 || {
+        echo "  onedrivegui: rsvg-convert not found, cannot rasterize custom SVGs"
+        return 1
+    }
+
+    fix_onedrivegui_permissions || return 1
+
+    local patched=0 skipped=0
+
+    # -- custom SVG replacements --
+    for name in "${!ONEDRIVEGUI_SVG_OVERRIDES[@]}"; do
+        local f="$ONEDRIVEGUI_IMAGES_DIR/$name"
+        [ -f "$f" ] || { echo "  onedrivegui: vendor file $name not found, skipping"; continue; }
+
+        IFS=':' read -r icon_name target <<< "${ONEDRIVEGUI_SVG_OVERRIDES[$name]}"
+        [ "$target" = "accent" ] && target="$accent"
+
+        local src_svg="$ICONS/${icon_name}_base_icon.svg"
+        if [ ! -f "$src_svg" ]; then
+            echo "  onedrivegui: $src_svg not found — add it, or drop this override for $name"
+            skipped=$((skipped + 1))
+            continue
+        fi
+
+        local backup="${f}.orig"
+        [ -f "$backup" ] || cp "$f" "$backup"
+
+        # Match the vendor icon's own pixel size so it doesn't look
+        # mismatched next to the icons we're leaving alone.
+        local dims
+        if command -v identify >/dev/null 2>&1; then
+            dims=$(identify -format "%wx%h" "$backup" 2>/dev/null)
+        else
+            dims=$("$tool" identify -format "%wx%h" "$backup" 2>/dev/null)
+        fi
+        local w="${dims%x*}" h="${dims#*x}"
+        [ -z "$w" ] && w=80
+        [ -z "$h" ] && h=80
+
+        local tmp_svg tmp_png
+        tmp_svg=$(mktemp --suffix=.svg)
+        tmp_png=$(mktemp --suffix=.png)
+        sed "s/currentColor/$target/g" "$src_svg" > "$tmp_svg"
+        rsvg-convert -w "$w" -h "$h" "$tmp_svg" -o "$tmp_png"
+        cp "$tmp_png" "$f"
+        rm -f "$tmp_svg" "$tmp_png"
+        patched=$((patched + 1))
+        echo "  $name replaced with ${icon_name}_base_icon.svg ($target)"
+    done
+
+    # -- plain recolor of remaining vendor art --
+    for name in "${!ONEDRIVEGUI_COLORIZE_ONLY[@]}"; do
+        local f="$ONEDRIVEGUI_IMAGES_DIR/$name"
+        [ -f "$f" ] || { echo "  onedrivegui: vendor file $name not found, skipping"; continue; }
+
+        local target="${ONEDRIVEGUI_COLORIZE_ONLY[$name]}"
+        [ "$target" = "accent" ] && target="$accent"
+
+        local backup="${f}.orig"
+        [ -f "$backup" ] || cp "$f" "$backup"
+
+        "$tool" "$backup" -fill "$target" -colorize 100% "$f"
+        patched=$((patched + 1))
+    done
+
+    echo "OneDriveGUI tray icons patched ($patched patched, $skipped skipped)"
+    echo "  (originals preserved as *.png.orig next to each file)"
+}
+
+# ---- Run everything ----
+patch_nativmix_tray
+patch_ferdium_tray
+patch_localsend_tray
+patch_streamcontroller_tray
+patch_blueman_tray
+patch_onedrivegui_tray
+
+[ "$LIST_ONLY" -eq 0 ] && echo "Tray icons patched with $accent"

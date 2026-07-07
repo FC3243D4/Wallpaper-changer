@@ -76,6 +76,7 @@ cmd_full() {
     APPS[sourcegit]="x|sourcegit|sourcegit|sourcegit|sourcegit"
     APPS[code]="x|code|code|code|code"
     APPS[vesktop]="x|vesktop|vesktop|vesktop|vesktop"
+    APPS[nativmix]="x|nativmix|nativmix|nativmix --hidden --restart|"
 
 
     source "$SUPPORT/appRestarter.sh"
@@ -100,8 +101,27 @@ exit(0 if any('$wclass' in c.get('class','').lower() for c in clients) else 1)
         # Restore Hyprland layout state after all restarts
         sleep 0.2 && "$SUPPORT/hyprMasterLayoutPreservation.sh" restore
 
+        systemctl --user restart waybar.service
+
     elif [ "$XDG_CURRENT_DESKTOP" == "KDE" ]; then
         kquitapp6 plasmashell && sleep 1 && kstart plasmashell &
+        disown
+    fi
+
+    # OneDriveGUI — special-cased instead of going through appRestarter.sh.
+    # It spawns a separate `onedrive --confdir=... --monitor` child process to
+    # actually do the syncing. A generic kill+relaunch only kills the GUI
+    # wrapper, leaving that child orphaned and still holding the account's
+    # lock file — the freshly relaunched GUI then tries to start a *new* sync
+    # process against the same locked confdir and fails with "already running".
+    if command -v onedrivegui >/dev/null 2>&1 && pgrep -f "onedrivegui" >/dev/null 2>&1; then
+        pkill -f "onedrivegui"
+        pkill -f "onedrive .*--monitor"
+        deadline=$(( $(date +%s) + 5 ))
+        while pgrep -f "onedrivegui|onedrive .*--monitor" >/dev/null 2>&1 && [ "$(date +%s)" -lt "$deadline" ]; do
+            sleep 0.1
+        done
+        onedrivegui >/dev/null 2>&1 &
         disown
     fi
 }
@@ -174,6 +194,8 @@ cmd_softrun() {
     if [ "$XDG_CURRENT_DESKTOP" == "KDE" ]; then
         kquitapp6 plasmashell && sleep 1 && kstart plasmashell &
         disown
+    elif [ "$XDG_CURRENT_DESKTOP" == "Hyprland" ]; then
+        systemctl --user restart waybar.service
     fi
 }
 

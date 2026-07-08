@@ -51,6 +51,94 @@ DESKTOP_DIRS=(
     "$HOME/.local/share/flatpak/exports/share/applications"
 )
 
+# Marks a user-dir .desktop file as OUR copy of a system file (created by
+# patch_desktop_file to safely edit Icon= without touching root-owned
+# files) rather than a genuine user-only entry. See patch_desktop_file and
+# cleanup_stale_desktop_overrides below.
+DESKTOP_OVERRIDE_MARKER="X-IconPatcherManaged=true"
+
+# Removes marked overrides once the system .desktop file they shadow no
+# longer exists anywhere (i.e. the app was uninstalled) — otherwise
+# DESKTOP_DIRS listing the user dir first means a stale copy shadows the
+# (now-nonexistent) original forever, and things like uninstalled apps
+# keep appearing in launchers. Only ever touches marked files; a real
+# user-only .desktop (e.g. Steam/Heroic shortcuts, which live solely in
+# this directory) is never marked and so is never a candidate here.
+# Runs before anything else scans DESKTOP_DIRS, so a removed entry doesn't
+# shadow anything for the rest of this same run either.
+# Retroactively marks overrides created by earlier runs, before this
+# marker system existed. Only marks a file if a system .desktop with the
+# same basename still exists today — i.e. it's demonstrably still
+# shadowing something real right now, so it's safe to treat as prunable
+# once that original eventually disappears. Anything whose basename has
+# no system counterpart today is left alone (could be a genuine user-only
+# entry like a Steam/Heroic shortcut, or could be already-orphaned from
+# before this system existed — either way, there's no longer a safe way
+# to tell the difference, so those need a one-time manual check instead).
+backfill_desktop_override_markers() {
+    local user_dir="$HOME/.local/share/applications"
+    [ -d "$user_dir" ] || return 0
+    local system_dirs=(
+        "/usr/share/applications"
+        "/usr/local/share/applications"
+        "/var/lib/flatpak/exports/share/applications"
+        "$HOME/.local/share/flatpak/exports/share/applications"
+    )
+    local marked=0
+    while IFS= read -r -d '' f; do
+        grep -qxF "$DESKTOP_OVERRIDE_MARKER" "$f" 2>/dev/null && continue
+        local base found=0
+        base=$(basename "$f")
+        for dir in "${system_dirs[@]}"; do
+            [ -f "$dir/$base" ] && { found=1; break; }
+        done
+        if [ "$found" -eq 1 ]; then
+            echo "$DESKTOP_OVERRIDE_MARKER" >> "$f"
+            marked=$((marked + 1))
+        fi
+    done < <(find "$user_dir" -maxdepth 1 -type f -name "*.desktop" -print0 2>/dev/null)
+    [ "$marked" -gt 0 ] && echo "Backfilled override marker on $marked existing .desktop file(s)"
+}
+
+# Removes marked overrides once the system .desktop file they shadow no
+# longer exists anywhere (i.e. the app was uninstalled) — otherwise
+# DESKTOP_DIRS listing the user dir first means a stale copy shadows the
+# (now-nonexistent) original forever, and things like uninstalled apps
+# keep appearing in launchers. Only ever touches marked files; a real
+# user-only .desktop (e.g. Steam/Heroic shortcuts, which live solely in
+# this directory) is never marked and so is never a candidate here.
+# Runs before anything else scans DESKTOP_DIRS, so a removed entry doesn't
+# shadow anything for the rest of this same run either.
+cleanup_stale_desktop_overrides() {
+    local user_dir="$HOME/.local/share/applications"
+    [ -d "$user_dir" ] || return 0
+    backfill_desktop_override_markers
+    local system_dirs=(
+        "/usr/share/applications"
+        "/usr/local/share/applications"
+        "/var/lib/flatpak/exports/share/applications"
+        "$HOME/.local/share/flatpak/exports/share/applications"
+    )
+    local removed=0
+    while IFS= read -r -d '' f; do
+        grep -qxF "$DESKTOP_OVERRIDE_MARKER" "$f" 2>/dev/null || continue
+        local base found=0
+        base=$(basename "$f")
+        for dir in "${system_dirs[@]}"; do
+            [ -f "$dir/$base" ] && { found=1; break; }
+        done
+        if [ "$found" -eq 0 ]; then
+            rm -f "$f"
+            echo "  removed stale override: $base (no longer installed)"
+            removed=$((removed + 1))
+        fi
+    done < <(find "$user_dir" -maxdepth 1 -type f -name "*.desktop" -print0 2>/dev/null)
+    if [ "$removed" -gt 0 ]; then
+        echo "Cleaned up $removed stale .desktop override(s)"
+        update-desktop-database "$user_dir" 2>/dev/null
+    fi
+}
+
 # .desktop basenames already themed by a dedicated function this run —
 # the generic engine skips these. Filled in by patch_desktop_icon.
 declare -A HANDLED_DESKTOPS
@@ -296,7 +384,15 @@ patch_desktop_file() {
     fi
     if [ "$current" != "$icon_name" ]; then
         mkdir -p "$HOME/.local/share/applications"
-        [ -f "$override" ] || cp "$file" "$override"
+        if [ ! -f "$override" ]; then
+            cp "$file" "$override"
+            # Marks this as OUR copy of a system file, not a genuine
+            # user-only .desktop entry (e.g. Steam/Heroic game shortcuts,
+            # which live solely in this directory and must never be
+            # pruned). Only files bearing this marker are ever considered
+            # for removal by cleanup_stale_desktop_overrides.
+            echo "$DESKTOP_OVERRIDE_MARKER" >> "$override"
+        fi
         if grep -q "^Icon=" "$override"; then
             sed -i "s|^Icon=.*|Icon=$icon_name|" "$override"
         else
@@ -1085,6 +1181,11 @@ if [ "$DRY_RUN" -eq 1 ]; then
     patch_all_desktop_icons
     exit 0
 fi
+
+# Prune stale overrides before anything else scans DESKTOP_DIRS, so a
+# removed entry doesn't shadow a nonexistent original for the rest of
+# this run either.
+cleanup_stale_desktop_overrides
 
 # Full breeze-dark theme pass first — recolors every accent/highlight icon
 # across the whole upstream theme. Dedicated + engine passes below write

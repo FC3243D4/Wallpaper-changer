@@ -39,6 +39,21 @@ SUPPORT="$HOME/.config/WallpaperChanger/themeRefresherSupportScripts"
 ICONS="$SUPPORT/svg"
 GAME_ICONS="$ICONS/games"                 # drop per-game custom icons here
 
+# Symbolic (ColorScheme-Text) icons specifically use matugen's resolved
+# color4/primary instead of the raw wallpaper-sampled seed — matching
+# tray icons and waybar text, since these icons show up right next to
+# both (Solaar, NetworkManager, the trash icon, etc.) and any mismatch is
+# just as visible there. Everything using ColorScheme-Accent/Highlight
+# (folders, places, and the rest of the theme) keeps using the raw seed
+# $accent, unaffected. Falls back to $accent if the rendered file isn't
+# found, so this degrades to the previous behavior rather than failing.
+symbolic_accent="$accent"
+WAYBAR_COLORS_RENDERED="$HOME/.config/waybar/matugen/colors-waybar.css"
+if [ -f "$WAYBAR_COLORS_RENDERED" ]; then
+    resolved_color4=$(grep -m1 -oP '@define-color\s+color4\s+\K#[0-9a-fA-F]{6}' "$WAYBAR_COLORS_RENDERED")
+    [ -n "$resolved_color4" ] && symbolic_accent="$resolved_color4"
+fi
+
 mkdir -p "$ICON_DIR/apps/16" "$ICON_DIR/apps/22" "$ICON_DIR/apps/24" \
          "$ICON_DIR/apps/32" "$ICON_DIR/apps/44" "$ICON_DIR/apps/48" \
          "$ICON_DIR/apps/64" "$ICON_DIR/apps/scalable" "$GAME_ICONS"
@@ -93,8 +108,12 @@ backfill_desktop_override_markers() {
             [ -f "$dir/$base" ] && { found=1; break; }
         done
         if [ "$found" -eq 1 ]; then
-            echo "$DESKTOP_OVERRIDE_MARKER" >> "$f"
-            marked=$((marked + 1))
+            if [ -w "$f" ]; then
+                echo "$DESKTOP_OVERRIDE_MARKER" >> "$f"
+                marked=$((marked + 1))
+            else
+                echo "  skipping $base (not writable — likely created by something else with elevated privileges)"
+            fi
         fi
     done < <(find "$user_dir" -maxdepth 1 -type f -name "*.desktop" -print0 2>/dev/null)
     [ "$marked" -gt 0 ] && echo "Backfilled override marker on $marked existing .desktop file(s)"
@@ -384,6 +403,10 @@ patch_desktop_file() {
     fi
     if [ "$current" != "$icon_name" ]; then
         mkdir -p "$HOME/.local/share/applications"
+        if [ -f "$override" ] && [ ! -w "$override" ]; then
+            echo "  skipping $base (existing override not writable — likely created by something else with elevated privileges)"
+            return 1
+        fi
         if [ ! -f "$override" ]; then
             cp "$file" "$override"
             # Marks this as OUR copy of a system file, not a genuine
@@ -601,12 +624,13 @@ patch_full_breeze_theme() {
     local dirs_file
     dirs_file=$(mktemp)
 
-    python3 - "$SRC" "$ICON_DIR" "$accent" "$dirs_file" << 'PYEOF'
+    python3 - "$SRC" "$ICON_DIR" "$accent" "$dirs_file" "$symbolic_accent" << 'PYEOF'
 import os, re, sys
 
-src_root, dst_root, accent, dirs_file = sys.argv[1:5]
+src_root, dst_root, accent, dirs_file, symbolic_accent = sys.argv[1:6]
 
-# Accent/Highlight: recolored everywhere in the theme, as before.
+# Accent/Highlight: recolored everywhere in the theme, as before — raw
+# seed color, unaffected by the symbolic-icon override below.
 accent_pattern = re.compile(
     r"(\.ColorScheme-(?:Accent|Highlight)\s*\{[^}]*?color:)\s*#[0-9a-fA-F]{3,8}",
     re.DOTALL,
@@ -617,6 +641,7 @@ accent_pattern = re.compile(
 # is why they show up unthemed otherwise. Only recolor Text in directories
 # where that flat mono style is the norm, so generic UI/mimetype icons
 # that rely on Text-for-contrast elsewhere in the theme stay untouched.
+# Uses symbolic_accent (matugen's resolved color4), not the raw seed.
 text_pattern = re.compile(
     r"(\.ColorScheme-Text\s*\{[^}]*?color:)\s*#[0-9a-fA-F]{3,8}",
     re.DOTALL,
@@ -647,7 +672,7 @@ for dirpath, _, filenames in os.walk(src_root):
         if has_accent:
             new_content = accent_pattern.sub(r"\g<1> " + accent, new_content)
         if has_text:
-            new_content = text_pattern.sub(r"\g<1> " + accent, new_content)
+            new_content = text_pattern.sub(r"\g<1> " + symbolic_accent, new_content)
 
         rel = os.path.relpath(src_path, src_root)
         dst_path = os.path.join(dst_root, rel)
@@ -660,7 +685,7 @@ for dirpath, _, filenames in os.walk(src_root):
 with open(dirs_file, "w") as fh:
     fh.write("\n".join(sorted(written_dirs)))
 
-print(f"Full breeze-dark pass: {count} icons recolored (accent={accent})")
+print(f"Full breeze-dark pass: {count} icons recolored (accent={accent}, symbolic={symbolic_accent})")
 PYEOF
 
     if [ -s "$dirs_file" ]; then
@@ -766,10 +791,10 @@ patch_trash_icon() {
         for name in user-trash user-trash-full; do
             dst="$ICON_DIR/places/$size/$name.svg"
             mkdir -p "$(dirname "$dst")"
-            sed "s/ColorScheme-Text { color: #[0-9a-fA-F]*/ColorScheme-Text { color: $accent/g" "$src" > "$dst"
+            sed "s/ColorScheme-Text { color: #[0-9a-fA-F]*/ColorScheme-Text { color: $symbolic_accent/g" "$src" > "$dst"
         done
     done
-    echo "Trash icon replaced with symbolic version (accent=$accent)"
+    echo "Trash icon replaced with symbolic version (symbolic=$symbolic_accent)"
 }
 
 patch_inode_directory_icon() {

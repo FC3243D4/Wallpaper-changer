@@ -22,7 +22,7 @@ if [ "$brightness" -ge "$BRIGHTNESS_THRESHOLD" ]; then
     echo "Using candidate $i: #$color" >&2
 fi
 
-if [ -z "$color"]; then
+if [ -z "$color" ]; then
     echo "dominantcolor candidate too dark, falling back to matugen"
 
     for i in 0 1 2 3 4; do

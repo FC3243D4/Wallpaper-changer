@@ -797,6 +797,27 @@ patch_trash_icon() {
     echo "Trash icon replaced with symbolic version (symbolic=$symbolic_accent)"
 }
 
+# Dolphin's Places-panel entry for a KDE Connect device is a manually
+# created bookmark (kdeconnectd writes it into user-places.xbel), not a
+# .desktop-driven app icon — and its bookmark:icon name is "kdeconnect"
+# (no underscore), a different name than the "kde_connect" the engine
+# already generates via ICON_OVERRIDES for the app's own .desktop entries.
+# Exact-match icon lookup means that one-character difference is enough to
+# miss entirely. Same artwork, just also written under the name Dolphin
+# actually asks for here. Uses symbolic_accent (color4) rather than the
+# raw seed accent, since this sits in the Places panel alongside other
+# device/status entries rather than functioning as a standalone app icon.
+patch_kdeconnect_places_icon() {
+    local src="$ICONS/kde_connect_base_icon.svg"
+    if [ ! -f "$src" ]; then
+        echo "  kde_connect_base_icon.svg not found, skipping KDE Connect places icon"
+        return 1
+    fi
+    local dst="$ICON_DIR/apps/scalable/kdeconnect.svg"
+    sed "s/currentColor/$symbolic_accent/g" "$src" > "$dst"
+    echo "KDE Connect places-panel icon patched (symbolic=$symbolic_accent)"
+}
+
 patch_inode_directory_icon() {
     src="/usr/share/icons/breeze-dark/mimetypes/64/inode-directory.svg"
     dst="$ICON_DIR/mimetypes/64/inode-directory.svg"
@@ -1220,6 +1241,7 @@ patch_full_breeze_theme
 # Dedicated functions next, so the engine knows what's already handled
 patch_folder_icons
 patch_trash_icon
+patch_kdeconnect_places_icon
 patch_inode_directory_icon
 patch_system_file_manager_icon
 patch_preferences_system_icon

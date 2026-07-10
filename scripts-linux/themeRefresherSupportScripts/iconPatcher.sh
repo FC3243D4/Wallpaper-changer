@@ -935,7 +935,7 @@ patch_vesktop_tray_icon() {
         mkdir -p "$TRAY_DIR"
 
         white_svg="$(mktemp --suffix=.svg)"
-        sed "s/#000000/#ffffff/g" "$src" > "$white_svg"
+        sed "s/currentColor/#ffffff/g" "$src" > "$white_svg"
 
         tray_png="$TRAY_DIR/vesktop-tray.png"
         rsvg-convert -w 256 -h 256 "$white_svg" -o "$tray_png"

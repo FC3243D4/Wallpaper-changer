@@ -514,87 +514,243 @@ category_fallback_icon() {
 # The generic engine — formerly ~50 per-app functions + gamesIconPatcher.sh
 # ---------------------------------------------------------------------------
 patch_all_desktop_icons() {
-    local -A seen
-    local custom=0 games_fallback=0 by_category=0 catchall=0 untouched=0
+    # The scanning/decision phase (slugify, category fallback, game
+    # detection, cross-directory dedup) used to spawn grep/cut/tr/sed per
+    # .desktop file — for a few hundred files, mostly just to decide
+    # nothing needs to happen to ~90% of them, that's 1500+ subprocess
+    # forks before any actual writing even starts. Doing that part as one
+    # Python pass instead (in-process string ops, no forking) is the
+    # single biggest win in this whole script. The actual writes
+    # (ensure_icon/patch_desktop_file) stay in bash below, unchanged —
+    # only run for files that actually need something written, same as
+    # before. Validated against the original bash logic via a side-by-side
+    # test harness covering overrides, category fallback, both
+    # game-detection paths, catchall, untouched, no-Name, cross-directory
+    # dedup, electron/wine slug normalization, and special characters in
+    # app names — byte-for-byte identical decisions on every case tested.
+    local icon_overrides_file category_fallbacks_file handled_file matches_file
+    icon_overrides_file=$(mktemp)
+    category_fallbacks_file=$(mktemp)
+    handled_file=$(mktemp)
+    matches_file=$(mktemp)
+
+    local k
+    for k in "${!ICON_OVERRIDES[@]}"; do
+        printf '%s\t%s\n' "$k" "${ICON_OVERRIDES[$k]}"
+    done > "$icon_overrides_file"
+
+    local entry
+    for entry in "${CATEGORY_FALLBACKS[@]}"; do
+        printf '%s\n' "$entry"
+    done > "$category_fallbacks_file"
+
+    for k in "${!HANDLED_DESKTOPS[@]}"; do
+        printf '%s\n' "$k"
+    done > "$handled_file"
+
+    [ "$DRY_RUN" -eq 0 ] && echo "Scanning .desktop files..."
+
+    python3 - "$icon_overrides_file" "$category_fallbacks_file" "$handled_file" \
+              "$GAME_ICONS" "$ICONS" "$CATCHALL_ICON" "$DRY_RUN" "$matches_file" \
+              "${DESKTOP_DIRS[@]}" << 'PYEOF'
+import os, re, sys
+
+icon_overrides_file, category_fallbacks_file, handled_file, game_icons_dir, icons_dir, catchall_icon, dry_run, matches_file = sys.argv[1:9]
+desktop_dirs = sys.argv[9:]
+dry_run = dry_run == "1"
+
+icon_overrides = {}
+with open(icon_overrides_file) as f:
+    for line in f:
+        line = line.rstrip("\n")
+        if not line:
+            continue
+        k, v = line.split("\t", 1)
+        icon_overrides[k] = v
+
+category_fallbacks = []
+with open(category_fallbacks_file) as f:
+    for line in f:
+        line = line.rstrip("\n")
+        if not line:
+            continue
+        cat, icon = line.split(":", 1)
+        category_fallbacks.append((cat, icon))
+
+handled = set()
+with open(handled_file) as f:
+    for line in f:
+        line = line.rstrip("\n")
+        if line:
+            handled.add(line)
+
+
+def slugify(name):
+    s = name.lower()
+    s = re.sub(r"[^a-z0-9 \-]", "", s)
+    s = re.sub(r"\s+", "_", s)
+    s = re.sub(r"-+", "_", s)
+    return s
+
+
+def normalize_slug(slug):
+    if re.match(r"^electron_[0-9]", slug):
+        return "electron"
+    if slug.startswith("wine_"):
+        return "settings"
+    return slug
+
+
+_base_svg_cache = {}
+
+
+def find_base_svg(name):
+    if name in _base_svg_cache:
+        return _base_svg_cache[name]
+    p1 = os.path.join(game_icons_dir, f"{name}_base_icon.svg")
+    p2 = os.path.join(icons_dir, f"{name}_base_icon.svg")
+    result = p1 if os.path.isfile(p1) else (p2 if os.path.isfile(p2) else None)
+    _base_svg_cache[name] = result
+    return result
+
+
+def is_game_desktop_file(content):
+    if re.search(r"^Exec=.*(steam://rungameid|lutris:rungame|heroic)", content, re.M):
+        return True
+    if re.search(r"^Categories=.*game", content, re.M | re.I):
+        return True
+    return False
+
+
+def get_field(content, field):
+    m = re.search(rf"^{field}=(.*)$", content, re.M)
+    return m.group(1) if m else None
+
+
+def category_fallback_icon(categories):
+    if not categories:
+        return None
+    padded = f";{categories};"
+    for cat, icon in category_fallbacks:
+        if f";{cat};" in padded and find_base_svg(icon):
+            return icon
+    return None
+
+
+seen = set()
+custom = games_fallback = by_category = catchall = untouched = 0
+dry_lines = []
+matches = []
+
+for d in desktop_dirs:
+    if not os.path.isdir(d):
+        continue
+    d_norm = os.path.normpath(d)
+    for root, dirs, files in os.walk(d_norm):
+        rel = os.path.relpath(root, d_norm)
+        depth = 0 if rel == "." else rel.count(os.sep) + 1
+        if depth >= 3:
+            dirs[:] = []
+
+        for fname in sorted(files):
+            if not fname.endswith(".desktop"):
+                continue
+            desktop_file = os.path.join(root, fname)
+            base = fname
+
+            if base in seen:
+                continue
+            seen.add(base)
+
+            if base in handled:
+                if dry_run:
+                    dry_lines.append((f"({base})", "-", "-", "dedicated function"))
+                continue
+
+            try:
+                with open(desktop_file, "r", errors="ignore") as fh:
+                    content = fh.read()
+            except OSError:
+                continue
+
+            name = get_field(content, "Name")
+            if not name:
+                if dry_run:
+                    dry_lines.append((f"({base})", "-", "-", "no Name=, skipped"))
+                continue
+
+            raw_slug = slugify(name)
+            slug = normalize_slug(raw_slug)
+            icon = icon_overrides.get(slug, slug)
+
+            if find_base_svg(icon):
+                reason = "override" if icon != slug else "custom icon"
+                custom += 1
+            elif is_game_desktop_file(content):
+                icon = "gaming"
+                reason = "game fallback"
+                games_fallback += 1
+            else:
+                categories = get_field(content, "Categories")
+                fb_icon = category_fallback_icon(categories)
+                if fb_icon:
+                    icon = fb_icon
+                    reason = "category"
+                    by_category += 1
+                elif find_base_svg(catchall_icon):
+                    icon = catchall_icon
+                    reason = "catch-all"
+                    catchall += 1
+                else:
+                    if dry_run:
+                        dry_lines.append((name, slug, "-", "no match, untouched"))
+                    untouched += 1
+                    continue
+
+            if dry_run:
+                dry_lines.append((name, slug, icon, reason))
+            else:
+                matches.append((desktop_file, icon, name, reason))
+
+if dry_run:
+    print(f"{'NAME':<40} {'SLUG':<35} {'ICON':<22} SOURCE")
+    print(f"{'----':<40} {'----':<35} {'----':<22} ------")
+    for name, slug, icon, reason in dry_lines:
+        print(f"{name:<40} {slug:<35} {icon:<22} {reason}")
+    print()
+    print(
+        f"Engine summary: {custom} custom/override, {games_fallback} game fallback, "
+        f"{by_category} by category, {catchall} catch-all, {untouched} untouched."
+    )
+else:
+    with open(matches_file, "w") as f:
+        for desktop_file, icon, name, reason in matches:
+            f.write(f"{desktop_file}\t{icon}\t{name}\t{reason}\n")
+    print(
+        f"Engine summary: {custom} custom/override, {games_fallback} game fallback, "
+        f"{by_category} by category, {catchall} catch-all, {untouched} untouched."
+    )
+PYEOF
 
     if [ "$DRY_RUN" -eq 1 ]; then
-        printf '%-40s %-35s %-22s %s\n' "NAME" "SLUG" "ICON" "SOURCE"
-        printf '%-40s %-35s %-22s %s\n' "----" "----" "----" "------"
-    else
-        echo "Scanning .desktop files..."
+        rm -f "$icon_overrides_file" "$category_fallbacks_file" "$handled_file" "$matches_file"
+        return 0
     fi
 
-    for dir in "${DESKTOP_DIRS[@]}"; do
-        [ -d "$dir" ] || continue
-        while IFS= read -r -d '' desktop_file; do
-            local base name raw_slug slug icon reason
-            base=$(basename "$desktop_file")
+    # Actual writes — same functions, same behavior as before. Only runs
+    # for files the Python pass decided actually need something written.
+    local desktop_file icon name reason
+    while IFS=$'\t' read -r desktop_file icon name reason; do
+        [ -z "$desktop_file" ] && continue
+        if ! ensure_icon "$icon"; then
+            echo "  '$name' -> base SVG for '$icon' vanished mid-run, skipping"
+            continue
+        fi
+        echo "'$name' -> $icon ($reason)"
+        patch_desktop_file "$icon" "$desktop_file"
+    done < "$matches_file"
 
-            # First hit wins; user dir is listed first so local overrides
-            # shadow their system originals.
-            [ -n "${seen[$base]:-}" ] && continue
-            seen[$base]=1
-
-            # Already themed by a dedicated function this run.
-            if [ -n "${HANDLED_DESKTOPS[$base]:-}" ]; then
-                [ "$DRY_RUN" -eq 1 ] && printf '%-40s %-35s %-22s %s\n' \
-                    "($base)" "-" "-" "dedicated function"
-                continue
-            fi
-
-            name=$(grep -m1 '^Name=' "$desktop_file" | cut -d= -f2-)
-            if [ -z "$name" ]; then
-                [ "$DRY_RUN" -eq 1 ] && printf '%-40s %-35s %-22s %s\n' \
-                    "($base)" "-" "-" "no Name=, skipped"
-                continue
-            fi
-
-            raw_slug=$(slugify "$name")
-            slug=$(normalize_slug "$raw_slug")
-            icon="${ICON_OVERRIDES[$slug]:-$slug}"
-
-            if find_base_svg "$icon" >/dev/null; then
-                if [ "$icon" != "$slug" ]; then
-                    reason="override"
-                else
-                    reason="custom icon"
-                fi
-                custom=$((custom + 1))
-            elif is_game_desktop_file "$desktop_file"; then
-                icon="gaming"
-                reason="game fallback"
-                games_fallback=$((games_fallback + 1))
-            elif icon=$(category_fallback_icon "$desktop_file"); then
-                reason="category"
-                by_category=$((by_category + 1))
-            elif find_base_svg "$CATCHALL_ICON" >/dev/null; then
-                icon="$CATCHALL_ICON"
-                reason="catch-all"
-                catchall=$((catchall + 1))
-            else
-                [ "$DRY_RUN" -eq 1 ] && printf '%-40s %-35s %-22s %s\n' \
-                    "$name" "$slug" "-" "no match, untouched"
-                untouched=$((untouched + 1))
-                continue
-            fi
-
-            if [ "$DRY_RUN" -eq 1 ]; then
-                printf '%-40s %-35s %-22s %s\n' "$name" "$slug" "$icon" "$reason"
-                continue
-            fi
-
-            if ! ensure_icon "$icon"; then
-                echo "  '$name' -> base SVG for '$icon' vanished mid-run, skipping"
-                continue
-            fi
-            echo "'$name' -> $icon ($reason)"
-            patch_desktop_file "$icon" "$desktop_file"
-        done < <(find "$dir" -maxdepth 3 -type f -name "*.desktop" -print0 2>/dev/null)
-    done
-
-    echo
-    echo "Engine summary: $custom custom/override, $games_fallback game fallback," \
-         "$by_category by category, $catchall catch-all, $untouched untouched."
+    rm -f "$icon_overrides_file" "$category_fallbacks_file" "$handled_file" "$matches_file"
 }
 
 # ---------------------------------------------------------------------------
@@ -1241,6 +1397,21 @@ cleanup_icon_cache() {
     kbuildsycoca6 --noincremental 2>/dev/null
 }
 
+# time_step <label> <command...> — runs the given command, prints its
+# wall-clock time to stderr afterward. awk instead of bc for the float
+# subtraction so this doesn't need an extra package installed. Works for
+# both function calls and plain external commands (e.g. the
+# trayIconPatcher.sh invocation and update-desktop-database below).
+time_step() {
+    local label="$1"; shift
+    local start end
+    start=$(date +%s.%N)
+    "$@"
+    end=$(date +%s.%N)
+    awk -v s="$start" -v e="$end" -v l="$label" \
+        'BEGIN { printf "[TIMING] [%7.3fs] %s\n", e - s, l }' >&2
+}
+
 # ---- Run everything, in order ----
 if [ "$DRY_RUN" -eq 1 ]; then
     echo "(dry run: dedicated functions are skipped, nothing is written)"
@@ -1252,40 +1423,43 @@ fi
 # Prune stale overrides before anything else scans DESKTOP_DIRS, so a
 # removed entry doesn't shadow a nonexistent original for the rest of
 # this run either.
-cleanup_stale_desktop_overrides
+time_step "cleanup_stale_desktop_overrides" cleanup_stale_desktop_overrides
 
 # Full breeze-dark theme pass first — recolors every accent/highlight icon
 # across the whole upstream theme. Dedicated + engine passes below write
 # on top of this, so hand-curated app icons still take priority.
-patch_full_breeze_theme
+time_step "patch_full_breeze_theme" patch_full_breeze_theme
 
 # Dedicated functions next, so the engine knows what's already handled
-patch_folder_icons
-patch_trash_icon
-patch_kdeconnect_places_icon
-patch_inode_directory_icon
-patch_system_file_manager_icon
-patch_preferences_system_icon
-patch_dolphin_icon
-patch_cachyos_hello_icon
+time_step "patch_folder_icons"             patch_folder_icons
+time_step "patch_trash_icon"               patch_trash_icon
+time_step "patch_kdeconnect_places_icon"   patch_kdeconnect_places_icon
+time_step "patch_inode_directory_icon"     patch_inode_directory_icon
+time_step "patch_system_file_manager_icon" patch_system_file_manager_icon
+time_step "patch_preferences_system_icon"  patch_preferences_system_icon
+time_step "patch_dolphin_icon"             patch_dolphin_icon
+time_step "patch_cachyos_hello_icon"       patch_cachyos_hello_icon
 #patch_cachyos_kernel_manager_icon
-patch_discord_vesktop_icons
+time_step "patch_discord_vesktop_icons"    patch_discord_vesktop_icons
 #patch_nativmix_icon
-patch_orcaslicer_icon
+time_step "patch_orcaslicer_icon"          patch_orcaslicer_icon
 #patch_conky_icon
 
 # The generic engine — everything else, games included
-patch_all_desktop_icons
+time_step "patch_all_desktop_icons" patch_all_desktop_icons
 
 # Non-.desktop icon sets
-patch_wlogout_icons
-patch_osd_icons
+time_step "patch_wlogout_icons" patch_wlogout_icons
+time_step "patch_osd_icons"     patch_osd_icons
 
 # Tray icons — split into its own file, see trayIconPatcher.sh
-"$SUPPORT/trayIconPatcher.sh" "$color"
+time_step "trayIconPatcher.sh" "$SUPPORT/trayIconPatcher.sh" "$color"
 
-update-desktop-database "$HOME/.local/share/applications" 2>/dev/null
+_run_update_desktop_database() {
+    update-desktop-database "$HOME/.local/share/applications" 2>/dev/null
+}
+time_step "update-desktop-database" _run_update_desktop_database
 
-cleanup_icon_cache
+time_step "cleanup_icon_cache" cleanup_icon_cache
 
 echo "Icons patched with $accent"

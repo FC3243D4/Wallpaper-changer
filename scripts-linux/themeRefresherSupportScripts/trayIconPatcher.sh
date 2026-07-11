@@ -631,13 +631,26 @@ patch_onedrivegui_tray() {
     echo "  (originals preserved as *.png.orig next to each file)"
 }
 
+# time_step <label> <function> — runs the given function, prints its
+# wall-clock time to stderr afterward. awk instead of bc for the float
+# subtraction so this doesn't need an extra package installed.
+time_step() {
+    local label="$1"; shift
+    local start end
+    start=$(date +%s.%N)
+    "$@"
+    end=$(date +%s.%N)
+    awk -v s="$start" -v e="$end" -v l="$label" \
+        'BEGIN { printf "  [%7.3fs] %s\n", e - s, l }' >&2
+}
+
 # ---- Run everything ----
-patch_nativmix_tray
-patch_ferdium_tray
-patch_localsend_tray
-patch_streamcontroller_tray
-patch_steam_tray
-patch_blueman_tray
-patch_onedrivegui_tray
+time_step "nativmix"        patch_nativmix_tray
+time_step "ferdium"         patch_ferdium_tray
+time_step "localsend"       patch_localsend_tray
+time_step "streamcontroller" patch_streamcontroller_tray
+time_step "steam"           patch_steam_tray
+time_step "blueman"         patch_blueman_tray
+time_step "onedrivegui"     patch_onedrivegui_tray
 
 [ "$LIST_ONLY" -eq 0 ] && echo "Tray icons patched with $accent"

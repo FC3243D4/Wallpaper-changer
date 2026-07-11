@@ -462,24 +462,24 @@ find_base_svg() {
 patch_svg_color() {
     local src="$1" dst="$2" name="$3"
     local tokens="${COLOR_TOKENS[$name]:-currentColor}"
-    python3 - "$src" "$dst" "$accent" "$tokens" << 'PYEOF'
-import re
-import sys
 
-src, dst, accent, tokens = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
-with open(src, "r") as f:
-    content = f.read()
-
-if tokens == "@inject":
-    # Icon has no explicit fill anywhere — inject one on the root svg tag.
-    content = re.sub(r"<svg\b", f'<svg fill="{accent}"', content, count=1)
-else:
-    for token in tokens.split():
-        content = content.replace(token, accent)
-
-with open(dst, "w") as f:
-    f.write(content)
-PYEOF
+    if [ "$tokens" = "@inject" ]; then
+        # Icon has no explicit fill anywhere — inject one on the root svg
+        # tag. "0,/<svg/" (GNU sed) matches only the first occurrence in
+        # the whole file, not just the first line, same as Python's
+        # re.sub(..., count=1) this replaced.
+        sed "0,/<svg/{s//<svg fill=\"$accent\"/}" "$src" > "$dst"
+    else
+        # Space-separated token list (usually just "currentColor") — one
+        # -e per token, all applied in a single sed invocation. "|" as
+        # delimiter avoids collision with "/" that can appear in SVG path
+        # data if a token pattern ever needs to be that specific.
+        local sed_args=()
+        for token in $tokens; do
+            sed_args+=(-e "s|$token|$accent|g")
+        done
+        sed "${sed_args[@]}" "$src" > "$dst"
+    fi
 }
 
 # ensure_icon <icon_name> — generates the accent-colored SVG in the theme
@@ -617,75 +617,96 @@ patch_full_breeze_theme() {
     local SRC="/usr/share/icons/breeze-dark"
     [ -d "$SRC" ] || { echo "  breeze-dark not found, skipping full-theme pass"; return 1; }
 
-    # Single python3 process walks + rewrites the whole tree — spawning one
-    # interpreter per matched icon (the previous approach) is what made this
-    # take minutes; breeze-dark has hundreds of Accent/Highlight icons, and
-    # python's ~50-100ms startup cost times hundreds of files adds up fast.
+    # Multiprocessing pool — each SVG's read/regex/write is fully
+    # independent of every other one (no shared state between files, only
+    # the final written_dirs set needs merging afterward), so this is a
+    # clean fit for parallelizing across cores rather than walking the
+    # whole tree in a single process. Collecting the file list itself
+    # stays single-threaded since that part is cheap (just os.walk, no
+    # file I/O yet) — only the actual per-file work is farmed out.
     local dirs_file
     dirs_file=$(mktemp)
 
     python3 - "$SRC" "$ICON_DIR" "$accent" "$dirs_file" "$symbolic_accent" << 'PYEOF'
+import multiprocessing as mp
 import os, re, sys
 
 src_root, dst_root, accent, dirs_file, symbolic_accent = sys.argv[1:6]
 
-# Accent/Highlight: recolored everywhere in the theme, as before — raw
-# seed color, unaffected by the symbolic-icon override below.
-accent_pattern = re.compile(
-    r"(\.ColorScheme-(?:Accent|Highlight)\s*\{[^}]*?color:)\s*#[0-9a-fA-F]{3,8}",
-    re.DOTALL,
-)
-
-# Text: breeze uses this for its monochrome "symbolic" icons too (status
-# tray glyphs — wifi, bluetooth, volume, security, display, etc.), which
-# is why they show up unthemed otherwise. Only recolor Text in directories
-# where that flat mono style is the norm, so generic UI/mimetype icons
-# that rely on Text-for-contrast elsewhere in the theme stay untouched.
-# Uses symbolic_accent (matugen's resolved color4), not the raw seed.
-text_pattern = re.compile(
-    r"(\.ColorScheme-Text\s*\{[^}]*?color:)\s*#[0-9a-fA-F]{3,8}",
-    re.DOTALL,
-)
 TEXT_RECOLOR_DIRS = ("status", "devices", "actions")
 
-count = 0
-written_dirs = set()
+_accent_pattern = None
+_text_pattern = None
 
+def _init_worker(a, s):
+    global _accent, _symbolic, _accent_pattern, _text_pattern
+    _accent, _symbolic = a, s
+    _accent_pattern = re.compile(
+        r"(\.ColorScheme-(?:Accent|Highlight)\s*\{[^}]*?color:)\s*#[0-9a-fA-F]{3,8}",
+        re.DOTALL,
+    )
+    _text_pattern = re.compile(
+        r"(\.ColorScheme-Text\s*\{[^}]*?color:)\s*#[0-9a-fA-F]{3,8}",
+        re.DOTALL,
+    )
+
+def _process_one(args):
+    src_path, dst_path, allow_text = args
+    with open(src_path, "r", errors="ignore") as fh:
+        content = fh.read()
+
+    has_accent = "ColorScheme-Accent" in content or "ColorScheme-Highlight" in content
+    has_text = allow_text and "ColorScheme-Text" in content
+    if not has_accent and not has_text:
+        return None
+
+    new_content = content
+    if has_accent:
+        new_content = _accent_pattern.sub(r"\g<1> " + _accent, new_content)
+    if has_text:
+        new_content = _text_pattern.sub(r"\g<1> " + _symbolic, new_content)
+
+    os.makedirs(os.path.dirname(dst_path), exist_ok=True)
+    with open(dst_path, "w") as fh:
+        fh.write(new_content)
+    return os.path.dirname(os.path.relpath(dst_path, dst_root))
+
+# Collecting the task list is cheap (no file reads yet) — stays serial.
+tasks = []
 for dirpath, _, filenames in os.walk(src_root):
     rel_dir = os.path.relpath(dirpath, src_root)
     top_dir = rel_dir.split(os.sep, 1)[0]
     allow_text = top_dir in TEXT_RECOLOR_DIRS
-
     for fname in filenames:
         if not fname.endswith(".svg"):
             continue
         src_path = os.path.join(dirpath, fname)
-        with open(src_path, "r", errors="ignore") as fh:
-            content = fh.read()
-
-        has_accent = "ColorScheme-Accent" in content or "ColorScheme-Highlight" in content
-        has_text = allow_text and "ColorScheme-Text" in content
-        if not has_accent and not has_text:
-            continue
-
-        new_content = content
-        if has_accent:
-            new_content = accent_pattern.sub(r"\g<1> " + accent, new_content)
-        if has_text:
-            new_content = text_pattern.sub(r"\g<1> " + symbolic_accent, new_content)
-
         rel = os.path.relpath(src_path, src_root)
         dst_path = os.path.join(dst_root, rel)
-        os.makedirs(os.path.dirname(dst_path), exist_ok=True)
-        with open(dst_path, "w") as fh:
-            fh.write(new_content)
-        written_dirs.add(os.path.dirname(rel))
-        count += 1
+        tasks.append((src_path, dst_path, allow_text))
+
+count = 0
+written_dirs = set()
+
+worker_count = max(1, (os.cpu_count() or 4) // 4)
+# Explicitly force "fork" rather than relying on Python's current default
+# start method. forkserver/spawn need to re-import the main script from a
+# real file path to set up worker processes — impossible here since this
+# whole thing runs via `python3 - <<PYEOF` fed through stdin, with no file
+# on disk to re-import. fork just duplicates the already-running process
+# in memory instead, so it works regardless of what Python's default is
+# on a given system/version.
+ctx = mp.get_context("fork")
+with ctx.Pool(processes=worker_count, initializer=_init_worker, initargs=(accent, symbolic_accent)) as pool:
+    for result in pool.imap_unordered(_process_one, tasks, chunksize=32):
+        if result is not None:
+            written_dirs.add(result)
+            count += 1
 
 with open(dirs_file, "w") as fh:
     fh.write("\n".join(sorted(written_dirs)))
 
-print(f"Full breeze-dark pass: {count} icons recolored (accent={accent}, symbolic={symbolic_accent})")
+print(f"Full breeze-dark pass: {count} icons recolored across {worker_count} workers (accent={accent}, symbolic={symbolic_accent})")
 PYEOF
 
     if [ -s "$dirs_file" ]; then

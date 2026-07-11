@@ -71,7 +71,7 @@ cmd_full() {
     # 7. Restart apps
     declare -A APPS
     APPS[dolphin]="x|dolphin|dolphin|dolphin|dolphin"
-    APPS[zen]="f|zen-bin|zen-bin|zen-browser|zen"
+    #APPS[zen]="f|zen-bin|zen-bin|zen-browser|zen" # removed since adding hot reloading for zen
     APPS[ferdium]="f|electron.*ferdium-bin|electron.*ferdium-bin|ferdium|"
     APPS[sourcegit]="x|sourcegit|sourcegit|sourcegit|sourcegit"
     APPS[code]="x|code|code|code|code"

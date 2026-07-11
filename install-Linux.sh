@@ -14,6 +14,7 @@ Options:
   --thumbnails          Install the automated wallpaper thumbnail watcher
   --update-scripts      Copy only new and updated scripts to the destination
   --update-wallpapers   Copy only new and updated wallpapers to the destination
+  --zen-hotreload       Install live theme reload support for Zen Browser
   --help                Show this help message
 EOF
 }
@@ -24,6 +25,11 @@ cmd_thumbnails() {
     cp ./scripts-linux/wallpaper-thumbnails.* ~/.config/systemd/user
     systemctl --user enable --now wallpaper-thumbnails.path
     echo "Thumbnail watcher installed successfully."
+}
+
+cmd_zen_hotreload() {
+    echo "Installing Zen Browser live theme reload support..."
+    source "$SUPPORT/zen_hotreload_install.sh"
 }
 
 cmd_update_wallpapers() {
@@ -147,7 +153,10 @@ cmd_install() {
     # 5 INSTALL THEMES
     source "$SUPPORT/install_themes.sh"
 
-    # 6 FINAL MESSAGE
+    # 6 OFFER ZEN BROWSER HOT RELOAD (only if Zen is detected)
+    source "$SUPPORT/zen_hotreload_prompt.sh"
+
+    # 7 FINAL MESSAGE
     source "$SUPPORT/final_message.sh"
 }
 
@@ -156,6 +165,7 @@ case "$1" in
     --thumbnails)         cmd_thumbnails ;;
     --update-scripts)     cmd_update_scripts ;;
     --update-wallpapers)  cmd_update_wallpapers ;;
+    --zen-hotreload)      cmd_zen_hotreload ;;
     --help)               usage ;;
     *)
         if [ -z "$1" ]; then

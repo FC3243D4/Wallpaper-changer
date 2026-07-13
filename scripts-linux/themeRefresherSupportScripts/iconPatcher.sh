@@ -198,6 +198,7 @@ declare -A ICON_OVERRIDES=(
     ["ark"]="zip"
     ["btrfs_assistant"]="btrfs"
     ["nativmix"]="nativmix-alt"
+    ["orcaslicer"]="orcaslicer-alt"
 
     # -- many-to-one shared icons (formerly one function per group) --
     ["advanced_network_configuration"]="network"
@@ -1442,7 +1443,7 @@ time_step "patch_cachyos_hello_icon"       patch_cachyos_hello_icon
 #patch_cachyos_kernel_manager_icon
 time_step "patch_discord_vesktop_icons"    patch_discord_vesktop_icons
 #patch_nativmix_icon
-time_step "patch_orcaslicer_icon"          patch_orcaslicer_icon
+#time_step "patch_orcaslicer_icon"          patch_orcaslicer_icon
 #patch_conky_icon
 
 # The generic engine — everything else, games included

@@ -23,11 +23,13 @@ BREEZE_COLORS_BASE="${BREEZE_COLORS}.base"
 
 if [ -f "$BREEZE_COLORS_BASE" ]; then
     awk -v rgb="$R,$G,$B" '
-        /^\[Colors:View\]/      { in_view=1; in_sel=0 }
-        /^\[Colors:Selection\]/ { in_sel=1;  in_view=0 }
-        /^\[/ && !/^\[Colors:View\]/ && !/^\[Colors:Selection\]/ { in_view=0; in_sel=0 }
-        /^DecorationFocus=/     { print "DecorationFocus=" rgb; next }
-        /^DecorationHover=/     { print "DecorationHover=" rgb; next }
+        /^\[Colors:View\]/      { in_view=1; in_sel=0; in_win=0; in_btn=0 }
+        /^\[Colors:Selection\]/ { in_sel=1;  in_view=0; in_win=0; in_btn=0 }
+        /^\[Colors:Window\]/    { in_win=1;  in_view=0; in_sel=0; in_btn=0 }
+        /^\[Colors:Button\]/    { in_btn=1;  in_view=0; in_sel=0; in_win=0 }
+        /^\[/ && !/^\[Colors:View\]/ && !/^\[Colors:Selection\]/ && !/^\[Colors:Window\]/ && !/^\[Colors:Button\]/ { in_view=0; in_sel=0; in_win=0; in_btn=0 }
+        (in_view || in_sel || in_win || in_btn) && /^DecorationFocus=/ { print "DecorationFocus=" rgb; next }
+        (in_view || in_sel || in_win || in_btn) && /^DecorationHover=/ { print "DecorationHover=" rgb; next }
         in_view && /^ForegroundActive=/ { print "ForegroundActive=" rgb; next }
         in_sel  && /^BackgroundNormal=/ { print "BackgroundNormal=" rgb; next }
         { print }
@@ -56,9 +58,16 @@ fi
 kwriteconfig6 --file kdeglobals --group "Colors:View"      --key "DecorationFocus"     "$R,$G,$B"
 kwriteconfig6 --file kdeglobals --group "Colors:View"      --key "DecorationHover"     "$R,$G,$B"
 kwriteconfig6 --file kdeglobals --group "Colors:View"      --key "ForegroundActive"    "$R,$G,$B"
+kwriteconfig6 --file kdeglobals --group "Colors:Selection" --key "DecorationFocus"     "$R,$G,$B"
+kwriteconfig6 --file kdeglobals --group "Colors:Selection" --key "DecorationHover"     "$R,$G,$B"
 kwriteconfig6 --file kdeglobals --group "Colors:Selection" --key "BackgroundNormal"    "$R,$G,$B"
 kwriteconfig6 --file kdeglobals --group "Colors:Selection" --key "BackgroundAlternate" "$R,$G,$B"
+kwriteconfig6 --file kdeglobals --group "Colors:Window"    --key "DecorationFocus"     "$R,$G,$B"
+kwriteconfig6 --file kdeglobals --group "Colors:Window"    --key "DecorationHover"     "$R,$G,$B"
+kwriteconfig6 --file kdeglobals --group "Colors:Button"    --key "DecorationFocus"     "$R,$G,$B"
+kwriteconfig6 --file kdeglobals --group "Colors:Button"    --key "DecorationHover"     "$R,$G,$B"
 kwriteconfig6 --file kdeglobals --group "General"          --key "AccentColor"         "$R,$G,$B"
+kwriteconfig6 --file kdeglobals --group "General"          --key "AccentColorFromWallpaper" "false"
 qdbus6 org.kde.KGlobalSettings /KGlobalSettings notifyChange 0 0 2>/dev/null || true
 
 # Force plasmashell to reload accent color

@@ -170,9 +170,12 @@ cmd_install() {
     # primary display set to work correctly. Detects whichever connected
     # output sits at position 0,0, applies it immediately (so wallpaper
     # application below works this session too, without needing a
-    # Hyprland restart first), and writes it into Start_Apps.lua so future
-    # sessions set it automatically on login.
-    STARTAPPS_LUA="$HOME/.config/hypr/UserConfigs/Start_Apps.lua"
+    # Hyprland restart first), stores it as PRIMARY_DISPLAY in
+    # 01-UserDefaults.lua, and uncomments the line in Startup_Apps.lua
+    # that references that env var — so if the display ever changes
+    # later, only UserDefaults.lua needs updating, not Startup_Apps.lua.
+    USERDEFAULTS_LUA="$HOME/.config/hypr/UserConfigs/01-UserDefaults.lua"
+    STARTUPAPPS_LUA="$HOME/.config/hypr/UserConfigs/Startup_Apps.lua"
     if ! command -v xrandr >/dev/null 2>&1; then
         echo "xrandr not found — skipping primary display setup."
     else
@@ -189,16 +192,30 @@ cmd_install() {
 
         if [ -z "$primary_display" ]; then
             echo "Could not detect a display at position 0,0 — skipping primary display setup."
-            echo "You may need to set this manually in $STARTAPPS_LUA."
-        elif [ ! -f "$STARTAPPS_LUA" ]; then
-            echo "$STARTAPPS_LUA not found — skipping primary display setup."
+            echo "You may need to set this manually in $USERDEFAULTS_LUA."
         else
             xrandr --output "$primary_display" --primary 2>/dev/null
-            if grep -qE '^\s*"xrandr --output .+ --primary",' "$STARTAPPS_LUA" 2>/dev/null; then
-                echo "Start_Apps.lua already has an active primary-display line — leaving it as-is."
+
+            if [ -f "$USERDEFAULTS_LUA" ]; then
+                if grep -q 'hl.env("PRIMARY_DISPLAY"' "$USERDEFAULTS_LUA" 2>/dev/null; then
+                    echo "PRIMARY_DISPLAY already configured in 01-UserDefaults.lua — leaving it as-is."
+                else
+                    sed -i "s|hl.env(\"PRIMARY-DISPLAY\", \"x\")|hl.env(\"PRIMARY_DISPLAY\", \"${primary_display}\")|" "$USERDEFAULTS_LUA"
+                    echo "PRIMARY_DISPLAY set to $primary_display in 01-UserDefaults.lua."
+                fi
             else
-                sed -i "s|--\"xrandr --output X --primary\",|\"xrandr --output ${primary_display} --primary\",|" "$STARTAPPS_LUA"
-                echo "Primary display set to $primary_display (xrandr applied now, Start_Apps.lua updated for future sessions)."
+                echo "$USERDEFAULTS_LUA not found — skipping."
+            fi
+
+            if [ -f "$STARTUPAPPS_LUA" ]; then
+                if grep -qE '^\s*"xrandr --output \$PRIMARY_DISPLAY --primary",' "$STARTUPAPPS_LUA" 2>/dev/null; then
+                    echo "Startup_Apps.lua already references \$PRIMARY_DISPLAY — leaving it as-is."
+                else
+                    sed -i 's|--"xrandr --output X --primary",|"xrandr --output $PRIMARY_DISPLAY --primary",|' "$STARTUPAPPS_LUA"
+                    echo "Startup_Apps.lua updated to use \$PRIMARY_DISPLAY."
+                fi
+            else
+                echo "$STARTUPAPPS_LUA not found — skipping."
             fi
         fi
     fi

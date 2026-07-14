@@ -31,3 +31,93 @@ copy_with_bar() {
     done
     printf "\n"
 }
+
+# ---------------------------------------------------------------------------
+# multiselect: pure-bash arrow-key + spacebar multi-select menu.
+# $1 = name of array to write results into (by reference)
+# $2 = name of array holding the options (pass as arrayname[@])
+# $3 = optional name of array holding "locked" option values (pass as
+#      arrayname[@]) — these are pre-selected and cannot be toggled off,
+#      shown with a "(required)" tag.
+# ---------------------------------------------------------------------------
+multiselect() {
+    local -n result=$1
+    local options=("${!2}")
+    local locked=()
+    if [ -n "${3:-}" ]; then
+        locked=("${!3}")
+    fi
+    local selected=()
+    local cursor=0
+    local count=${#options[@]}
+
+    is_locked() {
+        local item="$1"
+        local l
+        for l in "${locked[@]}"; do
+            [ "$item" = "$l" ] && return 0
+        done
+        return 1
+    }
+
+    for ((i = 0; i < count; i++)); do
+        if is_locked "${options[i]}"; then
+            selected[i]=1
+        else
+            selected[i]=0
+        fi
+    done
+
+    tput civis
+
+    while true; do
+        for ((i = 0; i < count; i++)); do
+            if [ "$i" -eq "$cursor" ]; then
+                printf "\033[7m"
+            fi
+            local tag=""
+            is_locked "${options[i]}" && tag=" (required)"
+            if [ "${selected[i]}" -eq 1 ]; then
+                printf " [x] %s%s \033[0m\n" "${options[i]}" "$tag"
+            else
+                printf " [ ] %s%s \033[0m\n" "${options[i]}" "$tag"
+            fi
+        done
+
+        IFS= read -rsn1 key
+        if [[ $key == $'\x1b' ]]; then
+            read -rsn2 key
+            case "$key" in
+                '[A')
+                    ((cursor--))
+                    [ "$cursor" -lt 0 ] && cursor=$((count - 1))
+                    ;;
+                '[B')
+                    ((cursor++))
+                    [ "$cursor" -ge "$count" ] && cursor=0
+                    ;;
+            esac
+        elif [[ $key == "" ]]; then
+            break
+        elif [[ $key == " " ]]; then
+            if ! is_locked "${options[cursor]}"; then
+                if [ "${selected[cursor]}" -eq 1 ]; then
+                    selected[cursor]=0
+                else
+                    selected[cursor]=1
+                fi
+            fi
+        fi
+
+        printf "\033[%dA" "$count"
+    done
+
+    tput cnorm
+
+    result=()
+    for ((i = 0; i < count; i++)); do
+        if [ "${selected[i]}" -eq 1 ]; then
+            result+=("${options[i]}")
+        fi
+    done
+}

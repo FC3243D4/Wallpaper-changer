@@ -23,7 +23,7 @@ if [ "$brightness" -ge "$BRIGHTNESS_THRESHOLD" ]; then
 fi
 
 if [ -z "$color" ]; then
-    echo "dominantcolor candidate too dark, falling back to matugen"
+    echo "dominantcolor candidate too dark, falling back to matugen" >&2
 
     for i in 0 1 2 3 4; do
         candidate=$(matugen image "$WALLPAPER" --source-color-index $i --dry-run 2>/dev/null \

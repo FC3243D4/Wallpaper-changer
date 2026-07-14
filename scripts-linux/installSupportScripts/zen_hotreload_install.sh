@@ -6,8 +6,11 @@
 # Intended to be sourced from install-Linux.sh (expects $SUPPORT to be set).
 # Override the detected install dir with:
 #   ZEN_INSTALL_DIR=/opt/zen-browser-bin ./install-Linux.sh --zen-hotreload
+# Override which profiles get patched (colon-separated absolute paths) with:
+#   ZEN_PROFILE_DIRS="/home/you/.zen/xxxx.default:/home/you/.zen/yyyy.work" ./install-Linux.sh --zen-hotreload
 
 ZEN_INSTALL_DIR="${ZEN_INSTALL_DIR:-}"
+ZEN_HOME="${ZEN_HOME:-$HOME/.zen}"
 ZEN_RELOAD_SCRIPT="$SUPPORT/zenThemeReloader.uc.js"
 
 zen_hotreload_detect_install_dir() {
@@ -31,6 +34,55 @@ if [ ! -f "$ZEN_RELOAD_SCRIPT" ]; then
     exit 1
 fi
 
+# Reads $ZEN_HOME/profiles.ini (standard Firefox-style profile registry that
+# Zen also uses) and prints one absolute profile dir per line. This is what
+# lets the script find profiles regardless of the random salt in their names
+# (e.g. "8ma66p8a.Default (release)") instead of hardcoding them.
+zen_hotreload_find_profiles() {
+    local ini="$ZEN_HOME/profiles.ini"
+    [ -f "$ini" ] || return 1
+
+    local path="" is_relative="1" in_profile_section=false found=false
+    local line
+
+    _emit() {
+        [ "$in_profile_section" = true ] || return 0
+        [ -n "$path" ] || return 0
+        if [ "$is_relative" = "1" ]; then
+            echo "$ZEN_HOME/$path"
+        else
+            echo "$path"
+        fi
+        found=true
+    }
+
+    while IFS= read -r line || [ -n "$line" ]; do
+        case "$line" in
+            \[Profile*\])
+                _emit
+                in_profile_section=true
+                path=""
+                is_relative="1"
+                ;;
+            \[*\])
+                _emit
+                in_profile_section=false
+                path=""
+                is_relative="1"
+                ;;
+            Path=*)
+                path="${line#Path=}"
+                ;;
+            IsRelative=*)
+                is_relative="${line#IsRelative=}"
+                ;;
+        esac
+    done < "$ini"
+    _emit
+
+    [ "$found" = true ]
+}
+
 echo "Zen install dir: $ZEN_INSTALL_DIR"
 
 WORK=$(mktemp -d)
@@ -47,10 +99,18 @@ FXAC_SRC="$WORK/fx-autoconfig-master"
 echo "Installing loader into $ZEN_INSTALL_DIR (requires sudo)..."
 sudo cp -r "$FXAC_SRC/program/"* "$ZEN_INSTALL_DIR/"
 
-ZEN_PROFILES=(
-    "$HOME/.zen/8ma66p8a.Default (release)"
-    "$HOME/.zen/k71gdxvw.Default Profile"
-)
+ZEN_PROFILES=()
+if [ -n "$ZEN_PROFILE_DIRS" ]; then
+    IFS=':' read -ra ZEN_PROFILES <<< "$ZEN_PROFILE_DIRS"
+else
+    while IFS= read -r profile_dir; do
+        ZEN_PROFILES+=("$profile_dir")
+    done < <(zen_hotreload_find_profiles) || {
+        echo "Could not find $ZEN_HOME/profiles.ini, so no profiles were auto-detected."
+        echo "Re-run with: ZEN_PROFILE_DIRS=\"/path/to/profile1:/path/to/profile2\" ./install-Linux.sh --zen-hotreload"
+        exit 1
+    }
+fi
 
 patchedAny=false
 for ZEN_PROFILE in "${ZEN_PROFILES[@]}"; do
@@ -67,7 +127,7 @@ for ZEN_PROFILE in "${ZEN_PROFILES[@]}"; do
 done
 
 if [ "$patchedAny" = false ]; then
-    echo "No matching Zen profiles found under ~/.zen. Nothing was patched."
+    echo "No matching Zen profiles found under $ZEN_HOME. Nothing was patched."
     exit 1
 fi
 

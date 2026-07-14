@@ -222,8 +222,15 @@ cmd_install() {
     # of waiting for the next Hyprland session start, so the system is
     # fully themed the moment installation finishes.
     if [ -x "$HOME/.config/WallpaperChanger/WallpaperApplicator.sh" ]; then
-        echo "Applying a random wallpaper to finish setting up theming..."
-        "$HOME/.config/WallpaperChanger/WallpaperApplicator.sh" random
+        read -p "wallpaperApplicator.sh random will now be run, be advised that some of your programs might be closed and open again for the theming to be applied, do you wish to procede? [Y/n]"
+        echo""
+        echo""
+        if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+            echo "It is strongly advised for you to run this script once the installation is done to theme everything"
+        else
+            echo "Applying a random wallpaper to finish setting up theming..."
+            "$HOME/.config/WallpaperChanger/WallpaperApplicator.sh" random
+        fi
     fi
 
     # 9 OFFER ZEN BROWSER HOT RELOAD (only if Zen is detected)

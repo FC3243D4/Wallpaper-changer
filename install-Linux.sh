@@ -148,8 +148,7 @@ cmd_install() {
     source "$SUPPORT/script_install.sh"
 
     # 4 WALLPAPER SOURCE FALLBACK
-    # Some repo checkouts don't ship the full ./wallpapers tree (e.g. to
-    # keep a base clone small, or avoid nsfw content by default). If it's
+    # By default the ropo does not ship any wallpaper folder, so if it's
     # missing, fall back to the smaller ./wallpapersDefaultInstall set via
     # a persistent symlink — every script that expects ./wallpapers
     # (including this installer's own --update-wallpapers) then keeps

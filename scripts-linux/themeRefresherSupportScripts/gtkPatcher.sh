@@ -22,6 +22,26 @@ touch "$HOME/.config/gtk-4.0/colors.css"
 
 # Patch Breeze-Dark GTK theme (always from system copy, single sed pass)
 GTK_BASE="$HOME/.local/share/themes/Breeze-Dark"
+GTK_SYS_BASE="/usr/share/themes/Breeze-Dark"
+
+# On a fresh install, ~/.local/share/themes may not exist at all yet — the
+# patch loop below only ever edits an existing local override, it never
+# creates one. Without this, the whole block below silently no-ops every
+# run (real symptom hit on a fresh laptop: nwg-look's widget preview
+# stayed plain unmodified Breeze-Dark forever, no accent color ever
+# applied, with no error anywhere — same shape of bug as the missing
+# breeze-dark-accent/index.theme). Bootstrap by copying the full system
+# theme once, so there's a real user-owned copy to patch going forward.
+if [ ! -d "$GTK_BASE" ]; then
+    if [ -d "$GTK_SYS_BASE" ]; then
+        mkdir -p "$HOME/.local/share/themes"
+        cp -r "$GTK_SYS_BASE" "$GTK_BASE"
+        echo "  Breeze-Dark GTK theme copied to $GTK_BASE (was missing — fresh install bootstrap)"
+    else
+        echo "  $GTK_SYS_BASE not found, cannot bootstrap local GTK theme override"
+    fi
+fi
+
 if [ -d "$GTK_BASE" ]; then
     for gtk_ver in gtk-3.0 gtk-4.0; do
         sys_css="/usr/share/themes/Breeze-Dark/$gtk_ver/gtk.css"

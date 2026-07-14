@@ -770,9 +770,104 @@ PYEOF
 # so hand-curated Tabler-based app icons always win over anything this
 # pass writes for the same path.
 # ---------------------------------------------------------------------------
+# On a completely fresh machine, breeze-dark-accent may not exist as a
+# theme at all yet — nothing before this point ever creates its
+# index.theme from scratch (update_index_theme_directories below only
+# ever appends sections to one that already exists). Without this file,
+# and specifically its Inherits=breeze-dark line, breeze-dark-accent isn't
+# a valid/complete icon theme: anything this pipeline hasn't explicitly
+# recolored has no fallback to resolve through at all, which is why a
+# fresh install can show "no icon" for almost everything rather than just
+# the handful of apps this pipeline actually themes.
+ensure_icon_theme_index() {
+    local theme_file="$ICON_DIR/index.theme"
+    [ -f "$theme_file" ] && return 0
+
+    mkdir -p "$ICON_DIR"
+    cat > "$theme_file" << 'EOF'
+[Icon Theme]
+Name=Breeze Dark Accent
+Comment=Breeze Dark with dynamic accent color theming
+Inherits=breeze-dark
+Directories=
+EOF
+    echo "  breeze-dark-accent/index.theme created (was missing — fresh install bootstrap)"
+}
+
+# Registers the directories THIS pipeline's own custom/override icons get
+# written into (see the mkdir -p at the top of this script) — apps/scalable
+# above all, since that's where ensure_icon() puts every "custom icon" /
+# "override" / "category" / "catch-all" app icon (the majority of the
+# engine's output). update_index_theme_directories only ever copies
+# stanzas FROM breeze-dark's own index.theme, for directories the
+# breeze-mirror pass happened to write to this run — it has no connection
+# to ensure_icon's output at all, so apps/scalable can go permanently
+# unregistered on a freshly bootstrapped index.theme (files present and
+# correctly colored on disk, but invisible to icon-theme lookup, since a
+# directory not listed in Directories= doesn't exist as far as GTK/Qt icon
+# resolution is concerned). Hand-written stanzas here rather than copied
+# from breeze-dark, since breeze-dark doesn't necessarily define matching
+# sections for some of these (e.g. size 44 is nonstandard).
+ensure_app_icon_directories() {
+    local theme_file="$ICON_DIR/index.theme"
+    [ -f "$theme_file" ] || return 1
+
+    python3 - "$theme_file" << 'PYEOF'
+import configparser, sys
+
+theme_file = sys.argv[1]
+
+APP_DIR_STANZAS = {
+    "apps/16":       {"Size": "16", "Context": "Applications", "Type": "Fixed"},
+    "apps/22":       {"Size": "22", "Context": "Applications", "Type": "Fixed"},
+    "apps/24":       {"Size": "24", "Context": "Applications", "Type": "Fixed"},
+    "apps/32":       {"Size": "32", "Context": "Applications", "Type": "Fixed"},
+    "apps/44":       {"Size": "44", "Context": "Applications", "Type": "Fixed"},
+    "apps/48":       {"Size": "48", "Context": "Applications", "Type": "Fixed"},
+    "apps/64":       {"Size": "64", "Context": "Applications", "Type": "Fixed"},
+    "apps/scalable": {"Size": "48", "MinSize": "1", "MaxSize": "512",
+                       "Context": "Applications", "Type": "Scalable"},
+}
+
+cp = configparser.ConfigParser(strict=False)
+cp.optionxform = str
+cp.read(theme_file)
+
+existing = [d.strip() for d in cp["Icon Theme"].get("Directories", "").split(",") if d.strip()]
+existing_set = set(existing)
+
+added = []
+for d, stanza in APP_DIR_STANZAS.items():
+    if d not in existing_set:
+        existing.append(d)
+        existing_set.add(d)
+        added.append(d)
+    cp[d] = stanza  # always (re)assert contents — cheap, idempotent
+
+cp["Icon Theme"]["Directories"] = ",".join(existing)
+
+with open(theme_file, "w") as f:
+    f.write("[Icon Theme]\n")
+    for k, v in cp["Icon Theme"].items():
+        f.write(f"{k}={v}\n")
+    for section in cp.sections():
+        if section == "Icon Theme":
+            continue
+        f.write(f"\n[{section}]\n")
+        for k, v in cp[section].items():
+            f.write(f"{k}={v}\n")
+
+if added:
+    print(f"  index.theme: registered app-icon directories: {', '.join(added)}")
+PYEOF
+}
+
 patch_full_breeze_theme() {
     local SRC="/usr/share/icons/breeze-dark"
     [ -d "$SRC" ] || { echo "  breeze-dark not found, skipping full-theme pass"; return 1; }
+
+    ensure_icon_theme_index
+    ensure_app_icon_directories
 
     # Multiprocessing pool — each SVG's read/regex/write is fully
     # independent of every other one (no shared state between files, only

@@ -146,13 +146,10 @@ cmd_install() {
     # 3 SCRIPT INSTALLATION
     source "$SUPPORT/script_install.sh"
 
-    # 4 WALLPAPER SOURCE FALLBACK
-    # By default the ropo does not ship any wallpaper folder, so if it's
-    # missing, fall back to the smaller ./wallpapersDefaultInstall set via
-    # a persistent symlink — every script that expects ./wallpapers
-    # (including this installer's own --update-wallpapers) then keeps
-    # working with no separate fallback logic needed anywhere else.
+    # 4 WALLPAPER CLONE AND FALLBACK
+    # If no wallpapers are cloned it will use the fallback
     if [ ! -d "./wallpapers" ] && [ -d "./wallpapersDefaultInstall" ]; then
+        source "$SUPPORT/wallpaperClone.sh"
         echo "No ./wallpapers folder found — using bundled wallpapersDefaultInstall instead."
         ln -s "./wallpapersDefaultInstall" "./wallpapers"
     fi

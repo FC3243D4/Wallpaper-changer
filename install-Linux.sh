@@ -200,7 +200,7 @@ cmd_install() {
                 if grep -q 'hl.env("PRIMARY_DISPLAY"' "$USERDEFAULTS_LUA" 2>/dev/null; then
                     echo "PRIMARY_DISPLAY already configured in 01-UserDefaults.lua — leaving it as-is."
                 else
-                    sed -i "s|hl.env(\"PRIMARY-DISPLAY\", \"x\")|hl.env(\"PRIMARY_DISPLAY\", \"${primary_display}\")|" "$USERDEFAULTS_LUA"
+                    sed -i "s|hl.env(\"PRIMARY_DISPLAY\", \"x\")|hl.env(\"PRIMARY_DISPLAY\", \"${primary_display}\")|" "$USERDEFAULTS_LUA"
                     echo "PRIMARY_DISPLAY set to $primary_display in 01-UserDefaults.lua."
                 fi
             else

@@ -100,7 +100,7 @@ exit(0 if any('$wclass' in c.get('class','').lower() for c in clients) else 1)
         done
 
         # Restore Hyprland layout state after all restarts
-        sleep 1 && "$SUPPORT/hyprMasterLayoutPreservation.sh" restore
+        "$SUPPORT/hyprMasterLayoutPreservation.sh" restore
 
         systemctl --user restart waybar.service
 

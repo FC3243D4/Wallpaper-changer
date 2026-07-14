@@ -147,16 +147,77 @@ cmd_install() {
     # 3 SCRIPT INSTALLATION
     source "$SUPPORT/script_install.sh"
 
-    # 4 WALLPAPER INSTALLATION
+    # 4 WALLPAPER SOURCE FALLBACK
+    # Some repo checkouts don't ship the full ./wallpapers tree (e.g. to
+    # keep a base clone small, or avoid nsfw content by default). If it's
+    # missing, fall back to the smaller ./wallpapersDefaultInstall set via
+    # a persistent symlink — every script that expects ./wallpapers
+    # (including this installer's own --update-wallpapers) then keeps
+    # working with no separate fallback logic needed anywhere else.
+    if [ ! -d "./wallpapers" ] && [ -d "./wallpapersDefaultInstall" ]; then
+        echo "No ./wallpapers folder found — using bundled wallpapersDefaultInstall instead."
+        ln -s "./wallpapersDefaultInstall" "./wallpapers"
+    fi
+
+    # 5 WALLPAPER INSTALLATION
     source "$SUPPORT/wallpaper_install.sh"
 
-    # 5 INSTALL THEMES
+    # 6 INSTALL THEMES
     source "$SUPPORT/install_themes.sh"
 
-    # 6 OFFER ZEN BROWSER HOT RELOAD (only if Zen is detected)
+    # 7 SET PRIMARY DISPLAY
+    # WallpaperChanger's symlink-based wallpaper application needs a
+    # primary display set to work correctly. Detects whichever connected
+    # output sits at position 0,0, applies it immediately (so wallpaper
+    # application below works this session too, without needing a
+    # Hyprland restart first), and writes it into Start_Apps.lua so future
+    # sessions set it automatically on login.
+    STARTAPPS_LUA="$HOME/.config/hypr/UserConfigs/Start_Apps.lua"
+    if ! command -v xrandr >/dev/null 2>&1; then
+        echo "xrandr not found — skipping primary display setup."
+    else
+        primary_display=$(xrandr --query 2>/dev/null | awk '
+            / connected/ {
+                for (i = 1; i <= NF; i++) {
+                    if ($i ~ /^[0-9]+x[0-9]+\+0\+0$/) {
+                        print $1
+                        exit
+                    }
+                }
+            }
+        ')
+
+        if [ -z "$primary_display" ]; then
+            echo "Could not detect a display at position 0,0 — skipping primary display setup."
+            echo "You may need to set this manually in $STARTAPPS_LUA."
+        elif [ ! -f "$STARTAPPS_LUA" ]; then
+            echo "$STARTAPPS_LUA not found — skipping primary display setup."
+        else
+            xrandr --output "$primary_display" --primary 2>/dev/null
+            if grep -qE '^\s*"xrandr --output .+ --primary",' "$STARTAPPS_LUA" 2>/dev/null; then
+                echo "Start_Apps.lua already has an active primary-display line — leaving it as-is."
+            else
+                sed -i "s|--\"xrandr --output X --primary\",|\"xrandr --output ${primary_display} --primary\",|" "$STARTAPPS_LUA"
+                echo "Primary display set to $primary_display (xrandr applied now, Start_Apps.lua updated for future sessions)."
+            fi
+        fi
+    fi
+
+    # 8 APPLY WALLPAPER/THEME NOW
+    # Nearly everything downstream (matugen, icon theming, GTK/KDE colors,
+    # tray icons, etc.) depends on .current_wallpaper existing — nothing
+    # sets that until a wallpaper is actually applied. Do it now instead
+    # of waiting for the next Hyprland session start, so the system is
+    # fully themed the moment installation finishes.
+    if [ -x "$HOME/.config/WallpaperChanger/WallpaperApplicator.sh" ]; then
+        echo "Applying a random wallpaper to finish setting up theming..."
+        "$HOME/.config/WallpaperChanger/WallpaperApplicator.sh" random
+    fi
+
+    # 9 OFFER ZEN BROWSER HOT RELOAD (only if Zen is detected)
     source "$SUPPORT/zen_hotreload_prompt.sh"
 
-    # 7 FINAL MESSAGE
+    # 10 FINAL MESSAGE
     source "$SUPPORT/final_message.sh"
 }
 

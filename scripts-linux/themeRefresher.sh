@@ -77,7 +77,7 @@ cmd_full() {
     APPS[code]="x|code|code|code|code"
     APPS[vesktop]="x|vesktop|vesktop|vesktop|vesktop"
     APPS[nativmix]="x|nativmix|nativmix|nativmix --hidden --restart|"
-    APPS[localsend]="x|localsend|localsend|localsend|localsend"
+    APPS[localsend]="x|localsend|localsend|localsend|localsend --hidden"
 
 
     source "$SUPPORT/appRestarter.sh"

@@ -17,7 +17,7 @@ EOF
 cmd_full() {
     # Save Hyprland layout state before any restarts
     if [ "$XDG_CURRENT_DESKTOP" == "Hyprland" ]; then
-        "$SUPPORT/hyprMasterLayoutPreservation.sh" save
+        "$SUPPORT/hyprLayoutPreservation.sh" save
     fi
 
     # 1. Choose accent color from wallpaper
@@ -72,12 +72,12 @@ cmd_full() {
     declare -A APPS
     APPS[dolphin]="x|dolphin|dolphin|dolphin|dolphin"
     #APPS[zen]="f|zen-bin|zen-bin|zen-browser|zen" # removed since adding hot reloading for zen
-    APPS[ferdium]="f|electron.*ferdium-bin|electron.*ferdium-bin|ferdium|"
+    APPS[ferdium]="f|electron.*ferdium-bin|electron.*ferdium-bin|ferdium|ferdium"
     APPS[sourcegit]="x|sourcegit|sourcegit|sourcegit|sourcegit"
     APPS[code]="x|code|code|code|code"
     APPS[vesktop]="x|vesktop|vesktop|vesktop|vesktop"
     APPS[nativmix]="x|nativmix|nativmix|nativmix --hidden --restart|"
-    APPS[localsend]="x|localsend|localsend|localsend|localsend --hidden"
+    APPS[localsend]="x|localsend|localsend|localsend --hidden|localsend"
 
 
     source "$SUPPORT/appRestarter.sh"
@@ -100,7 +100,7 @@ exit(0 if any('$wclass' in c.get('class','').lower() for c in clients) else 1)
         done
 
         # Restore Hyprland layout state after all restarts
-        "$SUPPORT/hyprMasterLayoutPreservation.sh" restore
+        "$SUPPORT/hyprLayoutPreservation.sh" restore
 
         systemctl --user restart waybar.service
 

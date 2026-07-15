@@ -57,3 +57,7 @@ Layout restoration can also be run manually, independent of `themeRefresher.sh`:
 hyprLayoutPreservation.sh save      # snapshot the current layout of every workspace
 hyprLayoutPreservation.sh restore   # restore the most recent snapshot
 ```
+
+## Icons
+
+This repo ships the monochrome icon set used by `themeRefresher.sh`'s icon patching step (and by the icon patchers in [hypr-dotfiles](https://github.com/FC3243D4/hypr-dotfiles), which consumes this set rather than shipping its own). Most icons come from [Tabler Icons](https://tabler.io/icons), used under the [MIT License](https://github.com/tabler/tabler-icons/blob/main/LICENSE), with no modifications to the icon shapes themselves beyond recoloring to the current accent color. A number of icons (mainly per-game/per-app overrides not covered by Tabler's set) are custom-made.

@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# hyprMasterLayoutPreservation.sh
+# hyprLayoutPreservation.sh
 # Saves and restores Hyprland layout state for ALL tiled workspaces.
 # Supports both the "master" layout (master/slave stack) and the
 # "dwindle" layout (binary split tree).
 #
 # Usage:
-#   hyprMasterLayoutPreservation.sh save
-#   hyprMasterLayoutPreservation.sh restore
+#   hyprLayoutPreservation.sh save
+#   hyprLayoutPreservation.sh restore
 
 STATE_FILE="/tmp/hyprLayoutState.txt"
 

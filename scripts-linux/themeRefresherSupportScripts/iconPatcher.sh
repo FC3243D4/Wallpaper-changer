@@ -1194,62 +1194,6 @@ patch_cachyos_kernel_manager_icon() {
     fi
 }
 
-# Tray icon: deliberately NOT accent-colored. Vesktop's tray icon only
-# visibly refreshes when the icon is re-selected through its own UI, not
-# on file/settings changes from outside — so a plain, static white icon
-# (that never needs re-selecting) is more reliable than chasing per-accent
-# recoloring here. Requires rsvg-convert (SVG rasterize) and ImageMagick
-# (badge compositing). Called from patch_discord_vesktop_icons.
-patch_vesktop_tray_icon() {
-    local src="$1"
-    VESKTOP_SETTINGS="$HOME/.config/vesktop/settings.json"
-    if command -v rsvg-convert >/dev/null 2>&1 && [ -f "$VESKTOP_SETTINGS" ]; then
-        TRAY_DIR="$SUPPORT/tray-icons"
-        mkdir -p "$TRAY_DIR"
-
-        white_svg="$(mktemp --suffix=.svg)"
-        sed "s/currentColor/#ffffff/g" "$src" > "$white_svg"
-
-        tray_png="$TRAY_DIR/vesktop-tray.png"
-        rsvg-convert -w 256 -h 256 "$white_svg" -o "$tray_png"
-        rm -f "$white_svg"
-        echo "Vesktop tray icon generated (white)"
-
-        # Unread-state variant: same white icon with a red notification
-        # dot composited in the bottom-right corner.
-        tray_png_unread="$TRAY_DIR/vesktop-tray-unread.png"
-        if command -v magick >/dev/null 2>&1; then
-            magick "$tray_png" -fill "#ed4245" -stroke none \
-                -draw "circle 200,56 200,16" "$tray_png_unread"
-            echo "Vesktop tray icon (unread/red-dot) generated"
-        elif command -v convert >/dev/null 2>&1; then
-            convert "$tray_png" -fill "#ed4245" -stroke none \
-                -draw "circle 200,56 200,16" "$tray_png_unread"
-            echo "Vesktop tray icon (unread/red-dot) generated"
-        else
-            echo "  ImageMagick not found — skipping unread-state tray icon"
-        fi
-
-        python3 - "$VESKTOP_SETTINGS" "$tray_png" << 'EOF'
-import json
-import sys
-
-settings_path, tray_png = sys.argv[1], sys.argv[2]
-with open(settings_path, "r") as f:
-    data = json.load(f)
-
-if data.get("trayIconPath") != tray_png:
-    data["trayIconPath"] = tray_png
-    with open(settings_path, "w") as f:
-        json.dump(data, f, indent=4)
-    print("  trayIconPath updated (re-select it once in Vesktop's tray icon")
-    print("  picker to force a visual refresh — see prior troubleshooting)")
-EOF
-    elif ! command -v rsvg-convert >/dev/null 2>&1; then
-        echo "  rsvg-convert not found — skipping Vesktop tray icon (install librsvg for this)"
-    fi
-}
-
 # Discord/Vesktop share one base icon, and Vesktop additionally needs the
 # tray-state PNGs above — too entangled for the generic engine.
 patch_discord_vesktop_icons() {
@@ -1264,7 +1208,6 @@ patch_discord_vesktop_icons() {
             sed "s/currentColor/$accent/g" "$src" > "$ICON_DIR/apps/scalable/vesktop.svg"
             echo "Vesktop icon patched"
             patch_desktop_icon "vesktop" "vesktop.desktop" "*vesktop*.desktop"
-            patch_vesktop_tray_icon "$src"
         fi
     fi
 }

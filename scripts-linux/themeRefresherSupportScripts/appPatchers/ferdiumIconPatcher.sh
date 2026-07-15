@@ -20,7 +20,7 @@ accent="#$color"
 SUPPORT="$HOME/.config/WallpaperChanger/themeRefresherSupportScripts"
 ICONS="$SUPPORT/svg"
 FERDIUM_RECIPES="$HOME/.config/Ferdium/recipes"
-FERDIUM_ICON_OUT="$SUPPORT/ferdium-icons"
+FERDIUM_ICON_OUT="$HOME/.config/Ferdium/themed-icons"
 
 mkdir -p "$FERDIUM_ICON_OUT"
 

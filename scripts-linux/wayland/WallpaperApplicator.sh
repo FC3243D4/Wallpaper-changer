@@ -82,6 +82,7 @@ mapfile -t -O 1 refresh < <(echo "$displays" | cut -d '@' -f2 | tr -d ' ')
 # -----------------------------------------------------------------
 
 n=1
+symlinkSet=false
 while [[ -n ${var[$n]} ]]; do
     screen=${var[$n]}
 
@@ -117,9 +118,15 @@ while [[ -n ${var[$n]} ]]; do
 
     if [[ $primary == $screen ]]; then
             ln -sf $Wallpaper $HOME/.config/WallpaperChanger/.current_wallpaper
+            symlinkSet=true
     fi
     ((n++))
 done
+
+if [ "$symlinkSet" = false ]; then
+    echo "No primary display detected via xrandr — falling back to the 16-9 version of the wallpaper for .current_wallpaper."
+    ln -sf "$wallDIR$WallpaperRelativePath" "$HOME/.config/WallpaperChanger/.current_wallpaper"
+fi
 
 # -----------------------------------------------------------------
 # 4️⃣ Refresh the theme

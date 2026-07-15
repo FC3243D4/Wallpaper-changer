@@ -33,8 +33,6 @@ SUPPORT="$HOME/.config/WallpaperChanger/themeRefresherSupportScripts"
 ICONS="$SUPPORT/svg"
 GAME_ICONS="$ICONS/games"
 ICON_DIR="$HOME/.local/share/icons/breeze-dark-accent"
-TRAY_DIR="$SUPPORT/tray-icons"
-mkdir -p "$TRAY_DIR"
 
 # ---------------------------------------------------------------------------
 # Match waybar's text color exactly, not just "the same seed".
@@ -114,18 +112,6 @@ fix_system_dir_permissions() {
     echo "  Run this once yourself, then re-run this script:"
     echo "    sudo chown -R \$USER $dir"
     return 1
-}
-
-# rasterize_tray_png <name> <src_svg> [size]
-# Writes $TRAY_DIR/<name>-tray.png at the given size (default 24 — a common
-# panel tray size; bump per-app below if yours renders too small/blurry).
-rasterize_tray_png() {
-    local name="$1" src="$2" size="${3:-24}"
-    if ! command -v rsvg-convert >/dev/null 2>&1; then
-        echo "  rsvg-convert not found — install librsvg to generate tray PNGs" >&2
-        return 1
-    fi
-    rsvg-convert -w "$size" -h "$size" "$src" -o "$TRAY_DIR/${name}-tray.png"
 }
 
 # ===========================================================================
@@ -631,6 +617,90 @@ patch_onedrivegui_tray() {
     echo "  (originals preserved as *.png.orig next to each file)"
 }
 
+# ===========================================================================
+# 4. Vesktop — confirmed via `find ~/.config/vesktop` that the real,
+#    currently-shipping (v1.6.0+) "User Assets" feature stores its picked
+#    tray icon at a literal, extensionless file:
+#
+#        ~/.config/vesktop/userAssets/tray
+#        ~/.config/vesktop/userAssets/trayUnread   (badge overlay variant)
+#
+#    copied there once when you use the "Customize" button under
+#    Settings -> User Assets -> Tray. `trayIconPath` in settings.json
+#    LOOKS like the right hook (it's exactly what the early, never-merged
+#    2024 draft PR #576 used) but is dead: the actual shipped feature
+#    (#1179) is a full rewrite that doesn't read it at all. Don't be
+#    fooled by it again — the file below is the one that matters.
+#
+#    Electron re-reads this file from disk on every tray repaint, same
+#    reasoning as before — no restart needed *if* Vesktop is already
+#    running past its initial load, though a long-idle instance since
+#    boot still won't repaint until something (unread count, mute, or a
+#    fresh launch) triggers one. See VESKTOP_TRAY_RESTART below.
+# ===========================================================================
+
+patch_vesktop_tray() {
+    command -v vesktop >/dev/null 2>&1 || return 0
+
+    local user_assets="$HOME/.config/vesktop/userAssets"
+
+    # Don't create userAssets/ ourselves if Vesktop has never initialized
+    # it — writing files there before Vesktop knows about custom assets
+    # at all may not be picked up. Ask once via the UI (Customize ->
+    # pick any file, for both Tray and Tray Unread) so Vesktop creates
+    # its own tray/trayUnread files, then this script just keeps
+    # overwriting them from then on.
+    [ -d "$user_assets" ] || {
+        echo "  vesktop: $user_assets doesn't exist yet — open Vesktop's"
+        echo "  Settings -> User Assets -> Tray/Tray Unread -> Customize"
+        echo "  and pick any image once for each, then re-run this script."
+        return 1
+    }
+
+    command -v rsvg-convert >/dev/null 2>&1 || {
+        echo "  vesktop: rsvg-convert not found, cannot rasterize"; return 1
+    }
+
+    local patched=0
+
+    # -- plain tray icon --
+    local svg
+    svg=$(resolve_themed_svg "vesktop") || svg=$(resolve_themed_svg "discord") || {
+        echo "  vesktop: no themed base icon found for tray, skipping"
+    }
+    if [ -n "$svg" ]; then
+        local target="$user_assets/tray"
+        if [ "$LIST_ONLY" -eq 1 ]; then
+            echo "vesktop: would overwrite $target"
+        else
+            rsvg-convert -w 64 -h 64 "$svg" -o "$target" \
+                && { echo "Vesktop tray icon patched in place ($target)"; patched=$((patched + 1)); }
+        fi
+    fi
+
+    # -- unread-badge variant — separate base icon, since the badge is
+    # baked into the artwork itself rather than composited by Vesktop
+    # (unlike Ferdium/OneDriveGUI, there's no separate dot overlay step
+    # here — whatever discord-unread_base_icon.svg draws is exactly what
+    # shows in the tray). --
+    local svg_unread
+    svg_unread=$(resolve_themed_svg "discord-unread") || {
+        echo "  vesktop: discord-unread_base_icon.svg not found, skipping trayUnread"
+    }
+    if [ -n "$svg_unread" ]; then
+        local target_unread="$user_assets/trayUnread"
+        if [ "$LIST_ONLY" -eq 1 ]; then
+            echo "vesktop: would overwrite $target_unread"
+        else
+            rsvg-convert -w 64 -h 64 "$svg_unread" -o "$target_unread" \
+                && { echo "Vesktop trayUnread icon patched in place ($target_unread)"; patched=$((patched + 1)); }
+        fi
+    fi
+
+    [ "$LIST_ONLY" -eq 1 ] && return 0
+    [ "$patched" -gt 0 ]
+}
+
 # time_step <label> <function> — runs the given function, prints its
 # wall-clock time to stderr afterward. awk instead of bc for the float
 # subtraction so this doesn't need an extra package installed.
@@ -652,5 +722,6 @@ time_step "streamcontroller" patch_streamcontroller_tray
 time_step "steam"           patch_steam_tray
 time_step "blueman"         patch_blueman_tray
 time_step "onedrivegui"     patch_onedrivegui_tray
+time_step "vesktop"         patch_vesktop_tray
 
 [ "$LIST_ONLY" -eq 0 ] && echo "Tray icons patched with $accent"

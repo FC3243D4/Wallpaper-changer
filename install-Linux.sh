@@ -160,62 +160,7 @@ cmd_install() {
     # 6 INSTALL THEMES
     source "$SUPPORT/install_themes.sh"
 
-    # 7 SET PRIMARY DISPLAY
-    # WallpaperChanger's symlink-based wallpaper application needs a
-    # primary display set to work correctly. Detects whichever connected
-    # output sits at position 0,0, applies it immediately (so wallpaper
-    # application below works this session too, without needing a
-    # Hyprland restart first), stores it as PRIMARY_DISPLAY in
-    # 01-UserDefaults.lua, and uncomments the line in Startup_Apps.lua
-    # that references that env var — so if the display ever changes
-    # later, only UserDefaults.lua needs updating, not Startup_Apps.lua.
-    USERDEFAULTS_LUA="$HOME/.config/hypr/UserConfigs/01-UserDefaults.lua"
-    STARTUPAPPS_LUA="$HOME/.config/hypr/UserConfigs/Startup_Apps.lua"
-    if ! command -v xrandr >/dev/null 2>&1; then
-        echo "xrandr not found — skipping primary display setup."
-    else
-        primary_display=$(xrandr --query 2>/dev/null | awk '
-            / connected/ {
-                for (i = 1; i <= NF; i++) {
-                    if ($i ~ /^[0-9]+x[0-9]+\+0\+0$/) {
-                        print $1
-                        exit
-                    }
-                }
-            }
-        ')
-
-        if [ -z "$primary_display" ]; then
-            echo "Could not detect a display at position 0,0 — skipping primary display setup."
-            echo "You may need to set this manually in $USERDEFAULTS_LUA."
-        else
-            xrandr --output "$primary_display" --primary 2>/dev/null
-
-            if [ -f "$USERDEFAULTS_LUA" ]; then
-                if grep -q 'hl.env("PRIMARY_DISPLAY"' "$USERDEFAULTS_LUA" 2>/dev/null; then
-                    echo "PRIMARY_DISPLAY already configured in 01-UserDefaults.lua — leaving it as-is."
-                else
-                    sed -i "s|hl.env(\"PRIMARY_DISPLAY\", \"x\")|hl.env(\"PRIMARY_DISPLAY\", \"${primary_display}\")|" "$USERDEFAULTS_LUA"
-                    echo "PRIMARY_DISPLAY set to $primary_display in 01-UserDefaults.lua."
-                fi
-            else
-                echo "$USERDEFAULTS_LUA not found — skipping."
-            fi
-
-            if [ -f "$STARTUPAPPS_LUA" ]; then
-                if grep -qE '^\s*"xrandr --output \$PRIMARY_DISPLAY --primary",' "$STARTUPAPPS_LUA" 2>/dev/null; then
-                    echo "Startup_Apps.lua already references \$PRIMARY_DISPLAY — leaving it as-is."
-                else
-                    sed -i 's|--"xrandr --output X --primary",|"xrandr --output $PRIMARY_DISPLAY --primary",|' "$STARTUPAPPS_LUA"
-                    echo "Startup_Apps.lua updated to use \$PRIMARY_DISPLAY."
-                fi
-            else
-                echo "$STARTUPAPPS_LUA not found — skipping."
-            fi
-        fi
-    fi
-
-    # 8 APPLY WALLPAPER/THEME NOW
+    # 7 APPLY WALLPAPER/THEME NOW
     # Nearly everything downstream (matugen, icon theming, GTK/KDE colors,
     # tray icons, etc.) depends on .current_wallpaper existing — nothing
     # sets that until a wallpaper is actually applied. Do it now instead
@@ -233,10 +178,10 @@ cmd_install() {
         fi
     fi
 
-    # 9 OFFER ZEN BROWSER HOT RELOAD (only if Zen is detected)
+    # 8 OFFER ZEN BROWSER HOT RELOAD (only if Zen is detected)
     source "$SUPPORT/zen_hotreload_prompt.sh"
 
-    # 10 FINAL MESSAGE
+    # 9 FINAL MESSAGE
     source "$SUPPORT/final_message.sh"
 }
 

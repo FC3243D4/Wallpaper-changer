@@ -38,14 +38,18 @@ Once installed, the day-to-day entry point on Linux is `themeRefresher.sh` (foun
 
 Restarting apps to apply a new theme inevitably scatters your windows. On Hyprland, `--full` automatically saves your current window layout beforehand and restores it afterward, using `hyprLayoutPreservation.sh` (in the same support scripts folder). This happens transparently — no extra setup needed to just use `--full` as-is.
 
-It supports both the `master` and `dwindle` layouts, including **mixed setups where different workspaces use different layouts**. By default every workspace is assumed to use whatever `general:layout` is currently set to, but you can override this per-workspace by adding a `layout` field to a workspace rule in `~/.config/hypr/UserConfigs/WorkSpaceRules.lua`, following standard Hyprland Lua syntax:
+It supports **all four Hyprland layouts** — `master`, `dwindle`, `scrolling`, and `monocle` — including **mixed setups where different workspaces use different layouts simultaneously**. By default every workspace is assumed to use whatever `general:layout` is currently set to, but you can override this per-workspace by adding a `layout` field to a workspace rule in `~/.config/hypr/UserConfigs/WorkSpaceRules.lua`, following standard Hyprland Lua syntax:
 
 ```lua
 hl.workspace_rule({ workspace = "2", layout = "master" })
 hl.workspace_rule({ workspace = "5", layout = "dwindle" })
+hl.workspace_rule({ workspace = "7", layout = "scrolling" })
+hl.workspace_rule({ workspace = "9", layout = "monocle" })
 ```
 
 Any workspace without a matching rule falls back to the global default. Commented-out rules (both `--` and `--[[ ]]` style) are correctly ignored.
+
+One thing worth knowing: for every layout except `monocle`, saving is completely passive — it just reads window positions, with no visible side effects. `monocle` is the exception: since every window in a monocle stack occupies the exact same space, there's no positional information to read, and no way to query the stack order directly. To capture it, the save step briefly switches to each monocle workspace and cycles through its windows to record the order, then returns you to wherever you started. You'll see a brief flash on monocle workspaces specifically when saving; every other layout is unaffected.
 
 Layout restoration can also be run manually, independent of `themeRefresher.sh`:
 

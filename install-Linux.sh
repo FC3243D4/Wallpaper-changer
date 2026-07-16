@@ -179,10 +179,10 @@ cmd_install() {
         echo""
         echo""
         if [[ ! $REPLY =~ ^[Nn]$ ]]; then
-            echo "It is strongly advised for you to run this script once the installation is done to theme everything"
-        else
             echo "Applying a random wallpaper to finish setting up theming..."
             "$HOME/.config/WallpaperChanger/WallpaperApplicator.sh" random
+        else
+            echo "It is strongly advised for you to run this script once the installation is done to theme everything"
         fi
     fi
 

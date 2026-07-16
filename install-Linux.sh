@@ -141,6 +141,7 @@ cmd_install() {
     WallpapersDirExists=false
     CopyWallpapers=true
     CopyNsfw=false
+    wallpapersRepo=false
 
     # 1 CHECK DEPENDENCIES
     if ! source "$SUPPORT/dependency_check.sh"; then

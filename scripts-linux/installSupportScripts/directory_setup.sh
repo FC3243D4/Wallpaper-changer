@@ -3,8 +3,8 @@
 # Checks for existing config/wallpaper directories and the rofi config,
 # prompting the user for overwrite/copy decisions.
 # Meant to be SOURCED from install-Linux.sh so that ConfigDirExists,
-# CopyScripts, WallpapersDirExists, CopyWallpapers, CreatePicturesDir,
-# and wallpapersRepo are visible to later modules.
+# CopyScripts, WallpapersDirExists, CopyWallpapers, and CreatePicturesDir
+# are visible to later modules.
 
 if [ -d "$HOME/.config/WallpaperChanger" ]; then
     read -p "Directory $HOME/.config/WallpaperChanger exists. Do you want to delete it and all its content? [y/N]" -n 1 -r
@@ -12,7 +12,7 @@ if [ -d "$HOME/.config/WallpaperChanger" ]; then
     echo ""
     if [[ ! $REPLY =~ ^[Yy]$ ]]; then
         ConfigDirExists=true
-        read -p "Do you still want to copy this repo's scripts to the directory? [y/N]" -n 1 -r
+        read -p "Do you still want to copy the current wallpapers folder's scripts to the directory? [y/N]" -n 1 -r
         echo ""
         echo ""
         if [[ ! $REPLY =~ ^[Yy]$ ]]; then
@@ -33,8 +33,7 @@ if [ -d "$HOME/Pictures" ]; then
         if [[ ! $REPLY =~ ^[Yy]$ ]]; then
             WallpapersDirExists=true
             if [ -d ./wallpapers ]; then
-                wallpapersRepo=true
-                read -p "Do you still want to copy this repo's wallpapers to the directory? [y/N]" -n 1 -r
+                read -p "Do you still want to copy the current wallpapers folder's wallpapers to the directory? [y/N]" -n 1 -r
                 echo ""
                 echo ""
                 if [[ ! $REPLY =~ ^[Yy]$ ]]; then
@@ -48,8 +47,7 @@ if [ -d "$HOME/Pictures" ]; then
         else
             rm -r "$HOME/Pictures/wallpapers"
             if [ -d ./wallpapers ]; then
-                wallpapersRepo=true
-                read -p "Do you want to copy this repo's wallpapers to the directory? [y/N]" -n 1 -r
+                read -p "Do you want to copy the current wallpapers folder's wallpapers to the directory? [y/N]" -n 1 -r
                 echo ""
                 echo ""
                 if [[ ! $REPLY =~ ^[Yy]$ ]]; then
@@ -72,8 +70,7 @@ else
     else
         CreatePicturesDir=true
         if [ -d ./wallpapers ]; then
-            wallpapersRepo=true
-            read -p "Do you want to copy this repo's wallpapers to the directory? [y/N]" -n 1 -r
+            read -p "Do you want to copy the current wallpapers folder's wallpapers to the directory? [y/N]" -n 1 -r
             echo ""
             echo ""
             if [[ ! $REPLY =~ ^[Yy]$ ]]; then

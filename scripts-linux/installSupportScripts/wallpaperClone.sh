@@ -58,12 +58,18 @@ EOF
             echo "Please place your wallpapers into the wallpapers folder now, following the structure and rules shown above. If you wish to cancel the operation simply delete the wallpapers folder and procede"
             read -p "Press enter once you're done adding your wallpapers..." -r
             echo ""
+            if [ -d "./wallpapers" ]; then
+                wallpapersRepo=true
+            fi
         elif [ "$chosenOption" == "git repo's" ]; then
             read -p "Please paste here the repo's link: " wallpaperRepo
             echo ""
             echo ""
             if [ -n "$wallpaperRepo" ]; then
                 git clone "$wallpaperRepo" ./wallpapers
+            fi
+            if [ -d "./wallpapers" ]; then
+                wallpapersRepo=true
             fi
         fi
     fi

@@ -148,19 +148,21 @@ cmd_install() {
         exit 1
     fi
 
-    # 2 CHECK FOR EXISTING DIRECTORIES AND FILES
-    source "$SUPPORT/directory_setup.sh"
-
-    # 3 SCRIPT INSTALLATION
-    source "$SUPPORT/script_install.sh"
-
-    # 4 WALLPAPER CLONE AND FALLBACK
+    # 2 WALLPAPER CLONE AND FALLBACK
     # If no wallpapers are cloned it will use the fallback
     if [ ! -d "./wallpapers" ] && [ -d "./wallpapersDefaultInstall" ]; then
         source "$SUPPORT/wallpaperClone.sh"
-        echo "No ./wallpapers folder found — using bundled wallpapersDefaultInstall instead."
-        ln -s "./wallpapersDefaultInstall" "./wallpapers"
+        if [ ! -d "./wallpapers" ] && [ -d "./wallpapersDefaultInstall" ]; then
+            echo "No ./wallpapers folder found — using bundled wallpapersDefaultInstall instead."
+            ln -s "./wallpapersDefaultInstall" "./wallpapers"
+        fi
     fi
+
+    # 3 CHECK FOR EXISTING DIRECTORIES AND FILES
+    source "$SUPPORT/directory_setup.sh"
+
+    # 4 SCRIPT INSTALLATION
+    source "$SUPPORT/script_install.sh"
 
     # 5 WALLPAPER INSTALLATION
     source "$SUPPORT/wallpaper_install.sh"
@@ -168,7 +170,10 @@ cmd_install() {
     # 6 INSTALL THEMES
     source "$SUPPORT/install_themes.sh"
 
-    # 7 APPLY WALLPAPER/THEME NOW
+    # 7 OFFER ZEN BROWSER HOT RELOAD (only if Zen is detected)
+    source "$SUPPORT/zen_hotreload_prompt.sh"
+
+    # 8 APPLY WALLPAPER/THEME NOW
     # Nearly everything downstream (matugen, icon theming, GTK/KDE colors,
     # tray icons, etc.) depends on .current_wallpaper existing — nothing
     # sets that until a wallpaper is actually applied. Do it now instead
@@ -185,9 +190,6 @@ cmd_install() {
             echo "It is strongly advised for you to run this script once the installation is done to theme everything"
         fi
     fi
-
-    # 8 OFFER ZEN BROWSER HOT RELOAD (only if Zen is detected)
-    source "$SUPPORT/zen_hotreload_prompt.sh"
 
     # 9 FINAL MESSAGE
     source "$SUPPORT/final_message.sh"

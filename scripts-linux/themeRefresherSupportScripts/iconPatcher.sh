@@ -40,18 +40,24 @@ ICONS="$SUPPORT/svg"
 GAME_ICONS="$ICONS/games"                 # drop per-game custom icons here
 
 # Symbolic (ColorScheme-Text) icons specifically use matugen's resolved
-# color4/primary instead of the raw wallpaper-sampled seed — matching
+# primary color instead of the raw wallpaper-sampled seed — matching
 # tray icons and waybar text, since these icons show up right next to
 # both (Solaar, NetworkManager, the trash icon, etc.) and any mismatch is
 # just as visible there. Everything using ColorScheme-Accent/Highlight
 # (folders, places, and the rest of the theme) keeps using the raw seed
 # $accent, unaffected. Falls back to $accent if the rendered file isn't
 # found, so this degrades to the previous behavior rather than failing.
+#
+# NOTE: since migrating the waybar template to InioX/matugen-themes, the
+# rendered file moved from .config/waybar/matugen/colors-waybar.css to
+# .config/waybar/colors.css, and the role once called "color4" (raw
+# colors.primary.default.hex) is now just named "primary" — same value,
+# new name.
 symbolic_accent="$accent"
-WAYBAR_COLORS_RENDERED="$HOME/.config/waybar/matugen/colors-waybar.css"
+WAYBAR_COLORS_RENDERED="$HOME/.config/waybar/colors.css"
 if [ -f "$WAYBAR_COLORS_RENDERED" ]; then
-    resolved_color4=$(grep -m1 -oP '@define-color\s+color4\s+\K#[0-9a-fA-F]{6}' "$WAYBAR_COLORS_RENDERED")
-    [ -n "$resolved_color4" ] && symbolic_accent="$resolved_color4"
+    resolved_primary=$(grep -m1 -oP '@define-color\s+primary\s+\K#[0-9a-fA-F]{6}' "$WAYBAR_COLORS_RENDERED")
+    [ -n "$resolved_primary" ] && symbolic_accent="$resolved_primary"
 fi
 
 mkdir -p "$ICON_DIR/apps/16" "$ICON_DIR/apps/22" "$ICON_DIR/apps/24" \
@@ -1079,7 +1085,7 @@ patch_trash_icon() {
 # already generates via ICON_OVERRIDES for the app's own .desktop entries.
 # Exact-match icon lookup means that one-character difference is enough to
 # miss entirely. Same artwork, just also written under the name Dolphin
-# actually asks for here. Uses symbolic_accent (color4) rather than the
+# actually asks for here. Uses symbolic_accent (matugen's primary) rather than the
 # raw seed accent, since this sits in the Places panel alongside other
 # device/status entries rather than functioning as a standalone app icon.
 patch_kdeconnect_places_icon() {

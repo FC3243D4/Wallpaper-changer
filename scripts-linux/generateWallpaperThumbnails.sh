@@ -3,14 +3,24 @@
 # Pre-generates thumbnails for all wallpapers to speed up rofi wallpaper menu.
 # Run once manually; subsequent runs only process new/changed wallpapers.
 
-WALL_DIR="$HOME/Pictures/wallpapers/16-9"
+wallBaseDIR="$HOME/Pictures/wallpapers"
+if [ -d "$wallBaseDIR/16-9" ]; then
+    wallDIR="$wallBaseDIR/16-9"
+else
+    wallDIR=$(find "$wallBaseDIR" -mindepth 1 -maxdepth 1 -type d | sort | head -n 1)
+    if [ -z "$wallDIR" ]; then
+        echo "No '16-9' folder found and no subfolders exist under $wallBaseDIR, exiting..."
+        exit 1
+    fi
+    echo "'16-9' folder not found, falling back to: $wallDIR"
+fi
 CACHE_DIR="$HOME/.cache/wallpaper-thumbnails"
-THUMB_SIZE="300x169"
+THUMB_WIDTH=300
 JOBS=$(nproc)
 
 mkdir -p "$CACHE_DIR"
 
-mapfile -d '' walls < <(find -L "$WALL_DIR" -type f \( \
+mapfile -d '' walls < <(find -L "$wallDIR" -type f \( \
     -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" \) -print0)
 
 total=${#walls[@]}

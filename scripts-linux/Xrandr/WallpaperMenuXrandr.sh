@@ -2,7 +2,17 @@
 # This script for selecting wallpapers with xrandr (for non-wayland users)
 
 # WALLPAPERS PATH
-wallDIR="$HOME/Pictures/wallpapers/16-9"
+wallBaseDIR="$HOME/Pictures/wallpapers"
+if [ -d "$wallBaseDIR/16-9" ]; then
+    wallDIR="$wallBaseDIR/16-9"
+else
+    wallDIR=$(find "$wallBaseDIR" -mindepth 1 -maxdepth 1 -type d | sort | head -n 1)
+    if [ -z "$wallDIR" ]; then
+        echo "No '16-9' folder found and no subfolders exist under $wallBaseDIR, exiting..."
+        exit 1
+    fi
+    echo "'16-9' folder not found, falling back to: $wallDIR"
+fi
 CACHE_DIR="$HOME/.cache/wallpaper-thumbnails"
 
 # Directory for swaync

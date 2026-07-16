@@ -11,16 +11,15 @@ The wallpapers folder should be structured like this
 
 wallpapers
 |--sfw
-    |--16-9 <- base directory of wallpaperApplicator
-    |--21-9 <- or any other aspect ratio you want
+    |--16-9 <- or any other aspect ratio you want
     |--...
 |--nsfw
     |--16-9
-    |--21-9
     |--...
 
 Also there are some rules that the files have to follow:
 - All the wallpapers must have a variant with the same name in all aspect ratio folders
+- If you have an nsfw folder all aspect ratios inside the sfw folder must be present inside the nsfw one and viceversa
 - All the files inside the nsfw parent folder must be named nsfw-<name of the wallpaper>
 - The files must be one of this formats:
     - jpg

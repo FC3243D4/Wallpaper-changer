@@ -4,7 +4,7 @@ read -p "Do you want to clone a repo's wallpapers or provide your own for this s
 echo ""
 echo ""
 if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-    exit 0;
+    return 1;
 else
     cat <<EOF
 The wallpapers folder should be structured like this
@@ -39,7 +39,7 @@ EOF
     echo ""
     echo ""
     if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        exit 0
+        return 1
     else
         options=("provide my own" "git repo's" "cancel")
 

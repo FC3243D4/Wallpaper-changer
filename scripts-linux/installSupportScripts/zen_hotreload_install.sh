@@ -11,6 +11,7 @@
 
 ZEN_INSTALL_DIR="${ZEN_INSTALL_DIR:-}"
 ZEN_HOME="${ZEN_HOME:-$HOME/.zen}"
+ZEN_PROFILE_DIRS="${ZEN_PROFILE_DIRS:-}"
 ZEN_RELOAD_SCRIPT="$SUPPORT/zenThemeReloader.uc.js"
 
 zen_hotreload_detect_install_dir() {

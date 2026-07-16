@@ -106,7 +106,10 @@ fi
 
 if [ "$CopyWallpapers" = true ]; then
     if [ -f "$HOME/.cache/wallpaper_ratios.cache" ]; then
+        echo "removing wallpaper_ratios.cache"
         rm "$HOME/.cache/wallpaper_ratios.cache"
+        echo "removing wallpaper's thumbnail cache"
+        rm -r "$HOME/.cache/wallpaper-thumbnails"
     fi
 
     WALLPAPERS_SOURCE="./wallpapers"

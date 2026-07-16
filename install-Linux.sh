@@ -33,18 +33,28 @@ cmd_zen_hotreload() {
 }
 
 cmd_update_wallpapers() {
-    ASPECT_RATIOS=(
-        "16-9" "21-9" "32-9" "4-3"
-        "16-10" "21-10" "32-10" "3-2"
-        "9-16" "9-21" "9-32" "3-4"
-        "10-16" "10-21" "10-32" "2-3"
-    )
-
     if [ ! -d "$HOME/Pictures/wallpapers" ]; then
         echo "Wallpapers directory not found at $HOME/Pictures/wallpapers."
         echo "Run --install first."
         exit 1
     fi
+
+    # Sourcing wallpaper_install.sh only defines detect_aspect_ratios and
+    # validate_wallpaper_structure here — its copy logic is gated behind
+    # $CreatePicturesDir/$WallpapersDirExists/$CopyWallpapers, which are
+    # never set to true in this code path, so nothing else in it runs.
+    source "$SUPPORT/wallpaper_install.sh"
+
+    WALLPAPERS_SOURCE="./wallpapers"
+    if ! validate_wallpaper_structure "$WALLPAPERS_SOURCE"; then
+        echo "The wallpapers folder structure in the repo is invalid or incomplete, skipping wallpaper update."
+        exit 1
+    fi
+
+    # Detect aspect ratios dynamically instead of relying on a hardcoded list,
+    # so new ratio folders added to the repo are picked up automatically.
+    detectedRatios=()
+    detect_aspect_ratios "$WALLPAPERS_SOURCE" detectedRatios
 
     # Check if any nsfw wallpapers are already present in the destination
     # by looking for files whose names start with "nsfw".
@@ -55,12 +65,12 @@ cmd_update_wallpapers() {
     fi
 
     sourceDirs=()
-    for ratio in "${ASPECT_RATIOS[@]}"; do
-        [ -d "./wallpapers/sfw/$ratio" ] && sourceDirs+=("./wallpapers/sfw/$ratio")
+    for ratio in "${detectedRatios[@]}"; do
+        [ -d "$WALLPAPERS_SOURCE/sfw/$ratio" ] && sourceDirs+=("$WALLPAPERS_SOURCE/sfw/$ratio")
     done
     if [ "$syncNsfw" = true ]; then
-        for ratio in "${ASPECT_RATIOS[@]}"; do
-            [ -d "./wallpapers/nsfw/$ratio" ] && sourceDirs+=("./wallpapers/nsfw/$ratio")
+        for ratio in "${detectedRatios[@]}"; do
+            [ -d "$WALLPAPERS_SOURCE/nsfw/$ratio" ] && sourceDirs+=("$WALLPAPERS_SOURCE/nsfw/$ratio")
         done
     fi
 
@@ -68,8 +78,6 @@ cmd_update_wallpapers() {
         echo "No wallpaper directories found in the repo."
         exit 1
     fi
-
-    source "$SUPPORT/utils.sh"
 
     if [ "$syncNsfw" = true ]; then
         copy_with_bar "Syncing wallpapers..." "${sourceDirs[@]}" "$HOME/Pictures/wallpapers/"

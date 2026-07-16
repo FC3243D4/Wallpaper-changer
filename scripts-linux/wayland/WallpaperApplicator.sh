@@ -9,7 +9,18 @@ primary=${primary%%[[:space:]]*}
 
 echo "Running WallpaperRandomSelect.sh with arguments: $1 $2"
 
-wallDIR="$HOME/Pictures/wallpapers/16-9"
+wallBaseDIR="$HOME/Pictures/wallpapers"
+if [ -d "$wallBaseDIR/16-9" ]; then
+    wallDIR="$wallBaseDIR/16-9"
+else
+    wallDIR=$(find "$wallBaseDIR" -mindepth 1 -maxdepth 1 -type d | sort | head -n 1)
+    if [ -z "$wallDIR" ]; then
+        echo "No '16-9' folder found and no subfolders exist under $wallBaseDIR, exiting..."
+        exit 1
+    fi
+    echo "'16-9' folder not found, falling back to: $wallDIR"
+fi
+
 #create array of all wallpapers in the directory
 PICS=($(find -L ${wallDIR} -type f \( -name "*.jpg" -o -name "*.jpeg" -o -name "*.png" -o -name "*.pnm" -o -name "*.tga" -o -name "*.tiff" -o -name "*.webp" -o -name "*.bmp" -o -name "*.farbfeld" -o -name "*.gif" \)))
 

@@ -10,7 +10,6 @@ source "$SUPPORT/utils.sh"
 
 VALID_EXTENSIONS=("jpg" "jpeg" "png" "pnm" "tga" "tiff" "webp" "bmp" "farbfeld" "gif")
 DEFAULT_WALLPAPERS_DIR="./wallpapersDefaultInstall"
-REQUIRED_RATIO="16-9"
 
 # ---------------------------------------------------------------------------
 # detect_aspect_ratios: lists the aspect-ratio subfolders found under
@@ -28,8 +27,7 @@ detect_aspect_ratios() {
 
 # ---------------------------------------------------------------------------
 # validate_wallpaper_structure: checks:
-#   - the required aspect ratio ($REQUIRED_RATIO) is present, since it's
-#     the base directory wallpaperApplicator relies on
+#   - at least one aspect ratio folder is present under sfw
 #   - every ratio folder under sfw (and nsfw, if present) has the same
 #     set of filenames as every other ratio folder in that same tree
 #   - all files inside nsfw are prefixed with "nsfw-"
@@ -47,13 +45,7 @@ validate_wallpaper_structure() {
     detect_aspect_ratios "$base" ratios
     (( ${#ratios[@]} == 0 )) && return 1
 
-    local has_required=false
     local ratio
-    for ratio in "${ratios[@]}"; do
-        [ "$ratio" = "$REQUIRED_RATIO" ] && has_required=true
-    done
-    $has_required || return 1
-
     is_valid_ext() {
         local ext="${1##*.}"
         ext="${ext,,}"
@@ -67,7 +59,7 @@ validate_wallpaper_structure() {
     local reference=()
     while IFS= read -r -d '' f; do
         reference+=("$(basename "$f")")
-    done < <(find "$sfw_dir/$REQUIRED_RATIO" -maxdepth 1 -type f -print0)
+    done < <(find "$sfw_dir/${ratios[0]}" -maxdepth 1 -type f -print0)
 
     local files f
     for ratio in "${ratios[@]}"; do
@@ -119,7 +111,7 @@ if [ "$CopyWallpapers" = true ]; then
 
     WALLPAPERS_SOURCE="./wallpapers"
     if ! validate_wallpaper_structure "$WALLPAPERS_SOURCE"; then
-        echo "The wallpapers folder structure is invalid, incomplete, or missing the required $REQUIRED_RATIO aspect ratio."
+        echo "The wallpapers folder structure is invalid or incomplete (no aspect ratio folders found, or filenames/extensions are inconsistent across them)."
         echo "Falling back to the default wallpapers included with this install: $DEFAULT_WALLPAPERS_DIR"
         echo ""
         WALLPAPERS_SOURCE="$DEFAULT_WALLPAPERS_DIR"
@@ -140,21 +132,22 @@ if [ "$CopyWallpapers" = true ]; then
     detectedRatios=()
     detect_aspect_ratios "$WALLPAPERS_SOURCE" detectedRatios
 
-    requiredRatios=("$REQUIRED_RATIO")
+    noneLocked=()
     chosenRatios=()
     if (( ${#detectedRatios[@]} > 1 )); then
         echo "Multiple aspect ratios were found. Select which ones to install:"
-        echo "($REQUIRED_RATIO is required and cannot be deselected; space to toggle, enter to confirm)"
+        echo "(space to toggle, enter to confirm)"
         echo ""
-        multiselect chosenRatios detectedRatios[@] requiredRatios[@]
+        multiselect chosenRatios detectedRatios[@] noneLocked[@]
     else
         chosenRatios=("${detectedRatios[@]}")
     fi
 
-    # Safety net: guarantee the required ratio is always installed even if
-    # detection/selection logic above is ever bypassed or changed later.
-    if [[ ! " ${chosenRatios[*]} " == *" $REQUIRED_RATIO "* ]]; then
-        chosenRatios+=("$REQUIRED_RATIO")
+    # Safety net: if nothing ended up selected, install every detected ratio
+    # instead of silently leaving the wallpapers folder empty.
+    if (( ${#chosenRatios[@]} == 0 )); then
+        echo "No aspect ratios selected — installing all detected ratios instead."
+        chosenRatios=("${detectedRatios[@]}")
     fi
 
     # Collect all source directories to copy in a single rsync call so the

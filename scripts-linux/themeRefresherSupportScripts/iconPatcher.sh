@@ -200,6 +200,7 @@ declare -A ICON_OVERRIDES=(
     ["nativmix"]="nativmix-alt"
     ["orcaslicer"]="orcaslicer-alt"
     ["raspberry_pi_imager"]="raspberry-pi"
+    ["intellij_idea_community_edition"]="intellij-idea"
 
     # -- many-to-one shared icons (formerly one function per group) --
     ["advanced_network_configuration"]="network"

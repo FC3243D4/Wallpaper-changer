@@ -109,12 +109,13 @@ exit(0 if any('$wclass' in c.get('class','').lower() for c in clients) else 1)
         disown
     fi
 
-    # OneDriveGUI — special-cased instead of going through appRestarter.sh.
-    # It spawns a separate `onedrive --confdir=... --monitor` child process to
-    # actually do the syncing. A generic kill+relaunch only kills the GUI
-    # wrapper, leaving that child orphaned and still holding the account's
-    # lock file — the freshly relaunched GUI then tries to start a *new* sync
-    # process against the same locked confdir and fails with "already running".
+    # OneDriveGUI — special-cased instead of going through the generic
+    # APPS/appRestarter.sh mechanism. It spawns a separate
+    # `onedrive --confdir=... --monitor` child process to actually do the
+    # syncing. A generic kill+relaunch only kills the GUI wrapper, leaving
+    # that child orphaned and still holding the account's lock file — the
+    # freshly relaunched GUI then tries to start a *new* sync process
+    # against the same locked confdir and fails with "already running".
     if command -v onedrivegui >/dev/null 2>&1 && pgrep -f "onedrivegui" >/dev/null 2>&1; then
         pkill -f "onedrivegui"
         pkill -f "onedrive .*--monitor"
@@ -124,6 +125,37 @@ exit(0 if any('$wclass' in c.get('class','').lower() for c in clients) else 1)
         done
         onedrivegui >/dev/null 2>&1 &
         disown
+    fi
+
+    # Spotify/Spicetify — special-cased instead of going through the generic
+    # APPS/appRestarter.sh mechanism, for the same kind of reason as
+    # OneDriveGUI above: this needs an extra step run *in between* closing
+    # and reopening that the generic kill+relaunch can't express. spicetify
+    # refuses to patch a running Spotify (see spicetifyPostHook.sh), so a
+    # plain restart without the apply in between wouldn't actually pick up
+    # the new colors — this closes it (if it was open), applies while it's
+    # safely down, then reopens it — but only if it was already running.
+    # apply itself always runs (whenever spicetify is available) so the
+    # theme is ready the next time you open Spotify manually, even on a
+    # refresh where it wasn't running — it just never spawns a new Spotify
+    # process on its own.
+    if command -v spicetify >/dev/null 2>&1; then
+        spotify_was_running=false
+        if pgrep -x spotify >/dev/null 2>&1; then
+            spotify_was_running=true
+            pkill -x spotify
+            deadline=$(( $(date +%s) + 5 ))
+            while pgrep -x spotify >/dev/null 2>&1 && [ "$(date +%s)" -lt "$deadline" ]; do
+                sleep 0.1
+            done
+        fi
+
+        spicetify apply >/dev/null 2>&1
+
+        if [ "$spotify_was_running" = true ]; then
+            spotify >/dev/null 2>&1 &
+            disown
+        fi
     fi
 }
 

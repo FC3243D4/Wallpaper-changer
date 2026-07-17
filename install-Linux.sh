@@ -19,10 +19,48 @@ Options:
 EOF
 }
 
+# Regenerates the wallpaper-thumbnails.path unit's PathChanged= list so it
+# always matches whatever aspect-ratio folders currently exist under
+# ~/Pictures/wallpapers, instead of a hardcoded "16-9". Safe to call
+# repeatedly (--thumbnails, --update-wallpapers, --install) — it only
+# rewrites the file and reloads/restarts the watcher if it's actually
+# installed and enabled.
+generate_thumbnails_path_unit() {
+    local wallBaseDIR="$HOME/Pictures/wallpapers"
+    local unitDir="$HOME/.config/systemd/user"
+    local pathUnit="$unitDir/wallpaper-thumbnails.path"
+
+    # Base dir first (catches new/removed ratio folders themselves),
+    # then every existing ratio subfolder (catches files dropped inside).
+    local watchDirs=("$wallBaseDIR")
+    if [ -d "$wallBaseDIR" ]; then
+        while IFS= read -r dir; do
+            watchDirs+=("$dir")
+        done < <(find "$wallBaseDIR" -mindepth 1 -maxdepth 1 -type d | sort)
+    fi
+
+    mkdir -p "$unitDir"
+    {
+        echo "[Unit]"
+        echo "Description=Watch for new wallpapers"
+        echo ""
+        echo "[Path]"
+        for dir in "${watchDirs[@]}"; do
+            echo "PathChanged=$dir"
+        done
+        echo "Unit=wallpaper-thumbnails.service"
+        echo ""
+        echo "[Install]"
+        echo "WantedBy=default.target"
+    } > "$pathUnit"
+}
+
 cmd_thumbnails() {
     echo "Enabling automated watcher for wallpaper thumbnails..."
     mkdir -p ~/.config/systemd/user
-    cp ./scripts-linux/wallpaper-thumbnails.* ~/.config/systemd/user
+    cp ./scripts-linux/wallpaper-thumbnails.service ~/.config/systemd/user
+    generate_thumbnails_path_unit
+    systemctl --user daemon-reload
     systemctl --user enable --now wallpaper-thumbnails.path
     echo "Thumbnail watcher installed successfully."
 }
@@ -87,6 +125,16 @@ cmd_update_wallpapers() {
 
     # Invalidate aspect ratio cache so the changer picks up new wallpapers
     [ -f "$HOME/.cache/wallpaper_ratios.cache" ] && rm "$HOME/.cache/wallpaper_ratios.cache"
+
+    # If the thumbnail watcher is already installed, refresh which folders
+    # it watches — new ratio folders synced just now won't be picked up
+    # otherwise until the .path unit is regenerated.
+    if [ -f "$HOME/.config/systemd/user/wallpaper-thumbnails.path" ]; then
+        generate_thumbnails_path_unit
+        systemctl --user daemon-reload
+        systemctl --user restart wallpaper-thumbnails.path
+        echo "Thumbnail watcher folder list refreshed."
+    fi
 
     echo "Wallpapers synced successfully."
 }

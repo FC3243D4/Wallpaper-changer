@@ -11,6 +11,31 @@ if [ -z "$color" ]; then
 fi
 
 accent="#$color"
+
+# Match the Matugen Theme VS Code extension's actual accent instead of just
+# "the same seed". $color here is the raw wallpaper-sampled seed from
+# colorChooser.sh, but the extension reads matugen's *resolved* colors from
+# ~/.cache/matugen/vscode-colors.json (special.cursor = colors.primary,
+# tonally processed, not the raw seed). Since themeRefresher.sh already runs
+# `matugen color hex` before calling this script, that cache file reflects
+# this exact wallpaper change — read it back rather than re-deriving it here.
+# Falls back to the raw seed if the cache file/jq aren't available, so this
+# degrades to the previous behavior rather than failing.
+VSCODE_MATUGEN_CACHE="$HOME/.cache/matugen/vscode-colors.json"
+if [ -f "$VSCODE_MATUGEN_CACHE" ] && command -v jq &>/dev/null; then
+    resolved_primary=$(jq -r '.special.cursor // empty' "$VSCODE_MATUGEN_CACHE" 2>/dev/null)
+    if [ -n "$resolved_primary" ]; then
+        accent="$resolved_primary"
+        color="${accent#\#}"
+        color="${color,,}"
+        echo "vscodePatcher: using matugen's resolved primary ($accent) instead of the raw wallpaper seed"
+    else
+        echo "vscodePatcher: special.cursor not found in $VSCODE_MATUGEN_CACHE, falling back to raw seed color"
+    fi
+else
+    echo "vscodePatcher: $VSCODE_MATUGEN_CACHE not found (or jq missing), falling back to raw seed color"
+fi
+
 VSCODE_SETTINGS="$HOME/.config/Code/User/settings.json"
 VSCODE_BASE_ICON="$HOME/.config/WallpaperChanger/themeRefresherSupportScripts/svg/vscode_base_icon.svg"
 

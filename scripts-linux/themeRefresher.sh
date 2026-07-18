@@ -78,35 +78,36 @@ cmd_full() {
     APPS[vesktop]="x|vesktop|vesktop|vesktop|vesktop"
     APPS[nativmix]="x|nativmix|nativmix|nativmix --hidden --restart|"
     APPS[localsend]="x|localsend|localsend|localsend --hidden|localsend"
-
+    # Spotify is intentionally NOT in this array — it's special-cased below
+    # (spicetify apply) and would fight with that block if handled generically here.
 
     source "$SUPPORT/appRestarter.sh"
 
-    #Desktop Environment specific actions
+    # Blocks until a window of the given Hyprland class appears (or times
+    # out). Used so hyprLayoutPreservation.sh restore only runs once every
+    # relaunched window actually exists — otherwise a late-appearing window
+    # (e.g. Spotify) grabs focus after restore already set it.
+    wait_for_hypr_class() {
+        local wclass="$1"
+        local deadline=$(( $(date +%s) + 5 ))
+        while [ $(date +%s) -lt $deadline ]; do
+            hyprctl clients -j | python3 -c "
+import json,sys
+clients=json.load(sys.stdin)
+exit(0 if any('$wclass' in c.get('class','').lower() for c in clients) else 1)
+" 2>/dev/null && return 0
+            sleep 0.1
+        done
+        return 1
+    }
+
     if [ "$XDG_CURRENT_DESKTOP" == "Hyprland" ]; then
         # Wait for each windowed app individually
         for app in "${running[@]}"; do
             IFS='|' read -r _ _ _ _ wclass <<< "${APPS[$app]}"
             [ -z "$wclass" ] && continue
-            app_deadline=$(( $(date +%s) + 5 ))
-            while [ $(date +%s) -lt $app_deadline ]; do
-                hyprctl clients -j | python3 -c "
-import json,sys
-clients=json.load(sys.stdin)
-exit(0 if any('$wclass' in c.get('class','').lower() for c in clients) else 1)
-" 2>/dev/null && break
-                sleep 0.1
-            done
+            wait_for_hypr_class "$wclass"
         done
-
-        # Restore Hyprland layout state after all restarts
-        "$SUPPORT/hyprLayoutPreservation.sh" restore
-
-        systemctl --user restart waybar.service
-
-    elif [ "$XDG_CURRENT_DESKTOP" == "KDE" ]; then
-        kquitapp6 plasmashell && sleep 1 && kstart plasmashell &
-        disown
     fi
 
     # OneDriveGUI — special-cased instead of going through the generic
@@ -139,6 +140,13 @@ exit(0 if any('$wclass' in c.get('class','').lower() for c in clients) else 1)
     # theme is ready the next time you open Spotify manually, even on a
     # refresh where it wasn't running — it just never spawns a new Spotify
     # process on its own.
+    #
+    # This block deliberately runs BEFORE hyprLayoutPreservation.sh restore
+    # (below), not after. Spotify has no tray-only/hidden launch flag, so
+    # relaunching it always opens a real window and steals focus. If that
+    # happened after restore, it would clobber the workspace/focus state
+    # restore had just set. Waiting for its window here means restore gets
+    # the final word on focus instead.
     if command -v spicetify >/dev/null 2>&1; then
         spotify_was_running=false
         if pgrep -x spotify >/dev/null 2>&1; then
@@ -155,7 +163,20 @@ exit(0 if any('$wclass' in c.get('class','').lower() for c in clients) else 1)
         if [ "$spotify_was_running" = true ]; then
             spotify >/dev/null 2>&1 &
             disown
+            [ "$XDG_CURRENT_DESKTOP" == "Hyprland" ] && wait_for_hypr_class "spotify"
         fi
+    fi
+
+    #Desktop Environment specific actions
+    if [ "$XDG_CURRENT_DESKTOP" == "Hyprland" ]; then
+        # Restore Hyprland layout state after all restarts (Spotify included)
+        "$SUPPORT/hyprLayoutPreservation.sh" restore
+
+        systemctl --user restart waybar.service
+
+    elif [ "$XDG_CURRENT_DESKTOP" == "KDE" ]; then
+        kquitapp6 plasmashell && sleep 1 && kstart plasmashell &
+        disown
     fi
 }
 

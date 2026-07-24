@@ -2,6 +2,21 @@
 
 SUPPORT="$HOME/.config/WallpaperChanger/themeRefresherSupportScripts"
 
+# Runs "$@" and prints how long it took, e.g. "[timing] iconPatcher: 0.842s".
+# The timing line goes to stderr, so `color=$(timed colorChooser ...)` still
+# only captures the wrapped command's real stdout.
+timed() {
+    local label="$1"; shift
+    local t0 t1 elapsed rc
+    t0=$(date +%s%N)
+    "$@"
+    rc=$?
+    t1=$(date +%s%N)
+    elapsed=$(awk -v a="$t0" -v b="$t1" 'BEGIN{printf "%.3f", (b-a)/1000000000}')
+    echo "[timing] ${label}: ${elapsed}s" >&2
+    return $rc
+}
+
 usage() {
     cat << EOF
 Usage: ./install-Linux.sh [OPTION]
@@ -21,7 +36,7 @@ cmd_full() {
     fi
 
     # 1. Choose accent color from wallpaper
-    color=$("$SUPPORT/colorChooser.sh")
+    color=$(timed "colorChooser" "$SUPPORT/colorChooser.sh")
     if [ $? -ne 0 ] || [ -z "$color" ]; then
         echo "ERROR: colorChooser failed, aborting"
         exit 1
@@ -32,56 +47,58 @@ cmd_full() {
     echo "Final color: $accent"
 
     # Run matugen once with the final chosen color
-    matugen color hex "$accent" --quiet
+    timed "matugen" matugen color hex "$accent" --quiet
 
     # 2. Apply to RGB devices (backgrounded — fire and forget)
-    "$SUPPORT/rgbApply.sh" "$color"
+    timed "rgbApply" "$SUPPORT/rgbApply.sh" "$color"
 
     # 3. Patch KDE color schemes
-    "$SUPPORT/kdePatcher.sh" "$color"
+    timed "kdePatcher" "$SUPPORT/kdePatcher.sh" "$color"
 
     # 4. Patch GTK themes
-    "$SUPPORT/gtkPatcher.sh" "$color"
+    timed "gtkPatcher" "$SUPPORT/gtkPatcher.sh" "$color"
 
     # 5. Patch icons
-    "$SUPPORT/iconPatcher.sh" "$color"
+    timed "iconPatcher" "$SUPPORT/iconPatcher.sh" "$color"
 
     # 6. Patch app-specific themes
     if command -v code >/dev/null 2>&1; then
-        "$SUPPORT/appPatchers/vscodePatcher.sh" "$color"
+        timed "vscodePatcher" "$SUPPORT/appPatchers/vscodePatcher.sh" "$color"
     fi
     if command -v sourcegit >/dev/null 2>&1; then
-        "$SUPPORT/appPatchers/sourceGitPatcher.sh" "$color"
+        timed "sourceGitPatcher" "$SUPPORT/appPatchers/sourceGitPatcher.sh" "$color"
     fi
     if command -v ferdium >/dev/null 2>&1; then
-        "$SUPPORT/appPatchers/ferdiumPatcher.sh" "$color"
-        "$SUPPORT/appPatchers/ferdiumIconPatcher.sh" "$color"
+        timed "ferdiumPatcher" "$SUPPORT/appPatchers/ferdiumPatcher.sh" "$color"
+        timed "ferdiumIconPatcher" "$SUPPORT/appPatchers/ferdiumIconPatcher.sh" "$color"
     fi
     if command -v vesktop >/dev/null 2>&1; then
-    "$SUPPORT/appPatchers/discordPatcher.sh" "$color"
+    timed "discordPatcher" "$SUPPORT/appPatchers/discordPatcher.sh" "$color"
     fi
     #browser patchers
     if command -v zen-browser >/dev/null 2>&1; then
-        "$SUPPORT/appPatchers/zenPatcher.sh" "$color"
+        timed "zenPatcher" "$SUPPORT/appPatchers/zenPatcher.sh" "$color"
     fi
     if command -v firefox >/dev/null 2>&1; then
-        "$SUPPORT/appPatchers/firefoxPatcher.sh" "$color"
+        timed "firefoxPatcher" "$SUPPORT/appPatchers/firefoxPatcher.sh" "$color"
     fi
 
     # 7. Restart apps
     declare -A APPS
     APPS[dolphin]="x|dolphin|dolphin|dolphin|dolphin"
-    #APPS[zen]="f|zen-bin|zen-bin|zen-browser|zen" # removed since adding hot reloading for zen
     APPS[ferdium]="f|electron.*ferdium-bin|electron.*ferdium-bin|ferdium|ferdium"
     APPS[sourcegit]="x|sourcegit|sourcegit|sourcegit|sourcegit"
     APPS[code]="x|code|code|code|code"
     APPS[vesktop]="x|vesktop|vesktop|vesktop|vesktop"
     APPS[nativmix]="x|nativmix|nativmix|nativmix --hidden --restart|"
-    APPS[localsend]="x|localsend|localsend|localsend --hidden|localsend"
-    # Spotify is intentionally NOT in this array — it's special-cased below
-    # (spicetify apply) and would fight with that block if handled generically here.
+    APPS[localsend]="x|localsend|localsend|localsend --hidden|"
 
+    # Sourced directly (not via timed()) because it must set $running in
+    # THIS shell for the wait_for_hypr_class loop below to see it.
+    _t0=$(date +%s%N)
     source "$SUPPORT/appRestarter.sh"
+    _t1=$(date +%s%N)
+    echo "[timing] appRestarter: $(awk -v a="$_t0" -v b="$_t1" 'BEGIN{printf "%.3f", (b-a)/1000000000}')s" >&2
 
     # Blocks until a window of the given Hyprland class appears (or times
     # out). Used so hyprLayoutPreservation.sh restore only runs once every
@@ -106,73 +123,29 @@ exit(0 if any('$wclass' in c.get('class','').lower() for c in clients) else 1)
         for app in "${running[@]}"; do
             IFS='|' read -r _ _ _ _ wclass <<< "${APPS[$app]}"
             [ -z "$wclass" ] && continue
-            wait_for_hypr_class "$wclass"
+            timed "wait_for_hypr_class($app)" wait_for_hypr_class "$wclass"
         done
     fi
 
-    # OneDriveGUI — special-cased instead of going through the generic
-    # APPS/appRestarter.sh mechanism. It spawns a separate
-    # `onedrive --confdir=... --monitor` child process to actually do the
-    # syncing. A generic kill+relaunch only kills the GUI wrapper, leaving
-    # that child orphaned and still holding the account's lock file — the
-    # freshly relaunched GUI then tries to start a *new* sync process
-    # against the same locked confdir and fails with "already running".
+    # Special-cased: killing only the GUI orphans its onedrive --monitor
+    # child, which keeps the lock file and blocks a plain relaunch.
     if command -v onedrivegui >/dev/null 2>&1 && pgrep -f "onedrivegui" >/dev/null 2>&1; then
-        pkill -f "onedrivegui"
-        pkill -f "onedrive .*--monitor"
-        deadline=$(( $(date +%s) + 5 ))
-        while pgrep -f "onedrivegui|onedrive .*--monitor" >/dev/null 2>&1 && [ "$(date +%s)" -lt "$deadline" ]; do
-            sleep 0.1
-        done
-        onedrivegui >/dev/null 2>&1 &
-        disown
+        "$SUPPORT/appPatchers/oneDriveRestarter.sh"
     fi
 
-    # Spotify/Spicetify — special-cased instead of going through the generic
-    # APPS/appRestarter.sh mechanism, for the same kind of reason as
-    # OneDriveGUI above: this needs an extra step run *in between* closing
-    # and reopening that the generic kill+relaunch can't express. spicetify
-    # refuses to patch a running Spotify (see spicetifyPostHook.sh), so a
-    # plain restart without the apply in between wouldn't actually pick up
-    # the new colors — this closes it (if it was open), applies while it's
-    # safely down, then reopens it — but only if it was already running.
-    # apply itself always runs (whenever spicetify is available) so the
-    # theme is ready the next time you open Spotify manually, even on a
-    # refresh where it wasn't running — it just never spawns a new Spotify
-    # process on its own.
-    #
-    # This block deliberately runs BEFORE hyprLayoutPreservation.sh restore
-    # (below), not after. Spotify has no tray-only/hidden launch flag, so
-    # relaunching it always opens a real window and steals focus. If that
-    # happened after restore, it would clobber the workspace/focus state
-    # restore had just set. Waiting for its window here means restore gets
-    # the final word on focus instead.
+    # Special-cased: spicetify refuses to patch a running Spotify, so it
+    # must close, apply, then reopen. Runs before hyprLayoutPreservation
+    # restore (below) so its window doesn't steal focus after restore.
     if command -v spicetify >/dev/null 2>&1; then
-        spotify_was_running=false
-        if pgrep -x spotify >/dev/null 2>&1; then
-            spotify_was_running=true
-            pkill -x spotify
-            deadline=$(( $(date +%s) + 5 ))
-            while pgrep -x spotify >/dev/null 2>&1 && [ "$(date +%s)" -lt "$deadline" ]; do
-                sleep 0.1
-            done
-        fi
-
-        spicetify apply >/dev/null 2>&1
-
-        if [ "$spotify_was_running" = true ]; then
-            spotify >/dev/null 2>&1 &
-            disown
-            [ "$XDG_CURRENT_DESKTOP" == "Hyprland" ] && wait_for_hypr_class "spotify"
-        fi
+        "$SUPPORT/appPatchers/spicetifyRestarter.sh"
     fi
 
     #Desktop Environment specific actions
     if [ "$XDG_CURRENT_DESKTOP" == "Hyprland" ]; then
         # Restore Hyprland layout state after all restarts (Spotify included)
-        "$SUPPORT/hyprLayoutPreservation.sh" restore
+        timed "hyprLayoutPreservation restore" "$SUPPORT/hyprLayoutPreservation.sh" restore
 
-        systemctl --user restart waybar.service
+        timed "waybar restart" systemctl --user restart waybar.service
 
     elif [ "$XDG_CURRENT_DESKTOP" == "KDE" ]; then
         kquitapp6 plasmashell && sleep 1 && kstart plasmashell &
@@ -198,7 +171,7 @@ cmd_rgb() {
 
 cmd_softrun() {
     # 1. Choose accent color from wallpaper
-    color=$("$SUPPORT/colorChooser.sh")
+    color=$(timed "colorChooser" "$SUPPORT/colorChooser.sh")
     if [ $? -ne 0 ] || [ -z "$color" ]; then
         echo "ERROR: colorChooser failed, aborting"
         exit 1
@@ -209,47 +182,47 @@ cmd_softrun() {
     echo "Final color: $accent"
 
     # Run matugen once with the final chosen color
-    matugen color hex "$accent" --quiet
+    timed "matugen" matugen color hex "$accent" --quiet
 
     # 2. Apply to RGB devices (backgrounded — fire and forget)
-    "$SUPPORT/rgbApply.sh" "$color"
+    timed "rgbApply" "$SUPPORT/rgbApply.sh" "$color"
 
     # 3. Patch KDE color schemes
-    "$SUPPORT/kdePatcher.sh" "$color"
+    timed "kdePatcher" "$SUPPORT/kdePatcher.sh" "$color"
 
     # 4. Patch GTK themes
-    "$SUPPORT/gtkPatcher.sh" "$color"
+    timed "gtkPatcher" "$SUPPORT/gtkPatcher.sh" "$color"
 
     # 5. Patch icons
-    "$SUPPORT/iconPatcher.sh" "$color"
+    timed "iconPatcher" "$SUPPORT/iconPatcher.sh" "$color"
 
     # 6. Patch app-specific themes
     if command -v code >/dev/null 2>&1; then
-        "$SUPPORT/appPatchers/vscodePatcher.sh" "$color"
+        timed "vscodePatcher" "$SUPPORT/appPatchers/vscodePatcher.sh" "$color"
     fi
     if command -v sourcegit >/dev/null 2>&1; then
-        "$SUPPORT/appPatchers/sourceGitPatcher.sh" "$color"
+        timed "sourceGitPatcher" "$SUPPORT/appPatchers/sourceGitPatcher.sh" "$color"
     fi
     if command -v ferdium >/dev/null 2>&1; then
-        "$SUPPORT/appPatchers/ferdiumPatcher.sh" "$color"
-        "$SUPPORT/appPatchers/ferdiumIconPatcher.sh" "$color"
+        timed "ferdiumPatcher" "$SUPPORT/appPatchers/ferdiumPatcher.sh" "$color"
+        timed "ferdiumIconPatcher" "$SUPPORT/appPatchers/ferdiumIconPatcher.sh" "$color"
     fi
     if command -v vesktop >/dev/null 2>&1; then
-    "$SUPPORT/appPatchers/discordPatcher.sh" "$color"
+    timed "discordPatcher" "$SUPPORT/appPatchers/discordPatcher.sh" "$color"
     fi
     #browser patchers
     if command -v zen-browser >/dev/null 2>&1; then
-        "$SUPPORT/appPatchers/zenPatcher.sh" "$color"
+        timed "zenPatcher" "$SUPPORT/appPatchers/zenPatcher.sh" "$color"
     fi
     if command -v firefox >/dev/null 2>&1; then
-        "$SUPPORT/appPatchers/firefoxPatcher.sh" "$color"
+        timed "firefoxPatcher" "$SUPPORT/appPatchers/firefoxPatcher.sh" "$color"
     fi
 
     if [ "$XDG_CURRENT_DESKTOP" == "KDE" ]; then
         kquitapp6 plasmashell && sleep 1 && kstart plasmashell &
         disown
     elif [ "$XDG_CURRENT_DESKTOP" == "Hyprland" ]; then
-        systemctl --user restart waybar.service
+        timed "waybar restart" systemctl --user restart waybar.service
     fi
 }
 

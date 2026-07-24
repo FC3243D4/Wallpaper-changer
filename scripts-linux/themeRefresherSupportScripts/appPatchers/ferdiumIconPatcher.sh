@@ -38,6 +38,7 @@ declare -A ICON_FILE_OVERRIDES=(
     ["android-messages"]="messages_base_icon.svg"
     ["home-assistant"]="home_assistant_base_icon.svg"
     ["franz-custom-website"]="3d_printer_base_icon.svg"
+    ["office365-owa"]="outlook_base_icon.svg"
 )
 
 # Recipes that are SHARED across multiple configured services rather than

@@ -948,7 +948,7 @@ for dirpath, _, filenames in os.walk(src_root):
 count = 0
 written_dirs = set()
 
-worker_count = max(1, (os.cpu_count() or 4) // 4)
+worker_count = max(1, (os.cpu_count() or 4) // 2)
 # Explicitly force "fork" rather than relying on Python's current default
 # start method. forkserver/spawn need to re-import the main script from a
 # real file path to set up worker processes — impossible here since this

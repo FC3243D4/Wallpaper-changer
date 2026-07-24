@@ -200,25 +200,33 @@ patch_ferdium_tray() {
     fix_system_dir_permissions "$tray_dir" "ferdium" || return 1
 
     local patched=0
+    local job_dir
+    job_dir=$(mktemp -d)
+    local i=0
     for n in "${names[@]}"; do
         for variant in "$n.png" "$n@2x.png"; do
             local f="$tray_dir/$variant"
             [ -f "$f" ] || continue
-            local backup="${f}.orig"
-            [ -f "$backup" ] || cp "$f" "$backup"
+            i=$((i + 1))
+            (
+                backup="${f}.orig"
+                [ -f "$backup" ] || cp "$f" "$backup"
 
-            local dims size
-            if command -v identify >/dev/null 2>&1; then
-                dims=$(identify -format "%wx%h" "$backup" 2>/dev/null)
-            elif command -v magick >/dev/null 2>&1; then
-                dims=$(magick identify -format "%wx%h" "$backup" 2>/dev/null)
-            fi
-            size="${dims%x*}"
-            [ -z "$size" ] && size=22
+                if command -v identify >/dev/null 2>&1; then
+                    dims=$(identify -format "%wx%h" "$backup" 2>/dev/null)
+                elif command -v magick >/dev/null 2>&1; then
+                    dims=$(magick identify -format "%wx%h" "$backup" 2>/dev/null)
+                fi
+                size="${dims%x*}"
+                [ -z "$size" ] && size=22
 
-            rsvg-convert -w "$size" -h "$size" "$svg" -o "$f" && patched=$((patched + 1))
+                rsvg-convert -w "$size" -h "$size" "$svg" -o "$f" && touch "$job_dir/$i"
+            ) &
         done
     done
+    wait
+    patched=$(find "$job_dir" -mindepth 1 | wc -l)
+    rm -rf "$job_dir"
     echo "Ferdium tray icons patched in place ($patched files, $tray_dir)"
 }
 
@@ -423,47 +431,56 @@ patch_blueman_tray() {
     fi
 
     local patched=0
+    local job_dir
+    job_dir=$(mktemp -d)
+    local i=0
     for f in "${found[@]}"; do
-        case "$f" in
-            *hicolor*)
-                rel="${f#/usr/share/icons/hicolor/}"
-                dst="$ICON_DIR/$rel"
-                ;;
-            *)
-                # pixmaps/blueman's own dir — no theme-relative path, so
-                # just mirror basename under a flat "blueman" subfolder.
-                dst="$ICON_DIR/blueman/$(basename "$f")"
-                ;;
-        esac
-        mkdir -p "$(dirname "$dst")"
+        i=$((i + 1))
+        (
+            case "$f" in
+                *hicolor*)
+                    rel="${f#/usr/share/icons/hicolor/}"
+                    dst="$ICON_DIR/$rel"
+                    ;;
+                *)
+                    # pixmaps/blueman's own dir — no theme-relative path, so
+                    # just mirror basename under a flat "blueman" subfolder.
+                    dst="$ICON_DIR/blueman/$(basename "$f")"
+                    ;;
+            esac
+            mkdir -p "$(dirname "$dst")"
 
-        if [ -n "$tmp_svg" ]; then
-            if [[ "$f" == *.svg ]]; then
-                cp "$tmp_svg" "$dst"
-            elif command -v rsvg-convert >/dev/null 2>&1; then
-                # Size comes from the hicolor directory name (e.g. 24x24);
-                # default to 48 for anything outside that layout (pixmaps).
-                local size=48
-                if [[ "$f" == *hicolor/*x*/status* ]]; then
-                    local sizedir="${f#/usr/share/icons/hicolor/}"
-                    size="${sizedir%%x*}"
+            if [ -n "$tmp_svg" ]; then
+                if [[ "$f" == *.svg ]]; then
+                    cp "$tmp_svg" "$dst"
+                elif command -v rsvg-convert >/dev/null 2>&1; then
+                    # Size comes from the hicolor directory name (e.g. 24x24);
+                    # default to 48 for anything outside that layout (pixmaps).
+                    size=48
+                    if [[ "$f" == *hicolor/*x*/status* ]]; then
+                        sizedir="${f#/usr/share/icons/hicolor/}"
+                        size="${sizedir%%x*}"
+                    fi
+                    rsvg-convert -w "$size" -h "$size" "$tmp_svg" -o "$dst"
+                else
+                    echo "  blueman: rsvg-convert not found, skipping raster icon $f"
+                    exit 1
                 fi
-                rsvg-convert -w "$size" -h "$size" "$tmp_svg" -o "$dst"
+            elif [[ "$f" == *.svg ]]; then
+                sed "s/currentColor/$accent/g" "$f" > "$dst" 2>/dev/null \
+                    || cp "$f" "$dst"
+            elif [ -n "$tool" ]; then
+                "$tool" "$f" -fill "$accent" -colorize 100% "$dst"
             else
-                echo "  blueman: rsvg-convert not found, skipping raster icon $f"
-                continue
+                echo "  blueman: no ImageMagick found, skipping raster icon $f"
+                exit 1
             fi
-        elif [[ "$f" == *.svg ]]; then
-            sed "s/currentColor/$accent/g" "$f" > "$dst" 2>/dev/null \
-                || cp "$f" "$dst"
-        elif [ -n "$tool" ]; then
-            "$tool" "$f" -fill "$accent" -colorize 100% "$dst"
-        else
-            echo "  blueman: no ImageMagick found, skipping raster icon $f"
-            continue
-        fi
-        patched=$((patched + 1))
+            touch "$job_dir/$i"
+        ) &
     done
+    wait
+    patched=$(find "$job_dir" -mindepth 1 | wc -l)
+    rm -rf "$job_dir"
     # resolve_themed_svg now always returns a throwaway temp file (never a
     # path under $ICON_DIR), but keep this guard as cheap insurance rather
     # than assume that never changes again.

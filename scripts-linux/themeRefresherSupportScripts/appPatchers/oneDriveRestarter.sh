@@ -6,6 +6,7 @@
 
 _t0=$(date +%s%N)
 
+echo "Restarting OneDriveGUI..."
 pkill -f "onedrivegui"
 pkill -f "onedrive .*--monitor"
 while pgrep -f "onedrivegui|onedrive .*--monitor" >/dev/null 2>&1; do
@@ -13,6 +14,7 @@ while pgrep -f "onedrivegui|onedrive .*--monitor" >/dev/null 2>&1; do
 done
 onedrivegui >/dev/null 2>&1 &
 disown
+echo "OneDriveGUI relaunched"
 
 _t1=$(date +%s%N)
 echo "[timing] onedrive restart: $(awk -v a="$_t0" -v b="$_t1" 'BEGIN{printf "%.3f", (b-a)/1000000000}')s" >&2

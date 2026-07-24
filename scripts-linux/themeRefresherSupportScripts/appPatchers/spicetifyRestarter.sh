@@ -29,6 +29,7 @@ if pgrep -x spotify >/dev/null 2>&1; then
     spotify_was_running=true
     _kt0=$(date +%s%N)
 
+    echo "Closing Spotify to apply theme..."
     pkill -x spotify
     # Brief grace period for a clean exit, then force it — Spotify
     # has nothing critical to lose, unlike waiting out a slow quit.
@@ -47,12 +48,14 @@ if pgrep -x spotify >/dev/null 2>&1; then
     echo "[timing]   spotify kill+wait-for-death: $(awk -v a="$_kt0" -v b="$_kt1" 'BEGIN{printf "%.3f", (b-a)/1000000000}')s" >&2
 fi
 
+echo "Applying Spicetify theme..."
 _at0=$(date +%s%N)
 spicetify apply >/dev/null 2>&1
 _at1=$(date +%s%N)
 echo "[timing]   spicetify apply: $(awk -v a="$_at0" -v b="$_at1" 'BEGIN{printf "%.3f", (b-a)/1000000000}')s" >&2
 
 if [ "$spotify_was_running" = true ]; then
+    echo "Reopening Spotify..."
     _rt0=$(date +%s%N)
     spotify >/dev/null 2>&1 &
     disown

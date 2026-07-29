@@ -18,14 +18,14 @@ fi
 # keeping hue and value (brightness) unchanged. This keeps the color
 # recognizable (e.g. "faint orange") without letting it collapse to white.
 min_saturation=0.80      # 0.0 - 1.0, target floor for boosted colors
-ignore_saturation=0.15   # 0.0 - 1.0, colors below this are treated as
+ignore_saturation=0.25   # 0.0 - 1.0, colors below this are treated as
                          # intentional white/near-white and left untouched
 
 r=$((16#${color:0:2}))
 g=$((16#${color:2:2}))
 b=$((16#${color:4:2}))
 
-read -r changed color <<< "$(awk -v r="$r" -v g="$g" -v b="$b" -v min_s="$min_saturation" -v ignore_s="$ignore_saturation" 'BEGIN {
+read -r changed saturation color <<< "$(awk -v r="$r" -v g="$g" -v b="$b" -v min_s="$min_saturation" -v ignore_s="$ignore_saturation" 'BEGIN {
     rn = r/255; gn = g/255; bn = b/255
     max = rn; if (gn > max) max = gn; if (bn > max) max = bn
     min = rn; if (gn < min) min = gn; if (bn < min) min = bn
@@ -38,6 +38,8 @@ read -r changed color <<< "$(awk -v r="$r" -v g="$g" -v b="$b" -v min_s="$min_sa
     else if (max == gn) h = 60 * (((bn - rn) / delta) + 2)
     else                h = 60 * (((rn - gn) / delta) + 4)
     if (h < 0) h += 360
+
+    s_orig = s
 
     if (delta > 0 && s >= ignore_s && s < min_s) {
         changed = 1
@@ -66,8 +68,10 @@ read -r changed color <<< "$(awk -v r="$r" -v g="$g" -v b="$b" -v min_s="$min_sa
     if (rr > 255) rr = 255; if (gg > 255) gg = 255; if (bb > 255) bb = 255
     if (rr < 0) rr = 0; if (gg < 0) gg = 0; if (bb < 0) bb = 0
 
-    printf "%d %02x%02x%02x\n", changed, rr, gg, bb
+    printf "%d %.3f %02x%02x%02x\n", changed, s_orig, rr, gg, bb
 }')"
+
+echo "Input color #$1 saturation: $(awk -v s="$saturation" 'BEGIN { printf "%.0f%%", s * 100 }')"
 
 if [ "$changed" -eq 1 ]; then
     echo "Color too desaturated for LEDs, boosted saturation to #$color"

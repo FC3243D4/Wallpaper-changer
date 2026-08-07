@@ -207,6 +207,7 @@ declare -A ICON_OVERRIDES=(
     ["orcaslicer"]="orcaslicer-alt"
     ["raspberry_pi_imager"]="raspberry-pi"
     ["intellij_idea_community_edition"]="intellij-idea"
+    ["youtube_music_desktop_app"]="music"
 
     # -- many-to-one shared icons (formerly one function per group) --
     ["advanced_network_configuration"]="network"

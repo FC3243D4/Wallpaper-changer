@@ -103,7 +103,9 @@ resolve_themed_svg() {
 # resets ownership back to root, at which point this just redoes it.
 # Non-blocking: uses `sudo -n`, so it fails fast instead of hanging when
 # there's no cached credential/interactive terminal (see: the hang bug
-# from an earlier version of this pattern).
+# from an earlier version of this pattern). Ownership is otherwise kept
+# in sync by TARGETS in update-and-fix.sh, which runs after every
+# topgrade and re-chowns anything a package update reset to root.
 fix_system_dir_permissions() {
     local dir="$1" label="$2"
     [ -w "$dir" ] && return 0
@@ -725,6 +727,153 @@ patch_vesktop_tray() {
     [ "$patched" -gt 0 ]
 }
 
+# ===========================================================================
+# 5. YTMDesktop (ytmdesktop/ytmdesktop) — confirmed via source
+#    (src/main/index.ts, trayIconFileName()/getTrayIconPath()): on Linux the
+#    tray icon is one of two fixed files selected by the
+#    "appearance.trayIconStyle" setting (Auto follows the OS's own
+#    light/dark GTK theme via nativeTheme.shouldUseDarkColors — nothing to
+#    do with the wallpaper accent):
+#
+#        ytmd_white.png   (style=White, or Auto+dark)
+#        ytmd_black.png   (style=Black, or Auto+light)
+#
+#    Both ship as an electron-forge extraResource — real loose files next
+#    to the app, not packed inside app.asar — so overwriting them in place
+#    is enough, no unpacking required. AUR installs these under
+#    /opt/ytmdesktop/resources (root-owned, confirmed against AUR package
+#    comments referencing /opt/ytmdesktop/chrome-sandbox); a couple of
+#    alternate layouts are tried too in case yours differs. Since Auto is
+#    the default and just alternates between these two files depending on
+#    system theme, both get the same accent icon so it looks right either
+#    way rather than trying to keep a literal white/black pair.
+#
+#    getTrayIconPath() is only ever re-read from disk when setTrayIcon()
+#    runs (a nativeTheme 'updated' event, or trayIconStyle actually
+#    changing) — never on a timer, and never just because the file on disk
+#    changed. Restarting the app would force it, but interrupts playback,
+#    so instead this edits trayIconStyle in YTMDesktop's own config.json.
+#
+#    IMPORTANT, confirmed by reading the actual `conf` package source
+#    (node_modules/conf/dist/source/index.js, _watch()): on Linux/macOS it
+#    does NOT use inotify. It uses fs.watchFile — polling every ~5s —
+#    wrapped in its own 5000ms trailing debounce, so an external edit can
+#    take up to ~10s to be noticed at all. Worse, _handleChange() only
+#    compares the value from *before* the edit(s) to whatever it reads on
+#    the *next* poll — it never sees anything in between. A fast
+#    toggle-and-revert (write A, sleep briefly, write back the original)
+#    lands back on the original value before that first poll ever fires,
+#    so the "before" and "after" it observes are identical and
+#    setTrayIcon() never gets called — this is exactly why an earlier
+#    version of this function silently did nothing.
+#
+#    Since both ytmd_white.png and ytmd_black.png now hold the *same*
+#    accent icon, which one trayIconStyle points at no longer changes
+#    anything visually — so instead of toggling and reverting, this makes
+#    one real, permanent-feeling write to a different value (guaranteed to
+#    be noticed on the next poll, nothing to race against), then reverts
+#    it in a detached background job after enough time has passed for that
+#    first change to land — purely cosmetic, so your Settings page still
+#    shows your real trayIconStyle choice afterward.
+# ===========================================================================
+
+patch_ytmdesktop_tray() {
+    local resource_dir=""
+    local candidates=(
+        "/opt/ytmdesktop/resources"
+        "/opt/YouTube Music Desktop App/resources"
+        "/usr/lib/ytmdesktop/resources"
+    )
+    local d
+    for d in "${candidates[@]}"; do
+        if [ -f "$d/ytmd_white.png" ] && [ -f "$d/ytmd_black.png" ]; then
+            resource_dir="$d"
+            break
+        fi
+    done
+    [ -n "$resource_dir" ] || {
+        echo "  ytmdesktop: ytmd_white.png/ytmd_black.png not found under any of:"
+        printf '    %s\n' "${candidates[@]}"
+        echo "  (package layout may differ — find them with:"
+        echo "   find / -name 'ytmd_white.png' 2>/dev/null)"
+        return 1
+    }
+
+    local svg
+    svg=$(resolve_themed_svg "music") || { echo "  ytmdesktop: music_base_icon.svg not found, skipping tray"; return 1; }
+
+    local targets=("$resource_dir/ytmd_white.png" "$resource_dir/ytmd_black.png")
+
+    if [ "$LIST_ONLY" -eq 1 ]; then
+        echo "ytmdesktop: would overwrite:"
+        printf '  %s\n' "${targets[@]}"
+        return 0
+    fi
+
+    command -v rsvg-convert >/dev/null 2>&1 || {
+        echo "  ytmdesktop: rsvg-convert not found, cannot rasterize"; return 1
+    }
+    fix_system_dir_permissions "$resource_dir" "ytmdesktop" || return 1
+
+    local patched=0
+    local f
+    for f in "${targets[@]}"; do
+        local backup="${f}.orig"
+        [ -f "$backup" ] || cp "$f" "$backup"
+        # Match the original 512x512 canvas so the tray-side downscale
+        # behaves the same as upstream's own icon.
+        rsvg-convert -w 512 -h 512 "$svg" -o "$f" && patched=$((patched + 1))
+    done
+    echo "YTMDesktop tray icons patched in place ($patched/${#targets[@]}, $resource_dir)"
+
+    [ "$patched" -gt 0 ] && ytmdesktop_force_reload
+}
+
+# Makes one durable change to trayIconStyle in YTMDesktop's own config.json
+# so its `conf` store — polling via fs.watchFile on Linux, see the long
+# comment above — actually notices it and calls setTrayIcon() itself,
+# re-reading the PNGs we just overwrote. Values: Auto=0, White=1, Black=2
+# (src/shared/store/schema.ts). Schedules a delayed, detached revert back
+# to your real setting — cosmetic only, since ytmd_white.png and
+# ytmd_black.png are now identical, so which one gets selected doesn't
+# change what's actually drawn in the tray.
+ytmdesktop_force_reload() {
+    { pgrep -x youtube-music-desktop-app >/dev/null 2>&1 || pgrep -f ytmdesktop >/dev/null 2>&1; } || {
+        echo "  ytmdesktop: not currently running, nothing to notify"
+        return 0
+    }
+    command -v jq >/dev/null 2>&1 || {
+        echo "  ytmdesktop: jq not found, can't trigger a live tray refresh"
+        echo "  (new icons will show next time YTMDesktop starts)"
+        return 1
+    }
+
+    local cfg="$HOME/.config/YouTube Music Desktop App/config.json"
+    [ -f "$cfg" ] || {
+        echo "  ytmdesktop: config.json not found at $cfg, can't trigger a live refresh"
+        return 1
+    }
+
+    local current other tmp
+    current=$(jq -r '.appearance.trayIconStyle // 0' "$cfg")
+    other=$(( (current + 1) % 3 ))
+
+    tmp=$(mktemp)
+    jq ".appearance.trayIconStyle = $other" "$cfg" > "$tmp" && mv "$tmp" "$cfg"
+    echo "  ytmdesktop: set trayIconStyle $current -> $other to force a live repaint"
+    echo "  (conf polls the file on Linux — can take up to ~10s to actually redraw)"
+
+    # Detached: this script's own run finishes long before the revert
+    # fires, no need to make the theme refresh wait ~10+ more seconds on
+    # a cosmetic settings-value cleanup.
+    (
+        sleep 12
+        tmp2=$(mktemp)
+        jq ".appearance.trayIconStyle = $current" "$cfg" > "$tmp2" 2>/dev/null && mv "$tmp2" "$cfg"
+    ) >/dev/null 2>&1 &
+    disown
+}
+
 # time_step <label> <function> — runs the given function, prints its
 # wall-clock time to stderr afterward. awk instead of bc for the float
 # subtraction so this doesn't need an extra package installed.
@@ -747,5 +896,6 @@ time_step "steam"           patch_steam_tray
 time_step "blueman"         patch_blueman_tray
 time_step "onedrivegui"     patch_onedrivegui_tray
 time_step "vesktop"         patch_vesktop_tray
+time_step "ytmdesktop"      patch_ytmdesktop_tray
 
 [ "$LIST_ONLY" -eq 0 ] && echo "Tray icons patched with $accent"

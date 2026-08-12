@@ -25,6 +25,7 @@ Options:
   --full             Run the full theme refresh process (including restarting apps)
   --rgb              Apply the accent color to RGB devices only
   --softrun          Apply the accent color to RGB devices, patch themes and icons, but do not restart any apps
+  --tray             Run the tray icon updater only
   --help             Show this help message
 EOF
 }
@@ -226,10 +227,35 @@ cmd_softrun() {
     fi
 }
 
+cmd_tray() {
+    # 1. Choose accent color from wallpaper
+    color=$(timed "colorChooser" "$SUPPORT/colorChooser.sh")
+    if [ $? -ne 0 ] || [ -z "$color" ]; then
+        echo "ERROR: colorChooser failed, aborting"
+        exit 1
+    fi
+
+    color="${color,,}"
+    accent="#$color"
+    echo "Final color: $accent"
+
+    # Run the tray icon updater script
+    timed "trayIconPatcher.sh" "$SUPPORT/trayIconPatcher.sh" "$color"
+
+    # Reload shell/waybar to reflect tray icon changes
+    if [ "$XDG_CURRENT_DESKTOP" == "KDE" ]; then
+        kquitapp6 plasmashell && sleep 1 && kstart plasmashell &
+        disown
+    elif [ "$XDG_CURRENT_DESKTOP" == "Hyprland" ]; then
+        timed "waybar restart" systemctl --user restart waybar.service
+    fi
+}
+
 case "$1" in
     --full)        cmd_full ;;
     --rgb)         cmd_rgb ;;
     --softrun)     cmd_softrun ;;
+    --tray)        cmd_tray ;;
     --help)        usage ;;
     *)
         if [ -z "$1" ]; then

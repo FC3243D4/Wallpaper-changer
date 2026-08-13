@@ -83,6 +83,10 @@ cmd_full() {
     if command -v firefox >/dev/null 2>&1; then
         timed "firefoxPatcher" "$SUPPORT/appPatchers/firefoxPatcher.sh" "$color"
     fi
+    #betterbird patcher
+    if command -v betterbird >/dev/null 2>&1; then
+        timed "betterbirdPatcher" "$SUPPORT/appPatchers/betterbirdPatcher.sh" "$color"
+    fi
 
     # 7. Restart apps
     declare -A APPS
@@ -217,6 +221,10 @@ cmd_softrun() {
     fi
     if command -v firefox >/dev/null 2>&1; then
         timed "firefoxPatcher" "$SUPPORT/appPatchers/firefoxPatcher.sh" "$color"
+    fi
+    #betterbird patcher
+    if command -v betterbird >/dev/null 2>&1; then
+        timed "betterbirdPatcher" "$SUPPORT/appPatchers/betterbirdPatcher.sh" "$color"
     fi
 
     if [ "$XDG_CURRENT_DESKTOP" == "KDE" ]; then

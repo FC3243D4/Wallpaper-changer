@@ -313,6 +313,9 @@ declare -A ICON_OVERRIDES=(
     ["kde_connect_sms"]="kde_connect"
 
     ["sourcegit"]="git"
+
+    ["betterbird"]="mail"
+    ["thunderbird"]="mail"
 )
 
 # ---------------------------------------------------------------------------

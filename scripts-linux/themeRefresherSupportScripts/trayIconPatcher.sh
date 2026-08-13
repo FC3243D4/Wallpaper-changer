@@ -874,6 +874,57 @@ ytmdesktop_force_reload() {
     disown
 }
 
+#betterbird tray icons
+betterbird_tray_patch() {
+    command -v betterbird >/dev/null 2>&1 || return 0
+
+    defaultsvg=$(resolve_themed_svg "mail") || { echo "  betterbird: no themed base icon found, skipping tray"; return 1; }
+    newmailsvg=$(resolve_themed_svg "new-mail") || { echo "  betterbird: no themed new-mail icon found, skipping tray"; return 1; }
+
+    cp "$defaultsvg" "/opt/betterbird/chrome/icons/default/default.svg"
+    cp "$newmailsvg" "/opt/betterbird/chrome/icons/default/newmail.svg"
+
+    local svg
+    svg=$(resolve_themed_svg "mail") || { echo "  betterbird: no themed base icon found, skipping tray"; return 1; }
+
+    local targets=(
+        "/opt/betterbird/chrome/icons/default/default16.png"
+        "/opt/betterbird/chrome/icons/default/default22.png"
+        "/opt/betterbird/chrome/icons/default/default24.png"
+        "/opt/betterbird/chrome/icons/default/default32.png"
+        "/opt/betterbird/chrome/icons/default/default48.png"
+        "/opt/betterbird/chrome/icons/default/default64.png"
+        "/opt/betterbird/chrome/icons/default/default128.png"
+        "/opt/betterbird/chrome/icons/default/default256.png"
+    )
+
+    local resolutions=(
+        16 22 24 32 48 64 128 256
+    )
+
+    if [ "$LIST_ONLY" -eq 1 ]; then
+        echo "betterbird: would overwrite:"
+        printf '  %s\n' "${targets[@]}"
+        return 0
+    fi
+
+    command -v rsvg-convert >/dev/null 2>&1 || {
+        echo "  betterbird: rsvg-convert not found, cannot rasterize"; return 1
+    }
+    fix_system_dir_permissions "/opt/betterbird/chrome/icons/" "default" || return 1
+
+    local patched=0
+    for r in "${resolutions[@]}"; do
+        local f="/opt/betterbird/chrome/icons/default/default${r}.png"
+        [ -f "$f" ] || { echo "  betterbird: $f not found, skipping"; continue; }
+        local backup="${f}.orig"
+        [ -f "$backup" ] || cp "$f" "$backup"
+        # Size comes from the directory name (24x24).
+        rsvg-convert -w $r -h $r "$svg" -o "$f" && patched=$((patched + 1))
+    done
+    echo "Betterbird tray icon patched in place ($patched/${#targets[@]})"
+}
+
 # time_step <label> <function> — runs the given function, prints its
 # wall-clock time to stderr afterward. awk instead of bc for the float
 # subtraction so this doesn't need an extra package installed.
@@ -897,5 +948,6 @@ time_step "blueman"         patch_blueman_tray
 time_step "onedrivegui"     patch_onedrivegui_tray
 time_step "vesktop"         patch_vesktop_tray
 time_step "ytmdesktop"      patch_ytmdesktop_tray
+time_step "betterbird"      betterbird_tray_patch
 
 [ "$LIST_ONLY" -eq 0 ] && echo "Tray icons patched with $accent"

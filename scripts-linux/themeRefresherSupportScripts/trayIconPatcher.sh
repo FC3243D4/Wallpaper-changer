@@ -911,7 +911,7 @@ betterbird_tray_patch() {
     command -v rsvg-convert >/dev/null 2>&1 || {
         echo "  betterbird: rsvg-convert not found, cannot rasterize"; return 1
     }
-    fix_system_dir_permissions "/opt/betterbird/chrome/icons/" "default" || return 1
+    fix_system_dir_permissions "/opt/betterbird/chrome/icons/default" "default.svg" || return 1
 
     local patched=0
     for r in "${resolutions[@]}"; do

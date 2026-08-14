@@ -74,7 +74,7 @@ cmd_full() {
         timed "ferdiumIconPatcher" "$SUPPORT/appPatchers/ferdiumIconPatcher.sh" "$color"
     fi
     if command -v vesktop >/dev/null 2>&1; then
-    timed "discordPatcher" "$SUPPORT/appPatchers/discordPatcher.sh" "$color"
+        timed "discordPatcher" "$SUPPORT/appPatchers/discordPatcher.sh" "$color"
     fi
     #browser patchers
     if command -v zen-browser >/dev/null 2>&1; then
@@ -200,7 +200,7 @@ cmd_softrun() {
         timed "ferdiumIconPatcher" "$SUPPORT/appPatchers/ferdiumIconPatcher.sh" "$color"
     fi
     if command -v vesktop >/dev/null 2>&1; then
-    timed "discordPatcher" "$SUPPORT/appPatchers/discordPatcher.sh" "$color"
+        timed "discordPatcher" "$SUPPORT/appPatchers/discordPatcher.sh" "$color"
     fi
     #browser patchers
     if command -v zen-browser >/dev/null 2>&1; then

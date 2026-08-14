@@ -94,7 +94,7 @@ cmd_full() {
     APPS[ferdium]="f|electron.*ferdium-bin|electron.*ferdium-bin|ferdium|ferdium"
     APPS[sourcegit]="x|sourcegit|sourcegit|sourcegit|sourcegit"
     APPS[code]="x|code|code|code|code"
-    APPS[vesktop]="x|vesktop|vesktop|vesktop|vesktop"
+    APPS[vesktop]="x|vesktop|vesktop|vesktop -m|vesktop"
     APPS[nativmix]="x|nativmix|nativmix|nativmix --hidden --restart|"
     APPS[localsend]="x|localsend|localsend|localsend --hidden|"
 

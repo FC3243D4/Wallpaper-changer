@@ -54,3 +54,16 @@ for app in "${running[@]}"; do
     $launch >/dev/null 2>&1 &
     disown
 done
+
+# Special-cased: killing only the GUI orphans its onedrive --monitor
+# child, which keeps the lock file and blocks a plain relaunch.
+if command -v onedrivegui >/dev/null 2>&1 && pgrep -f "onedrivegui" >/dev/null 2>&1; then
+    "$SUPPORT/appPatchers/oneDriveRestarter.sh"
+fi
+
+# Special-cased: spicetify refuses to patch a running Spotify, so it
+# must close, apply, then reopen. Runs before hyprLayoutPreservation
+# restore (below) so its window doesn't steal focus after restore.
+if command -v spicetify >/dev/null 2>&1; then
+    "$SUPPORT/appPatchers/spicetifyRestarter.sh"
+fi

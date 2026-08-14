@@ -132,19 +132,6 @@ exit(0 if any('$wclass' in c.get('class','').lower() for c in clients) else 1)
         done
     fi
 
-    # Special-cased: killing only the GUI orphans its onedrive --monitor
-    # child, which keeps the lock file and blocks a plain relaunch.
-    if command -v onedrivegui >/dev/null 2>&1 && pgrep -f "onedrivegui" >/dev/null 2>&1; then
-        "$SUPPORT/appPatchers/oneDriveRestarter.sh"
-    fi
-
-    # Special-cased: spicetify refuses to patch a running Spotify, so it
-    # must close, apply, then reopen. Runs before hyprLayoutPreservation
-    # restore (below) so its window doesn't steal focus after restore.
-    if command -v spicetify >/dev/null 2>&1; then
-        "$SUPPORT/appPatchers/spicetifyRestarter.sh"
-    fi
-
     #Desktop Environment specific actions
     if [ "$XDG_CURRENT_DESKTOP" == "Hyprland" ]; then
         # Restore Hyprland layout state after all restarts (Spotify included)

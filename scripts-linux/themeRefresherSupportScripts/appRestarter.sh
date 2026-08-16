@@ -13,7 +13,7 @@
 # die almost instantly, so this rarely gets used in full. Apps that need
 # longer (e.g. betterbird flushing its profile DB before releasing its
 # lock) can override it via an optional 6th "|grace" field:
-#   APPS[betterbird]="f|betterbird|betterbird|betterbird|betterbird|5"
+#   APPS[betterbird]="f|betterbird|betterbird|betterbird|eu.betterbird.Betterbird|5"
 DEFAULT_GRACE=1
 
 # Kill, wait, and relaunch a single app. Runs as its own background job

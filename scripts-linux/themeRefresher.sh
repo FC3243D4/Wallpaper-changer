@@ -97,7 +97,7 @@ cmd_full() {
     APPS[vesktop]="x|vesktop|vesktop|vesktop -m|vesktop"
     APPS[nativmix]="x|nativmix|nativmix|nativmix --hidden --restart|"
     APPS[localsend]="x|localsend|localsend|localsend --hidden|"
-    APPS[betterbird]="f|betterbird|betterbird|betterbird|betterbird"
+    APPS[betterbird]="f|betterbird|betterbird|betterbird|eu.betterbird.Betterbird"
 
     # Sourced directly (not via timed()) because it must set $running in
     # THIS shell for the wait_for_hypr_class loop below to see it.

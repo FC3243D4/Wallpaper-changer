@@ -9,6 +9,23 @@
 #   APPS[dolphin]="x|dolphin|dolphin|dolphin|dolphin"
 #   source appRestarter.sh
 
+running=()
+all_pids=()
+
+for app in "${!APPS[@]}"; do
+    IFS='|' read -r flag detect _ _ _ <<< "${APPS[$app]}"
+    if [ "$flag" = "f" ]; then
+        mapfile -t apids < <(pgrep -f "$detect" 2>/dev/null)
+    else
+        mapfile -t apids < <(pgrep -x "$detect" 2>/dev/null)
+    fi
+    if [ ${#apids[@]} -gt 0 ]; then
+        echo "$app running"
+        running+=("$app")
+        all_pids+=("${apids[@]}")
+    fi
+done
+
 # Default grace period (seconds) between SIGTERM and SIGKILL. Most apps
 # die almost instantly, so this rarely gets used in full. Apps that need
 # longer (e.g. betterbird flushing its profile DB before releasing its

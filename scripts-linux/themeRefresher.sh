@@ -127,6 +127,7 @@ exit(0 if any('$wclass' in c.get('class','').lower() for c in clients) else 1)
     if [ "$XDG_CURRENT_DESKTOP" == "Hyprland" ]; then
         # Wait for each windowed app individually
         for app in "${running[@]}"; do
+            echo "Waiting for $app to appear..."
             IFS='|' read -r _ _ _ _ wclass <<< "${APPS[$app]}"
             [ -z "$wclass" ] && continue
             timed "wait_for_hypr_class($app)" wait_for_hypr_class "$wclass"

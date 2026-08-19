@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# betterbirdPatcher.sh
-# Patches Betterbird chrome with the accent color.
-# Usage: betterbirdPatcher.sh <hex_color>
+# thunderbirdPatcher.sh
+# Patches Thunderbird/betterbird chrome with the accent color.
+# Usage: thunderbirdPatcher.sh <hex_color>
 
 color="${1,,}"
 
@@ -16,7 +16,7 @@ TB_ROOT="$HOME/.thunderbird"
 PROFILES_INI="$TB_ROOT/profiles.ini"
 
 if [ ! -f "$PROFILES_INI" ]; then
-    echo "No Betterbird profiles.ini found at $PROFILES_INI"
+    echo "No Betterbird/Thunderbird profiles.ini found at $PROFILES_INI"
     exit 0
 fi
 
@@ -77,7 +77,7 @@ EOF
 EOF
     grep -q "toolkit.legacyUserProfileCustomizations.stylesheets" "$TB_PROFILE/prefs.js" 2>/dev/null || \
         echo 'user_pref("toolkit.legacyUserProfileCustomizations.stylesheets", true);' >> "$TB_PROFILE/prefs.js"
-    echo "Betterbird profile patched: $TB_PROFILE"
+    echo "Betterbird/Thunderbird profile patched: $TB_PROFILE"
 done < <(awk '
     /^\[/ {
         if (path != "") print relative "\t" path

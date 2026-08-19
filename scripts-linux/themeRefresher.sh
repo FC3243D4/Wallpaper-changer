@@ -84,8 +84,8 @@ cmd_full() {
         timed "firefoxPatcher" "$SUPPORT/appPatchers/firefoxPatcher.sh" "$color"
     fi
     #betterbird patcher
-    if command -v betterbird >/dev/null 2>&1; then
-        timed "betterbirdPatcher" "$SUPPORT/appPatchers/betterbirdPatcher.sh" "$color"
+    if command -v betterbird >/dev/null 2>&1 || command -v thunderbird >/dev/null 2>&1; then
+        timed "thunderbirdPatcher" "$SUPPORT/appPatchers/thunderbirdPatcher.sh" "$color"
     fi
 
     # 7. Restart apps
@@ -98,6 +98,7 @@ cmd_full() {
     APPS[nativmix]="x|nativmix|nativmix|nativmix --hidden --restart|"
     APPS[localsend]="x|localsend|localsend|localsend --hidden|"
     APPS[betterbird]="f|betterbird|betterbird|betterbird|eu.betterbird.Betterbird"
+    APPS[thunderbird]="f|thunderbird|thunderbird|thunderbird|org.mozilla.Thunderbird"
 
     # Sourced directly (not via timed()) because it must set $running in
     # THIS shell for the wait_for_hypr_class loop below to see it.
@@ -212,8 +213,8 @@ cmd_softrun() {
         timed "firefoxPatcher" "$SUPPORT/appPatchers/firefoxPatcher.sh" "$color"
     fi
     #betterbird patcher
-    if command -v betterbird >/dev/null 2>&1; then
-        timed "betterbirdPatcher" "$SUPPORT/appPatchers/betterbirdPatcher.sh" "$color"
+    if command -v betterbird >/dev/null 2>&1 || command -v thunderbird >/dev/null 2>&1; then
+        timed "thunderbirdPatcher" "$SUPPORT/appPatchers/thunderbirdPatcher.sh" "$color"
     fi
 
     if [ "$XDG_CURRENT_DESKTOP" == "KDE" ]; then

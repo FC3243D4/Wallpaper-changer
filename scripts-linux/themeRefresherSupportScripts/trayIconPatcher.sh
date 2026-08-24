@@ -123,12 +123,7 @@ fix_system_dir_permissions() {
     return 1
 }
 
-# ===========================================================================
-# 1. Apps with an existing custom themed icon in the main pipeline.
-#    Each of these just needs rasterizing to a tray-sized PNG. Wiring that
-#    PNG into the app itself is app-specific — see the TODO in each.
-# ===========================================================================
-
+#nativmix tray icon
 patch_nativmix_tray() {
     command -v nativmix >/dev/null 2>&1 || return 0
 
@@ -166,6 +161,7 @@ patch_nativmix_tray() {
         && echo "NativMix tray icon patched in place ($target)"
 }
 
+#ferdium tray icon
 patch_ferdium_tray() {
     command -v ferdium >/dev/null 2>&1 || return 0
 
@@ -232,6 +228,7 @@ patch_ferdium_tray() {
     echo "Ferdium tray icons patched in place ($patched files, $tray_dir)"
 }
 
+#localsend tray icon
 patch_localsend_tray() {
     command -v localsend >/dev/null 2>&1 || return 0
 
@@ -273,6 +270,7 @@ patch_localsend_tray() {
     echo "LocalSend tray icons patched in place ($patched/${#names[@]}, $img_dir)"
 }
 
+#streamcontroller tray icon
 patch_streamcontroller_tray() {
     command -v streamcontroller >/dev/null 2>&1 || return 0
 
@@ -315,14 +313,7 @@ patch_streamcontroller_tray() {
     echo "StreamController tray icon patched in place ($patched/${#targets[@]})"
 }
 
-# Steam — ships a dedicated theme-friendly monochrome tray variant
-# alongside its full-color icon. Two copies exist: the system package's
-# (/usr/share/pixmaps, root-owned) and Steam's own self-updating client
-# copy (~/.local/share/Steam, user-owned — no sudo needed for this one).
-# Patch both since it's unclear from outside which one the live client
-# actually reads. Steam re-downloads/updates its own client files often,
-# so the user-owned copy will likely need re-patching more frequently than
-# the other apps here — harmless, this just reapplies on the next run.
+#steam tray icon
 patch_steam_tray() {
     command -v steam >/dev/null 2>&1 || return 0
 
@@ -371,15 +362,7 @@ patch_steam_tray() {
     echo "Steam tray icon patched in place ($patched/${#targets[@]})"
 }
 
-# ===========================================================================
-# 2. Blueman — no per-app config; blueman-applet looks up fixed icon names
-#    (blueman-tray-full, blueman-tray-disabled, blueman-tray-plugged, etc.)
-#    through the active icon theme. Fix: find blueman's real icon files,
-#    recolor them the same way patch_folder_icons/patch_dolphin_icon do for
-#    breeze, and drop the results into breeze-dark-accent at the matching
-#    relative path so theme lookup resolves to the tinted version first.
-# ===========================================================================
-
+#blueman tray icon
 patch_blueman_tray() {
     command -v blueman-applet >/dev/null 2>&1 || return 0
 
@@ -494,27 +477,9 @@ patch_blueman_tray() {
     echo "Blueman tray icons patched ($patched/${#found[@]})"
 }
 
-# ===========================================================================
-# 3. OneDriveGUI — confirmed via `pacman -Ql onedrivegui`: ships as loose
-#    PNGs under /usr/lib/OneDriveGUI/resources/images/, loaded directly by
-#    path (no icon-theme lookup, no user-facing config for this). That
-#    directory is owned by the onedrivegui package, not $HOME.
-#
-#    Only the actual tray/cloud-state icons are touched. The status-dot
-#    indicators (green/red circle) and in-window UI buttons (account,
-#    folder, gear, play, pause, quit, ...) are deliberately left alone —
-#    the former carry connected/disconnected meaning, the latter aren't
-#    the tray icon at all.
-# ===========================================================================
-
+#onedrivegui tray icon
 ONEDRIVEGUI_IMAGES_DIR="/usr/lib/OneDriveGUI/resources/images"
 
-# The three real tray states — fully replaced with your own custom SVGs
-# (found the same way as every other custom icon in iconPatcher.sh: under
-# $ICONS/<name>_base_icon.svg, using currentColor). "warning" is a best
-# guess at which vendor file maps to that state — confirm once you see it
-# light up in practice, and swap the key below if it's actually
-# icons8-cloud-stop-80.png instead.
 declare -A ONEDRIVEGUI_SVG_OVERRIDES=(
     ["icons8-cloud-done-80.png"]="cloud-check:accent"      # ok/synced
     ["warning.png"]="cloud-exclamation:#f39c12"            # warning
@@ -522,22 +487,11 @@ declare -A ONEDRIVEGUI_SVG_OVERRIDES=(
     ["icons8-cloud-sync-80.png"]="cloud-cog:accent"        # syncing
 )
 
-# Everything else cloud-related that isn't one of the three states above —
-# these get a plain accent recolor of the existing vendor art rather than a
-# full SVG replacement (no custom icon requested for these).
 declare -A ONEDRIVEGUI_COLORIZE_ONLY=(
     ["icons8-cloud-80.png"]="accent"        # idle
     ["icons8-cloud-stop-80.png"]="accent"   # paused (unless this is actually "warning" — see above)
 )
 
-# One-time permission fix: chown the vendor images dir to the current user
-# so no further sudo is needed until the next onedrivegui package update
-# resets ownership back to root (that's a pacman/AUR upgrade behavior, not
-# something this script can prevent — just re-run it when that happens).
-# One-time permission fix: chown the vendor images dir to the current user
-# so no further sudo is needed until the next onedrivegui package update
-# resets ownership back to root (that's a pacman/AUR upgrade behavior, not
-# something this script can prevent — just re-run it when that happens).
 fix_onedrivegui_permissions() {
     fix_system_dir_permissions "$ONEDRIVEGUI_IMAGES_DIR" "onedrivegui"
 }
@@ -643,28 +597,7 @@ patch_onedrivegui_tray() {
     echo "  (originals preserved as *.png.orig next to each file)"
 }
 
-# ===========================================================================
-# 4. Vesktop — confirmed via `find ~/.config/vesktop` that the real,
-#    currently-shipping (v1.6.0+) "User Assets" feature stores its picked
-#    tray icon at a literal, extensionless file:
-#
-#        ~/.config/vesktop/userAssets/tray
-#        ~/.config/vesktop/userAssets/trayUnread   (badge overlay variant)
-#
-#    copied there once when you use the "Customize" button under
-#    Settings -> User Assets -> Tray. `trayIconPath` in settings.json
-#    LOOKS like the right hook (it's exactly what the early, never-merged
-#    2024 draft PR #576 used) but is dead: the actual shipped feature
-#    (#1179) is a full rewrite that doesn't read it at all. Don't be
-#    fooled by it again — the file below is the one that matters.
-#
-#    Electron re-reads this file from disk on every tray repaint, same
-#    reasoning as before — no restart needed *if* Vesktop is already
-#    running past its initial load, though a long-idle instance since
-#    boot still won't repaint until something (unread count, mute, or a
-#    fresh launch) triggers one. See VESKTOP_TRAY_RESTART below.
-# ===========================================================================
-
+#vesktop tray icons
 patch_vesktop_tray() {
     command -v vesktop >/dev/null 2>&1 || return 0
 
@@ -727,56 +660,7 @@ patch_vesktop_tray() {
     [ "$patched" -gt 0 ]
 }
 
-# ===========================================================================
-# 5. YTMDesktop (ytmdesktop/ytmdesktop) — confirmed via source
-#    (src/main/index.ts, trayIconFileName()/getTrayIconPath()): on Linux the
-#    tray icon is one of two fixed files selected by the
-#    "appearance.trayIconStyle" setting (Auto follows the OS's own
-#    light/dark GTK theme via nativeTheme.shouldUseDarkColors — nothing to
-#    do with the wallpaper accent):
-#
-#        ytmd_white.png   (style=White, or Auto+dark)
-#        ytmd_black.png   (style=Black, or Auto+light)
-#
-#    Both ship as an electron-forge extraResource — real loose files next
-#    to the app, not packed inside app.asar — so overwriting them in place
-#    is enough, no unpacking required. AUR installs these under
-#    /opt/ytmdesktop/resources (root-owned, confirmed against AUR package
-#    comments referencing /opt/ytmdesktop/chrome-sandbox); a couple of
-#    alternate layouts are tried too in case yours differs. Since Auto is
-#    the default and just alternates between these two files depending on
-#    system theme, both get the same accent icon so it looks right either
-#    way rather than trying to keep a literal white/black pair.
-#
-#    getTrayIconPath() is only ever re-read from disk when setTrayIcon()
-#    runs (a nativeTheme 'updated' event, or trayIconStyle actually
-#    changing) — never on a timer, and never just because the file on disk
-#    changed. Restarting the app would force it, but interrupts playback,
-#    so instead this edits trayIconStyle in YTMDesktop's own config.json.
-#
-#    IMPORTANT, confirmed by reading the actual `conf` package source
-#    (node_modules/conf/dist/source/index.js, _watch()): on Linux/macOS it
-#    does NOT use inotify. It uses fs.watchFile — polling every ~5s —
-#    wrapped in its own 5000ms trailing debounce, so an external edit can
-#    take up to ~10s to be noticed at all. Worse, _handleChange() only
-#    compares the value from *before* the edit(s) to whatever it reads on
-#    the *next* poll — it never sees anything in between. A fast
-#    toggle-and-revert (write A, sleep briefly, write back the original)
-#    lands back on the original value before that first poll ever fires,
-#    so the "before" and "after" it observes are identical and
-#    setTrayIcon() never gets called — this is exactly why an earlier
-#    version of this function silently did nothing.
-#
-#    Since both ytmd_white.png and ytmd_black.png now hold the *same*
-#    accent icon, which one trayIconStyle points at no longer changes
-#    anything visually — so instead of toggling and reverting, this makes
-#    one real, permanent-feeling write to a different value (guaranteed to
-#    be noticed on the next poll, nothing to race against), then reverts
-#    it in a detached background job after enough time has passed for that
-#    first change to land — purely cosmetic, so your Settings page still
-#    shows your real trayIconStyle choice afterward.
-# ===========================================================================
-
+#ytmdesktop tray icons
 patch_ytmdesktop_tray() {
     local resource_dir=""
     local candidates=(
@@ -948,6 +832,136 @@ betterbird_tray_patch() {
     echo "Betterbird tray icon patched in place ($patched/${#targets[@]})"
 }
 
+#cohesion tray icons
+cohesion_tray_patch() {
+    local app_id="io.github.brunofin.Cohesion"
+    command -v flatpak >/dev/null 2>&1 || return 0
+    flatpak info "$app_id" >/dev/null 2>&1 || return 0
+
+    local override_dir="$HOME/.local/share/cohesion-icons"
+    local icon_dir="$override_dir/icons/hicolor/512x512/apps"
+
+    # One-time sandbox grant, checked (not blindly re-applied) every run so
+    # this doesn't spam `flatpak override` on every theme refresh — same
+    # spirit as fix_system_dir_permissions's one-time chown above.
+    if ! flatpak override --user --show "$app_id" 2>/dev/null | grep -q "$override_dir"; then
+        echo "  cohesion: granting one-time sandbox access to $override_dir"
+        flatpak override --user "$app_id" \
+            --filesystem="$override_dir:ro" \
+            --env=XDG_DATA_DIRS="$override_dir:/app/share:/usr/share:/var/lib/flatpak/exports/share:$HOME/.local/share/flatpak/exports/share" \
+            || { echo "  cohesion: flatpak override failed, skipping tray"; return 1; }
+    fi
+
+    mkdir -p "$icon_dir" || return 1
+
+    local svg
+    svg=$(resolve_themed_svg "notion") || {
+        echo "  cohesion: no themed base icon found ($ICONS/cohesion_base_icon.svg), skipping tray"
+        return 1
+    }
+
+    local color_targets=(
+        "$icon_dir/io.github.brunofin.Cohesion.png"
+        "$icon_dir/io.github.brunofin.Cohesion-unread.png"
+    )
+    local grey_targets=(
+        "$icon_dir/io.github.brunofin.Cohesion-greyscale.png"
+        "$icon_dir/io.github.brunofin.Cohesion-greyscale-unread.png"
+    )
+
+    if [ "$LIST_ONLY" -eq 1 ]; then
+        echo "cohesion: would write:"
+        printf '  %s\n' "${color_targets[@]}" "${grey_targets[@]}"
+        return 0
+    fi
+
+    command -v rsvg-convert >/dev/null 2>&1 || {
+        echo "  cohesion: rsvg-convert not found, cannot rasterize"; return 1
+    }
+
+    local patched=0
+    local f
+    for f in "${color_targets[@]}"; do
+        rsvg-convert -w 512 -h 512 "$svg" -o "$f" && patched=$((patched + 1))
+    done
+
+    # Greyscale slots are Cohesion's own monochrome tray-style toggle —
+    # desaturate the accent render rather than reusing it verbatim, so the
+    # toggle still does something. ${f/-greyscale/} maps each greyscale
+    # target back to the color file it should be derived from (...
+    # -greyscale.png -> ...png, ...-greyscale-unread.png -> ...-unread.png).
+    if command -v magick >/dev/null 2>&1; then
+        for f in "${grey_targets[@]}"; do
+            magick "${f/-greyscale/}" -colorspace Gray "$f" && patched=$((patched + 1))
+        done
+    elif command -v convert >/dev/null 2>&1; then
+        for f in "${grey_targets[@]}"; do
+            convert "${f/-greyscale/}" -colorspace Gray "$f" && patched=$((patched + 1))
+        done
+    else
+        echo "  cohesion: imagemagick not found, copying color icon into greyscale slots unmodified"
+        for f in "${grey_targets[@]}"; do
+            cp "${f/-greyscale/}" "$f" && patched=$((patched + 1))
+        done
+    fi
+
+    echo "Cohesion tray icons patched ($patched/4, $icon_dir)"
+    echo "  (restart Cohesion for the new icons to take effect)"
+}
+
+#obs tray icons
+patch_obs_tray() {
+    local is_native=0 is_flatpak=0
+    command -v obs >/dev/null 2>&1 && is_native=1 && echo "  obs: native build detected"
+    flatpak info com.obsproject.Studio >/dev/null 2>&1 && is_flatpak=1 && echo "  obs: flatpak build detected"
+    { [ "$is_native" -eq 1 ] || [ "$is_flatpak" -eq 1 ]; } || return 0
+ 
+    if [ "$is_flatpak" -eq 1 ]; then
+        # One-time, checked (not blindly re-applied) every run — same
+        # pattern as cohesion_tray_patch's override gate above.
+        if ! flatpak override --user --show com.obsproject.Studio 2>/dev/null | grep -q "$HOME/.local/share"; then
+            echo "  obs: granting one-time XDG_DATA_DIRS override for the flatpak build"
+            flatpak override --user com.obsproject.Studio \
+                --env=XDG_DATA_DIRS="$HOME/.local/share:/app/share:/usr/share:/var/lib/flatpak/exports/share:$HOME/.local/share/flatpak/exports/share" \
+                || echo "  obs: flatpak override failed, tray icon may still not resolve"
+        fi
+    fi
+ 
+    local recording_svg
+    local idle_svg
+    recording_svg=$(resolve_themed_svg "obs-recording") || {
+        echo "  obs: no themed recording base icon found ($ICONS/obs-recording_base_icon.svg), skipping tray"
+        return 1
+    }
+    idle_svg=$(resolve_themed_svg "obs") || {
+        echo "  obs: no themed idle base icon found ($ICONS/obs_base_icon.svg), skipping tray"
+        return 1
+    }
+ 
+    local target_dir="$ICON_DIR/status/scalable"
+    local targets=(
+        "$target_dir/obs-tray.svg"
+        "$target_dir/obs-tray-active.svg"
+    )
+ 
+    if [ "$LIST_ONLY" -eq 1 ]; then
+        echo "obs: would write (native=$is_native, flatpak=$is_flatpak):"
+        printf '  %s\n' "${targets[@]}"
+        return 0
+    fi
+ 
+    mkdir -p "$target_dir" || return 1
+    fix_system_dir_permissions "$target_dir" "obs" || return 1
+ 
+    local patched=0
+    cp "$idle_svg" "$target_dir/obs-tray.svg" && patched=$((patched + 1))
+    cp "$recording_svg" "$target_dir/obs-tray-active.svg" && patched=$((patched + 1))
+ 
+    echo "OBS tray icons patched ($patched/2, $target_dir)"
+    echo "  (icon theme cache may need a refresh — or just restart OBS — for the new lookup to take effect)"
+}
+
+
 # time_step <label> <function> — runs the given function, prints its
 # wall-clock time to stderr afterward. awk instead of bc for the float
 # subtraction so this doesn't need an extra package installed.
@@ -972,5 +986,7 @@ time_step "onedrivegui"     patch_onedrivegui_tray
 time_step "vesktop"         patch_vesktop_tray
 time_step "ytmdesktop"      patch_ytmdesktop_tray
 time_step "betterbird"      betterbird_tray_patch
+time_step "cohesion"        cohesion_tray_patch
+time_step "obs"             patch_obs_tray
 
 [ "$LIST_ONLY" -eq 0 ] && echo "Tray icons patched with $accent"

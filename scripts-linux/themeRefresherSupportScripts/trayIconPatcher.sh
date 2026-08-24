@@ -859,6 +859,10 @@ cohesion_tray_patch() {
         echo "  cohesion: no themed base icon found ($ICONS/cohesion_base_icon.svg), skipping tray"
         return 1
     }
+    svg_unread=$(resolve_themed_svg "notion-unread") || {
+        echo "  cohesion: no themed unread base icon found ($ICONS/cohesion_unread_base_icon.svg), skipping tray"
+        return 1
+    }
 
     local color_targets=(
         "$icon_dir/io.github.brunofin.Cohesion.png"
@@ -882,7 +886,12 @@ cohesion_tray_patch() {
     local patched=0
     local f
     for f in "${color_targets[@]}"; do
-        rsvg-convert -w 512 -h 512 "$svg" -o "$f" && patched=$((patched + 1))
+        if [[ "$f" == *-unread.png ]]; then
+            rsvg="$svg_unread"
+        else
+            rsvg="$svg"
+        fi
+        rsvg-convert -w 512 -h 512 "$rsvg" -o "$f" && patched=$((patched + 1))
     done
 
     # Greyscale slots are Cohesion's own monochrome tray-style toggle —

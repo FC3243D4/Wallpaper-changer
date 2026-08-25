@@ -198,7 +198,7 @@ declare -A ICON_OVERRIDES=(
     ["chromium"]="chrome"
     ["gnu_image_manipulation_program"]="gimp"
     ["onlyoffice_desktop_editors"]="onlyoffice"
-    ["obs_studio"]="obs"
+    ["obs_studio"]="obs-studio"
     ["displays_settings"]="nwg-displays"
     ["arduino_ide_v2"]="arduino"
     ["ark"]="zip"
@@ -208,6 +208,7 @@ declare -A ICON_OVERRIDES=(
     ["raspberry_pi_imager"]="raspberry-pi"
     ["intellij_idea_community_edition"]="intellij-idea"
     ["youtube_music_desktop_app"]="music"
+    ["cohesion"]="notion"
 
     # -- many-to-one shared icons (formerly one function per group) --
     ["advanced_network_configuration"]="network"

@@ -918,58 +918,6 @@ cohesion_tray_patch() {
     echo "  (restart Cohesion for the new icons to take effect)"
 }
 
-#obs tray icons
-patch_obs_tray() {
-    local is_native=0 is_flatpak=0
-    command -v obs >/dev/null 2>&1 && is_native=1 && echo "  obs: native build detected"
-    flatpak info com.obsproject.Studio >/dev/null 2>&1 && is_flatpak=1 && echo "  obs: flatpak build detected"
-    { [ "$is_native" -eq 1 ] || [ "$is_flatpak" -eq 1 ]; } || return 0
- 
-    if [ "$is_flatpak" -eq 1 ]; then
-        # One-time, checked (not blindly re-applied) every run — same
-        # pattern as cohesion_tray_patch's override gate above.
-        if ! flatpak override --user --show com.obsproject.Studio 2>/dev/null | grep -q "$HOME/.local/share"; then
-            echo "  obs: granting one-time XDG_DATA_DIRS override for the flatpak build"
-            flatpak override --user com.obsproject.Studio \
-                --env=XDG_DATA_DIRS="$HOME/.local/share:/app/share:/usr/share:/var/lib/flatpak/exports/share:$HOME/.local/share/flatpak/exports/share" \
-                || echo "  obs: flatpak override failed, tray icon may still not resolve"
-        fi
-    fi
- 
-    local recording_svg
-    local idle_svg
-    recording_svg=$(resolve_themed_svg "obs-recording") || {
-        echo "  obs: no themed recording base icon found ($ICONS/obs-recording_base_icon.svg), skipping tray"
-        return 1
-    }
-    idle_svg=$(resolve_themed_svg "obs") || {
-        echo "  obs: no themed idle base icon found ($ICONS/obs_base_icon.svg), skipping tray"
-        return 1
-    }
- 
-    local target_dir="$ICON_DIR/status/scalable"
-    local targets=(
-        "$target_dir/obs-tray.svg"
-        "$target_dir/obs-tray-active.svg"
-    )
- 
-    if [ "$LIST_ONLY" -eq 1 ]; then
-        echo "obs: would write (native=$is_native, flatpak=$is_flatpak):"
-        printf '  %s\n' "${targets[@]}"
-        return 0
-    fi
- 
-    mkdir -p "$target_dir" || return 1
-    fix_system_dir_permissions "$target_dir" "obs" || return 1
- 
-    local patched=0
-    cp "$idle_svg" "$target_dir/obs-tray.svg" && patched=$((patched + 1))
-    cp "$recording_svg" "$target_dir/obs-tray-active.svg" && patched=$((patched + 1))
- 
-    echo "OBS tray icons patched ($patched/2, $target_dir)"
-    echo "  (icon theme cache may need a refresh — or just restart OBS — for the new lookup to take effect)"
-}
-
 
 # time_step <label> <function> — runs the given function, prints its
 # wall-clock time to stderr afterward. awk instead of bc for the float
@@ -996,6 +944,5 @@ time_step "vesktop"         patch_vesktop_tray
 time_step "ytmdesktop"      patch_ytmdesktop_tray
 time_step "betterbird"      betterbird_tray_patch
 time_step "cohesion"        cohesion_tray_patch
-time_step "obs"             patch_obs_tray
 
 [ "$LIST_ONLY" -eq 0 ] && echo "Tray icons patched with $accent"

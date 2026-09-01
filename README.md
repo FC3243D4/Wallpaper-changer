@@ -22,7 +22,7 @@ To ensure the script works at its best please remember to configure [matugen](ht
    ```
  - Next either start manually the hotkey by going into Documents\wallpaperScripts and double click on it or logout and login again and it will start automatically
 
-# Usage
+# Usage on Linux
 
 Once installed, the day-to-day entry point on Linux is `themeRefresher.sh` (found in `~/.config/WallpaperChanger/`), which picks an accent color from your current wallpaper and applies it system-wide. It supports three modes:
 

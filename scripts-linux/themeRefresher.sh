@@ -99,6 +99,7 @@ cmd_full() {
     APPS[localsend]="x|localsend|localsend|localsend --hidden|"
     APPS[betterbird]="f|betterbird|betterbird|betterbird|eu.betterbird.Betterbird"
     APPS[thunderbird]="f|thunderbird|thunderbird|thunderbird|org.mozilla.Thunderbird"
+    APPS[swaync]="x|swaync|swaync|swaync"
 
     # Sourced directly (not via timed()) because it must set $running in
     # THIS shell for the wait_for_hypr_class loop below to see it.

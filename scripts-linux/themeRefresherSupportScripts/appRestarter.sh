@@ -2,7 +2,7 @@
 # appRestarter.sh
 # Restarts a set of apps defined as an associative array passed via environment.
 # Usage: source appRestarter.sh after defining APPS array
-# Format: APPS[name]="pgrep_flag|detect_pattern|kill_pattern|launch_cmd|hyprland_window_class"
+# Format: APPS[name]="pgrep_flag|detect_pattern|kill_pattern|launch_cmd|hyprland_window_class|grace_period"
 # Example:
 #   declare -A APPS
 #   APPS[zen]="f|zen-bin|zen-bin|zen-browser|zen"

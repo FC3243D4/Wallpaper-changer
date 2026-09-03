@@ -21,9 +21,12 @@
 #                 stack) — the one layout where save briefly disrupts the
 #                 view instead of reading everything passively
 #
-# Each workspace's effective layout is the global `general:layout` value
-# by default, overridable per-workspace via a `layout` field on an
-# `hl.workspace_rule({...})` entry in WORKSPACE_RULES_FILE (see below).
+# Each workspace's effective layout is read live from `hyprctl workspaces -j`
+# (the `tiledLayout` field, per Hyprland's per-workspace layout state as of
+# 0.54+), so it reflects whatever is actually active right now — whether set
+# via a workspace rule, `hyprctl keyword workspace "<id>, layout:<layout>"`,
+# or any other runtime layout switch. `general:layout` is kept only as a
+# last-resort fallback for a workspace `hyprctl workspaces -j` doesn't report.
 #
 # Usage:
 #   hyprLayoutPreservation.sh save
@@ -40,40 +43,6 @@ get_layout_mode() {
     hyprctl getoption general:layout -j | jq -r '.str'
 }
 
-# Path to the user's per-workspace rules file, following Hyprland Lua syntax
-# like: hl.workspace_rule({ workspace = "2", layout = "scrolling" })
-WORKSPACE_RULES_FILE="$HOME/.config/hypr/UserConfigs/WorkSpaceRules.lua"
-
-# Scans WORKSPACE_RULES_FILE for hl.workspace_rule({...}) calls that set both
-# a "workspace" and a "layout" field, and prints one "ws_id:layout" pair per
-# line for each override found. A workspace with no matching rule simply
-# isn't printed — callers should fall back to the global default in that case.
-get_workspace_layout_overrides() {
-    [ -f "$WORKSPACE_RULES_FILE" ] || return 0
-    python3 -c "
-import re
-
-path = '$WORKSPACE_RULES_FILE'
-try:
-    with open(path) as f:
-        content = f.read()
-except OSError:
-    raise SystemExit
-
-# Strip Lua comments first, so a commented-out example rule (very common in
-# this file, e.g. the stock wiki examples) is never mistaken for an active
-# override. Block comments (--[[ ... ]]) first, then line comments (-- ...).
-content = re.sub(r'--\[\[.*?\]\]', '', content, flags=re.DOTALL)
-content = re.sub(r'--.*', '', content)
-
-for block in re.findall(r'hl\.workspace_rule\s*\(\s*\{(.*?)\}\s*\)', content, re.DOTALL):
-    ws_match = re.search(r'workspace\s*=\s*[\"\']?(\d+)[\"\']?', block)
-    layout_match = re.search(r'layout\s*=\s*[\"\']([A-Za-z_]+)[\"\']', block)
-    if ws_match and layout_match:
-        print(ws_match.group(1) + ':' + layout_match.group(1))
-" 2>/dev/null
-}
-
 save_layout() {
     local current_ws
     current_ws=$(hyprctl activeworkspace -j | jq '.id')
@@ -82,12 +51,12 @@ save_layout() {
     echo "Current workspace: $current_ws"
     echo "Default layout mode: $default_layout"
 
-    local overrides_arg=""
-    while IFS=':' read -r ov_ws ov_layout; do
-        [ -n "$ov_ws" ] && overrides_arg+="${ov_ws}=${ov_layout},"
-    done < <(get_workspace_layout_overrides)
+    local ws_layouts_json
+    ws_layouts_json=$(hyprctl workspaces -j)
+    local overrides_arg
+    overrides_arg=$(echo "$ws_layouts_json" | jq -r '.[] | select(.tiledLayout != null) | "\(.id)=\(.tiledLayout)"' | paste -sd, -)
     if [ -n "$overrides_arg" ]; then
-        echo "Workspace layout overrides: ${overrides_arg%,}"
+        echo "Live per-workspace layouts: ${overrides_arg}"
     fi
 
     local master_orientation
@@ -97,25 +66,27 @@ save_layout() {
         echo "current_workspace:$current_ws"
         echo "default_layout:$default_layout"
 
-        # Each workspace's EFFECTIVE layout (override if one exists for it,
+        # Each workspace's EFFECTIVE layout (live tiledLayout if reported,
         # else the global default) is decided here and saved directly per
-        # workspace as a "wslayout:" line, so restore doesn't need to
-        # re-read general:layout or the rules file — it just uses what was
-        # actually true at save time.
+        # workspace as a "wslayout:" line, so restore doesn't need to query
+        # hyprctl at all — it just uses what was actually true at save time.
         hyprctl clients -j | python3 -c "
 import json, sys
 clients = json.load(sys.stdin)
 default_layout = '$default_layout'
 orientation = '$master_orientation'
-overrides_raw = '$overrides_arg'
-overrides = {}
-for pair in overrides_raw.split(','):
+ws_layouts_raw = '$overrides_arg'
+ws_layouts = {}
+for pair in ws_layouts_raw.split(','):
     if '=' in pair:
         k, v = pair.split('=', 1)
-        overrides[k] = v
+        ws_layouts[k] = v
 
 def effective_layout(ws_id):
-    return overrides.get(str(ws_id), default_layout)
+    # Live tiledLayout from hyprctl workspaces -j; falls back to
+    # general:layout only if that workspace wasn't reported (shouldn't
+    # normally happen for any workspace that has open clients).
+    return ws_layouts.get(str(ws_id), default_layout)
 
 def pick_master(ws_clients):
     max_area = max(c['size'][0] * c['size'][1] for c in ws_clients)
@@ -203,8 +174,8 @@ for ws_id, ws_clients in sorted(workspaces.items()):
         [ "$ws_id" -le 0 ] 2>/dev/null && continue
 
         local this_layout="$default_layout"
-        IFS=',' read -ra override_pairs <<< "$overrides_arg"
-        for pair in "${override_pairs[@]}"; do
+        IFS=',' read -ra ws_layout_pairs <<< "$overrides_arg"
+        for pair in "${ws_layout_pairs[@]}"; do
             [ "${pair%%=*}" = "$ws_id" ] && this_layout="${pair#*=}"
         done
 

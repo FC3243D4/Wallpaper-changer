@@ -18,7 +18,7 @@ fi
 # keeping hue and value (brightness) unchanged. This keeps the color
 # recognizable (e.g. "faint orange") without letting it collapse to white.
 min_saturation=0.80      # 0.0 - 1.0, target floor for boosted colors
-ignore_saturation=0.25   # 0.0 - 1.0, colors below this are treated as
+ignore_saturation=0.22   # 0.0 - 1.0, colors below this are treated as
                          # intentional white/near-white and left untouched
 
 r=$((16#${color:0:2}))

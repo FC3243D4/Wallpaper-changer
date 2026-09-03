@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # gtkPatcher.sh
-# Patches GTK themes with the accent color.
+# Recolors GTK3/GTK4 (incl. libadwaita) with the accent color, patches the
+# local Breeze-Dark GTK theme copy, and nudges GTK apps to reload it.
 # Usage: gtkPatcher.sh <hex_color>
-# Example: gtkPatcher.sh a986d3
 
 color="${1,,}"
 
@@ -11,32 +11,29 @@ if [ -z "$color" ]; then
     exit 1
 fi
 
-# Calculate RGB components
-R=$((16#${color:0:2}))
-G=$((16#${color:2:2}))
-B=$((16#${color:4:2}))
+r=$((16#${color:0:2}))
+g=$((16#${color:2:2}))
+b=$((16#${color:4:2}))
 accent="#$color"
 
-# Patch (or bootstrap+patch) ~/.config/gtk-{3,4}.0/colors.css.
-# These override files take precedence over the theme's own gtk.css for
-# many apps (notably GTK4/libadwaita via the compiled gtk-4.0/gtk.css that
-# @imports colors.css), so they must be actively patched, not just touched.
-for gtk_ver in gtk-3.0 gtk-4.0; do
-    cfg_colors="$HOME/.config/$gtk_ver/colors.css"
-    mkdir -p "$HOME/.config/$gtk_ver"
+# Patch (or bootstrap+patch) ~/.config/gtk-{3,4}.0/colors.css. These
+# overrides take precedence over the theme's own gtk.css for many apps
+# (notably GTK4/libadwaita, whose compiled gtk.css @imports colors.css).
+for gtkVer in gtk-3.0 gtk-4.0; do
+    userColorsFile="$HOME/.config/$gtkVer/colors.css"
+    mkdir -p "$HOME/.config/$gtkVer"
 
-    # Bootstrap from the system theme's colors.css if the user doesn't have one yet
-    if [ ! -f "$cfg_colors" ]; then
-        sys_colors="/usr/share/themes/Breeze-Dark/$gtk_ver/colors.css"
-        if [ -f "$sys_colors" ]; then
-            cp "$sys_colors" "$cfg_colors"
-            echo "  $cfg_colors bootstrapped from $sys_colors"
+    if [ ! -f "$userColorsFile" ]; then
+        systemColorsFile="/usr/share/themes/Breeze-Dark/$gtkVer/colors.css"
+        if [ -f "$systemColorsFile" ]; then
+            cp "$systemColorsFile" "$userColorsFile"
+            echo "  $userColorsFile bootstrapped from $systemColorsFile"
         else
-            touch "$cfg_colors"
+            touch "$userColorsFile"
         fi
     fi
 
-    [ -s "$cfg_colors" ] && sed -i \
+    [ -s "$userColorsFile" ] && sed -i \
         -e "s/link_color_breeze #[0-9a-fA-F]\{6\}/link_color_breeze #$color/g" \
         -e "s/theme_view_hover_decoration_color_breeze #[0-9a-fA-F]\{6\}/theme_view_hover_decoration_color_breeze #$color/g" \
         -e "s/theme_hovering_selected_bg_color_breeze #[0-9a-fA-F]\{6\}/theme_hovering_selected_bg_color_breeze #$color/g" \
@@ -46,48 +43,48 @@ for gtk_ver in gtk-3.0 gtk-4.0; do
         -e "s/theme_button_decoration_focus_breeze #[0-9a-fA-F]\{6\}/theme_button_decoration_focus_breeze #$color/g" \
         -e "s/theme_button_decoration_hover_backdrop_breeze #[0-9a-fA-F]\{6\}/theme_button_decoration_hover_backdrop_breeze #$color/g" \
         -e "s/theme_button_decoration_hover_breeze #[0-9a-fA-F]\{6\}/theme_button_decoration_hover_breeze #$color/g" \
-        "$cfg_colors"
+        "$userColorsFile"
 
-    # libadwaita (GTK4) ignores the _breeze variables above entirely and only
-    # reads accent_color / accent_bg_color / accent_fg_color. Patch in place
-    # if already present (idempotent across repeated runs), else append once.
-    if [ "$gtk_ver" = "gtk-4.0" ] && [ -f "$cfg_colors" ]; then
-        if grep -q "@define-color accent_bg_color" "$cfg_colors"; then
+    # libadwaita (GTK4) ignores the _breeze variables above and only reads
+    # accent_color/accent_bg_color/accent_fg_color. Patch in place if
+    # already present (idempotent), else append once.
+    if [ "$gtkVer" = "gtk-4.0" ] && [ -f "$userColorsFile" ]; then
+        if grep -q "@define-color accent_bg_color" "$userColorsFile"; then
             sed -i \
                 -e "s/@define-color accent_color #[0-9a-fA-F]\{6\};/@define-color accent_color #$color;/g" \
                 -e "s/@define-color accent_bg_color #[0-9a-fA-F]\{6\};/@define-color accent_bg_color #$color;/g" \
-                "$cfg_colors"
+                "$userColorsFile"
         else
             {
                 echo ""
                 echo "@define-color accent_color #$color;"
                 echo "@define-color accent_bg_color #$color;"
                 echo "@define-color accent_fg_color #ffffff;"
-            } >> "$cfg_colors"
+            } >> "$userColorsFile"
         fi
     fi
 done
 
-# Patch Breeze-Dark GTK theme (always from system copy, single sed pass)
-GTK_BASE="$HOME/.local/share/themes/Breeze-Dark"
-GTK_SYS_BASE="/usr/share/themes/Breeze-Dark"
+# Patch the local Breeze-Dark GTK theme copy (always regenerated from the
+# system copy, single sed pass).
+gtkThemeDir="$HOME/.local/share/themes/Breeze-Dark"
+systemGtkThemeDir="/usr/share/themes/Breeze-Dark"
 
-# Bootstrap local theme if it doesn't exist
-if [ ! -d "$GTK_BASE" ]; then
-    if [ -d "$GTK_SYS_BASE" ]; then
+if [ ! -d "$gtkThemeDir" ]; then
+    if [ -d "$systemGtkThemeDir" ]; then
         mkdir -p "$HOME/.local/share/themes"
-        cp -r "$GTK_SYS_BASE" "$GTK_BASE"
-        echo "  Breeze-Dark GTK theme copied to $GTK_BASE (was missing — fresh install bootstrap)"
+        cp -r "$systemGtkThemeDir" "$gtkThemeDir"
+        echo "  Breeze-Dark GTK theme copied to $gtkThemeDir (was missing — fresh install bootstrap)"
     else
-        echo "  $GTK_SYS_BASE not found, cannot bootstrap local GTK theme override"
+        echo "  $systemGtkThemeDir not found, cannot bootstrap local GTK theme override"
     fi
 fi
 
-if [ -d "$GTK_BASE" ]; then
-    for gtk_ver in gtk-3.0 gtk-4.0; do
-        sys_css="/usr/share/themes/Breeze-Dark/$gtk_ver/gtk.css"
-        usr_css="$GTK_BASE/$gtk_ver/gtk.css"
-        [ -f "$sys_css" ] && sed \
+if [ -d "$gtkThemeDir" ]; then
+    for gtkVer in gtk-3.0 gtk-4.0; do
+        systemCss="/usr/share/themes/Breeze-Dark/$gtkVer/gtk.css"
+        userCss="$gtkThemeDir/$gtkVer/gtk.css"
+        [ -f "$systemCss" ] && sed \
             -e "s/theme_view_hover_decoration_color_breeze #[0-9a-fA-F]*/theme_view_hover_decoration_color_breeze #$color/g" \
             -e "s/theme_hovering_selected_bg_color_breeze #[0-9a-fA-F]*/theme_hovering_selected_bg_color_breeze #$color/g" \
             -e "s/theme_selected_bg_color_breeze #[0-9a-fA-F]*/theme_selected_bg_color_breeze #$color/g" \
@@ -97,8 +94,8 @@ if [ -d "$GTK_BASE" ]; then
             -e "s/theme_button_decoration_focus_breeze  #[0-9a-fA-F]*/theme_button_decoration_focus_breeze  #$color/g" \
             -e "s/theme_button_decoration_hover_backdrop_breeze  #[0-9a-fA-F]*/theme_button_decoration_hover_backdrop_breeze  #$color/g" \
             -e "s/theme_button_decoration_focus_backdrop_breeze  #[0-9a-fA-F]*/theme_button_decoration_focus_backdrop_breeze  #$color/g" \
-            -e "s/rgba([0-9]*, [0-9]*, [0-9]*,/rgba($R, $G, $B,/g" \
-            "$sys_css" > "$usr_css"
+            -e "s/rgba([0-9]*, [0-9]*, [0-9]*,/rgba($r, $g, $b,/g" \
+            "$systemCss" > "$userCss"
     done
 fi
 
@@ -133,17 +130,16 @@ pathbar button:hover {
 EOF
 
 # Nudge GTK apps to reload theme and clear cache
-current_theme=$(gsettings get org.gnome.desktop.interface gtk-theme | tr -d "'")
+currentTheme=$(gsettings get org.gnome.desktop.interface gtk-theme | tr -d "'")
 gsettings set org.gnome.desktop.interface gtk-theme ''
 sleep 0.1
-gsettings set org.gnome.desktop.interface gtk-theme "$current_theme"
+gsettings set org.gnome.desktop.interface gtk-theme "$currentTheme"
 rm -rf "$HOME/.cache/gtk-3.0" "$HOME/.cache/gtk-4.0"
-# These target different systemd units and don't depend on each other,
-# so there's no reason to wait for one before starting the other.
+# Independent units — restart both in parallel instead of waiting on one first.
 systemctl --user restart xdg-desktop-portal-gtk &
-portal_gtk_pid=$!
+portalGtkPid=$!
 systemctl --user restart xdg-desktop-portal &
-portal_pid=$!
-wait "$portal_gtk_pid" "$portal_pid"
+portalPid=$!
+wait "$portalGtkPid" "$portalPid"
 
 echo "GTK theme patched with $accent"

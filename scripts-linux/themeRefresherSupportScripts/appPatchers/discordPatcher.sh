@@ -2,12 +2,9 @@
 # discordPatcher.sh <hex-color-without-hash>
 # Recolors Vesktop's Discord brand/control accent via QuickCSS.
 #
-# Skips entirely (and removes any previously-applied patch) if the Midnight
-# Discord theme is enabled. Midnight already defines its own full accent
-# palette (--accent-1 through --accent-5, etc.) via the matugen
-# midnight-discord.css template, so this script's blanket
-# --background-brand/--control-primary-* overrides would fight with it
-# rather than complement it.
+# Skipped (and any previous patch removed) if the Midnight Discord theme
+# is enabled — Midnight already defines its own accent palette, and this
+# script's blanket overrides would fight with it instead of complementing it.
 set -euo pipefail
 
 color="${1:?ERROR: discordPatcher.sh requires a hex color argument}"
@@ -15,56 +12,55 @@ color="${color#\#}"
 
 # Locate Vesktop's config dir — native package first, then flatpak
 if [ -d "$HOME/.config/vesktop" ]; then
-    VESKTOP_CONFIG_DIR="$HOME/.config/vesktop"
+    vesktopConfigDir="$HOME/.config/vesktop"
 elif [ -d "$HOME/.var/app/dev.vencord.Vesktop" ]; then
-    VESKTOP_CONFIG_DIR="$HOME/.var/app/dev.vencord.Vesktop/config/vesktop"
+    vesktopConfigDir="$HOME/.var/app/dev.vencord.Vesktop/config/vesktop"
 else
-    VESKTOP_CONFIG_DIR="$HOME/.config/vesktop"
+    vesktopConfigDir="$HOME/.config/vesktop"
 fi
 
-QUICKCSS="$VESKTOP_CONFIG_DIR/settings/quickCss.css"
-VESKTOP_SETTINGS="$VESKTOP_CONFIG_DIR/settings.json"
+quickCssFile="$vesktopConfigDir/settings/quickCss.css"
+vesktopSettingsFile="$vesktopConfigDir/settings.json"
 
-MARK_START="/* >>> themeRefresher accent (auto-generated, do not edit) >>> */"
-MARK_END="/* <<< themeRefresher accent <<< */"
+markStart="/* >>> themeRefresher accent (auto-generated, do not edit) >>> */"
+markEnd="/* <<< themeRefresher accent <<< */"
 
-_remove_patch_block() {
-    if [ -f "$QUICKCSS" ] && grep -qF "$MARK_START" "$QUICKCSS" 2>/dev/null; then
-        awk -v start="$MARK_START" -v end="$MARK_END" '
+remove_patch_block() {
+    if [ -f "$quickCssFile" ] && grep -qF "$markStart" "$quickCssFile" 2>/dev/null; then
+        awk -v start="$markStart" -v end="$markEnd" '
             $0 == start {skip=1; next}
             $0 == end {skip=0; next}
             skip {next}
             {print}
-        ' "$QUICKCSS" > "$QUICKCSS.tmp" && mv "$QUICKCSS.tmp" "$QUICKCSS"
-        echo "Removed previous discordPatcher accent block from $QUICKCSS."
+        ' "$quickCssFile" > "$quickCssFile.tmp" && mv "$quickCssFile.tmp" "$quickCssFile"
+        echo "Removed previous discordPatcher accent block from $quickCssFile."
     fi
 }
 
 # --- Midnight Discord theme detection ---
 # UNVERIFIED: assumes Vencord's settings.json "enabledThemes" schema (same
-# assumption as install.sh's "Configure Vesktop" section). If this ever
-# stops correctly detecting Midnight, check that schema first.
-if [ -f "$VESKTOP_SETTINGS" ] && command -v jq &>/dev/null; then
-    if jq -e '(.enabledThemes // []) | index("midnight-discord.css")' "$VESKTOP_SETTINGS" &>/dev/null; then
+# assumption install.sh's "Configure Vesktop" section makes). If detection
+# ever breaks, check that schema first.
+if [ -f "$vesktopSettingsFile" ] && command -v jq &>/dev/null; then
+    if jq -e '(.enabledThemes // []) | index("midnight-discord.css")' "$vesktopSettingsFile" &>/dev/null; then
         echo "Midnight Discord theme is enabled — it already sets its own accent colors."
         echo "Skipping discordPatcher accent patch to avoid conflicting with it."
-        _remove_patch_block
+        remove_patch_block
         exit 0
     fi
-elif [ -f "$VESKTOP_SETTINGS" ]; then
-    # jq not available — fall back to a plain string search. Less precise
-    # (e.g. can't tell a commented-out entry from a real one) but still
-    # catches the common case.
-    if grep -qF '"midnight-discord.css"' "$VESKTOP_SETTINGS" 2>/dev/null; then
+elif [ -f "$vesktopSettingsFile" ]; then
+    # jq not available — plain string search. Less precise (can't tell a
+    # commented-out entry from a real one) but still catches the common case.
+    if grep -qF '"midnight-discord.css"' "$vesktopSettingsFile" 2>/dev/null; then
         echo "Midnight Discord theme appears to be enabled (jq not found, used a plain text match)."
         echo "Skipping discordPatcher accent patch to avoid conflicting with it."
-        _remove_patch_block
+        remove_patch_block
         exit 0
     fi
 fi
 
-mkdir -p "$(dirname "$QUICKCSS")"
-touch "$QUICKCSS"
+mkdir -p "$(dirname "$quickCssFile")"
+touch "$quickCssFile"
 
 # Derive lighter (hover) / darker (active) shades by blending toward white/black
 read -r hover active <<< "$(python3 - "$color" << 'PYEOF'
@@ -80,11 +76,11 @@ print(f"#{hr:02x}{hg:02x}{hb:02x} #{ar:02x}{ag:02x}{ab:02x}")
 PYEOF
 )"
 
-# Applied on * (not :root) because Discord's own components re-declare
-# these custom properties locally without !important, and a local
-# declaration always wins over an inherited value no matter how loud
-# an ancestor's !important is. Forcing it on every element beats that.
-block="$MARK_START
+# Applied on * (not :root): Discord's own components re-declare these
+# custom properties locally without !important, and a local declaration
+# always beats an inherited value regardless of !important — forcing it
+# on every element is what actually wins.
+block="$markStart
 *, *::before, *::after {
   --background-brand: #$color !important;
   --background-brand-hover: $hover !important;
@@ -105,17 +101,17 @@ block="$MARK_START
   --control-primary-border-hover: $hover !important;
   --control-primary-border-active: $active !important;
 }
-$MARK_END"
+$markEnd"
 
-if grep -qF "$MARK_START" "$QUICKCSS" 2>/dev/null; then
-    awk -v start="$MARK_START" -v end="$MARK_END" -v block="$block" '
+if grep -qF "$markStart" "$quickCssFile" 2>/dev/null; then
+    awk -v start="$markStart" -v end="$markEnd" -v block="$block" '
         $0 == start {print block; skip=1; next}
         $0 == end {skip=0; next}
         skip {next}
         {print}
-    ' "$QUICKCSS" > "$QUICKCSS.tmp" && mv "$QUICKCSS.tmp" "$QUICKCSS"
+    ' "$quickCssFile" > "$quickCssFile.tmp" && mv "$quickCssFile.tmp" "$quickCssFile"
 else
-    printf '\n%s\n' "$block" >> "$QUICKCSS"
+    printf '\n%s\n' "$block" >> "$quickCssFile"
 fi
 
 echo "Discord/Vesktop accent patched -> #$color"

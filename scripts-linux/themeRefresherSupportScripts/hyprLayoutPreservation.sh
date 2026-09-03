@@ -1,86 +1,78 @@
 #!/usr/bin/env bash
 # hyprLayoutPreservation.sh
-# Saves and restores Hyprland layout state across all workspaces, so
-# window arrangement survives events that scatter windows (e.g. a theme
-# refresh that restarts several apps at once).
+# Saves and restores Hyprland window layout across all workspaces, so
+# arrangement survives events that scatter windows (e.g. a theme refresh
+# restarting several apps at once).
 #
-# Supports all four Hyprland layouts, including mixed setups where
-# different workspaces run different layouts simultaneously:
-#   - master    : master/slave stack, ordered via swapwithmaster/swapprev
-#   - dwindle   : binary split tree, rebuilt via evict-and-reinsert plus a
-#                 directional-move grid correction pass
-#   - scrolling : left-to-right columns (each column able to stack several
-#                 windows), rebuilt via evict-and-reinsert with directional
-#                 merges, then a bounded up/down pass to fix row order
-#                 within each column
-#   - monocle   : a single stack of full-screen windows with no reorder
-#                 dispatcher available, so order is captured by actively
-#                 walking cyclenext at save time and reconstructed via
-#                 reverse-order reinsertion (each insert becomes the new
-#                 top, so inserting bottom-first rebuilds the original
-#                 stack) — the one layout where save briefly disrupts the
-#                 view instead of reading everything passively
+# Handles all four Hyprland layouts, including mixed setups where
+# different workspaces run different layouts at once:
+#   - master    : ordered via swapwithmaster/swapprev
+#   - dwindle   : rebuilt via evict-and-reinsert plus a directional-move
+#                 grid-correction pass (no reorder dispatcher exists)
+#   - scrolling : rebuilt via evict-and-reinsert with directional merges,
+#                 then a bounded up/down pass to fix row order per column
+#   - monocle   : has no reorder dispatcher and no passive geometry signal
+#                 (every window occupies the same rect), so save actively
+#                 walks cyclenext to capture order, and restore reinserts
+#                 in reverse (each insert becomes the new top of stack)
 #
-# Each workspace's effective layout is read live from `hyprctl workspaces -j`
-# (the `tiledLayout` field, per Hyprland's per-workspace layout state as of
-# 0.54+), so it reflects whatever is actually active right now — whether set
-# via a workspace rule, `hyprctl keyword workspace "<id>, layout:<layout>"`,
-# or any other runtime layout switch. `general:layout` is kept only as a
-# last-resort fallback for a workspace `hyprctl workspaces -j` doesn't report.
+# Each workspace's live layout is read from `hyprctl workspaces -j`'s
+# `tiledLayout` field (Hyprland 0.54+), reflecting whatever's actually
+# active right now regardless of how it was set. `general:layout` is only
+# a last-resort fallback for a workspace that field doesn't report.
 #
 # Usage:
 #   hyprLayoutPreservation.sh save
 #   hyprLayoutPreservation.sh restore
 
-STATE_FILE="/tmp/hyprLayoutState.txt"
+stateFile="/tmp/hyprLayoutState.txt"
 
 # Scratch workspace used to "evict" windows (dwindle/scrolling/monocle) so
-# their internal position is forgotten before being reinserted in the
-# saved order.
-DWINDLE_SCRATCH_WS="special:layoutscratch"
+# their internal position is forgotten before being reinserted in order.
+dwindleScratchWorkspace="special:layoutscratch"
 
 get_layout_mode() {
     hyprctl getoption general:layout -j | jq -r '.str'
 }
 
 save_layout() {
-    local current_ws
-    current_ws=$(hyprctl activeworkspace -j | jq '.id')
-    local default_layout
-    default_layout=$(get_layout_mode)
-    echo "Current workspace: $current_ws"
-    echo "Default layout mode: $default_layout"
+    local currentWorkspace
+    currentWorkspace=$(hyprctl activeworkspace -j | jq '.id')
+    local defaultLayout
+    defaultLayout=$(get_layout_mode)
+    echo "Current workspace: $currentWorkspace"
+    echo "Default layout mode: $defaultLayout"
 
-    local ws_layouts_json
-    ws_layouts_json=$(hyprctl workspaces -j)
-    local overrides_arg
-    overrides_arg=$(echo "$ws_layouts_json" | jq -r '.[] | select(.tiledLayout != null) | "\(.id)=\(.tiledLayout)"' | paste -sd, -)
-    if [ -n "$overrides_arg" ]; then
-        echo "Live per-workspace layouts: ${overrides_arg}"
+    local workspaceLayoutsJson
+    workspaceLayoutsJson=$(hyprctl workspaces -j)
+    local layoutOverridesArg
+    layoutOverridesArg=$(echo "$workspaceLayoutsJson" | jq -r '.[] | select(.tiledLayout != null) | "\(.id)=\(.tiledLayout)"' | paste -sd, -)
+    if [ -n "$layoutOverridesArg" ]; then
+        echo "Live per-workspace layouts: ${layoutOverridesArg}"
     fi
 
-    local master_orientation
-    master_orientation=$(hyprctl getoption master:orientation -j | jq -r '.str')
+    local masterOrientation
+    masterOrientation=$(hyprctl getoption master:orientation -j | jq -r '.str')
 
-    # One fetch covers both this snapshot and the all_ws_ids lookup below —
-    # nothing is dispatched in between, so it stays valid for both.
-    local clients_json
-    clients_json=$(hyprctl clients -j)
+    # One fetch covers both this snapshot and the allWorkspaceIds lookup
+    # below — nothing is dispatched in between, so it stays valid for both.
+    local clientsJson
+    clientsJson=$(hyprctl clients -j)
 
     {
-        echo "current_workspace:$current_ws"
-        echo "default_layout:$default_layout"
+        echo "current_workspace:$currentWorkspace"
+        echo "default_layout:$defaultLayout"
 
         # Each workspace's EFFECTIVE layout (live tiledLayout if reported,
-        # else the global default) is decided here and saved directly per
-        # workspace as a "wslayout:" line, so restore doesn't need to query
-        # hyprctl at all — it just uses what was actually true at save time.
-        printf '%s' "$clients_json" | python3 -c "
+        # else the global default) is decided here and saved directly as a
+        # "wslayout:" line, so restore never needs to query hyprctl for
+        # it — it just uses what was actually true at save time.
+        printf '%s' "$clientsJson" | python3 -c "
 import json, sys
 clients = json.load(sys.stdin)
-default_layout = '$default_layout'
-orientation = '$master_orientation'
-ws_layouts_raw = '$overrides_arg'
+default_layout = '$defaultLayout'
+orientation = '$masterOrientation'
+ws_layouts_raw = '$layoutOverridesArg'
 ws_layouts = {}
 for pair in ws_layouts_raw.split(','):
     if '=' in pair:
@@ -90,7 +82,7 @@ for pair in ws_layouts_raw.split(','):
 def effective_layout(ws_id):
     # Live tiledLayout from hyprctl workspaces -j; falls back to
     # general:layout only if that workspace wasn't reported (shouldn't
-    # normally happen for any workspace that has open clients).
+    # normally happen for any workspace with open clients).
     return ws_layouts.get(str(ws_id), default_layout)
 
 def pick_master(ws_clients):
@@ -165,89 +157,88 @@ for ws_id, ws_clients in sorted(workspaces.items()):
                   str(at[0]) + ':' + str(at[1]) + ':' + str(size[0]) + ':' + str(size[1]))
         print('---')
 "
-    } > "$STATE_FILE"
+    } > "$stateFile"
 
-    # Monocle workspaces have no passive geometry signal (every window
-    # occupies the exact same rect), so their cycle order can only be
-    # captured by actually switching to the workspace and walking
+    # Monocle workspaces have no passive geometry signal, so their cycle
+    # order can only be captured by switching to the workspace and walking
     # cyclenext, recording which window becomes visible at each step. This
-    # briefly disrupts the view for any monocle workspace, unlike every
-    # other layout above which is captured with zero side effects.
-    local all_ws_ids
-    all_ws_ids=$(printf '%s' "$clients_json" | jq -r '[.[].workspace.id] | unique | .[]')
-    for ws_id in $all_ws_ids; do
-        [ "$ws_id" -le 0 ] 2>/dev/null && continue
+    # briefly disrupts the view for monocle workspaces only — every other
+    # layout above is captured passively, with zero side effects.
+    local allWorkspaceIds
+    allWorkspaceIds=$(printf '%s' "$clientsJson" | jq -r '[.[].workspace.id] | unique | .[]')
+    for wsId in $allWorkspaceIds; do
+        [ "$wsId" -le 0 ] 2>/dev/null && continue
 
-        local this_layout="$default_layout"
-        IFS=',' read -ra ws_layout_pairs <<< "$overrides_arg"
-        for pair in "${ws_layout_pairs[@]}"; do
-            [ "${pair%%=*}" = "$ws_id" ] && this_layout="${pair#*=}"
+        local thisLayout="$defaultLayout"
+        IFS=',' read -ra workspaceLayoutPairs <<< "$layoutOverridesArg"
+        for pair in "${workspaceLayoutPairs[@]}"; do
+            [ "${pair%%=*}" = "$wsId" ] && thisLayout="${pair#*=}"
         done
 
-        if [ "$this_layout" = "monocle" ]; then
-            echo "Capturing monocle cycle order for workspace $ws_id..."
-            hyprctl dispatch "hl.dsp.focus({ workspace = $ws_id })" >/dev/null 2>&1
+        if [ "$thisLayout" = "monocle" ]; then
+            echo "Capturing monocle cycle order for workspace $wsId..."
+            hyprctl dispatch "hl.dsp.focus({ workspace = $wsId })" >/dev/null 2>&1
             sleep 0.2
 
             local total
-            total=$(hyprctl clients -j | jq -r --argjson w "$ws_id" '[.[] | select(.workspace.id == $w)] | length')
+            total=$(hyprctl clients -j | jq -r --argjson w "$wsId" '[.[] | select(.workspace.id == $w)] | length')
 
-            local -a mono_order=()
+            local -a monocleOrder=()
             if [ "$total" -gt 0 ] 2>/dev/null; then
-                local start_addr=""
+                local startAddr=""
                 for (( i = 0; i < total; i++ )); do
                     local cur
                     cur=$(hyprctl clients -j | python3 -c "
 import json, sys
 clients = json.load(sys.stdin)
-ws_id = $ws_id
+ws_id = $wsId
 for c in clients:
     if c['workspace']['id'] == ws_id and c.get('visible'):
         print(c['address'] + '|' + c['class'])
         break
 " 2>/dev/null)
                     [ -z "$cur" ] && break
-                    local cur_addr="${cur%%|*}"
+                    local curAddr="${cur%%|*}"
 
                     if [ "$i" -eq 0 ]; then
-                        start_addr="$cur_addr"
-                    elif [ "$cur_addr" = "$start_addr" ]; then
+                        startAddr="$curAddr"
+                    elif [ "$curAddr" = "$startAddr" ]; then
                         break   # cycled back to the start
                     fi
 
-                    mono_order+=("$cur")
+                    monocleOrder+=("$cur")
                     hyprctl dispatch 'hl.dsp.layout("cyclenext")' >/dev/null 2>&1
                     sleep 0.15
                 done
             fi
 
             {
-                echo "workspace:$ws_id"
+                echo "workspace:$wsId"
                 echo "wslayout:monocle"
-                for entry in "${mono_order[@]}"; do
+                for entry in "${monocleOrder[@]}"; do
                     local addr="${entry%%|*}"
                     local cls="${entry#*|}"
                     echo "monowindow:${addr}:${cls}"
                 done
                 echo "---"
-            } >> "$STATE_FILE"
+            } >> "$stateFile"
         fi
     done
 
     # Return to wherever the view started before any monocle cycle-walking
-    hyprctl dispatch "hl.dsp.focus({ workspace = $current_ws })" >/dev/null 2>&1
+    hyprctl dispatch "hl.dsp.focus({ workspace = $currentWorkspace })" >/dev/null 2>&1
 
-    if [ -s "$STATE_FILE" ]; then
+    if [ -s "$stateFile" ]; then
         echo "Layout saved for workspaces:"
-        grep "^workspace:" "$STATE_FILE" | cut -d: -f2
+        grep "^workspace:" "$stateFile" | cut -d: -f2
     else
         echo "No layouts found to save"
-        rm -f "$STATE_FILE"
+        rm -f "$stateFile"
     fi
 }
 
-# Extracts just the class field from an "address:class[:extra:fields...]"
-# entry. Safe for plain "address:class" pairs too (no-op if no further colon).
+# Extracts the class field from an "address:class[:extra:fields...]" entry.
+# Safe for plain "address:class" pairs too (no-op if there's no further colon).
 extract_class() {
     local entry="$1"
     local rest="${entry#*:}"
@@ -255,33 +246,31 @@ extract_class() {
 }
 
 # Resolves a saved (address, class) pair against a SNAPSHOT of
-# `hyprctl clients -j` output passed in by the caller (never fetched here),
-# using the same class-first / address-to-disambiguate strategy everywhere
-# in this script:
+# `hyprctl clients -j` output passed in by the caller (never fetched
+# here), using one strategy throughout this script:
 #   - 0 current matches -> nothing found, caller should skip
 #   - 1 current match    -> unambiguous; selector "class:$class"
 #   - 2+ current matches -> only usable if the exact saved (address+class)
 #                           pair is still among them -> "address:0x...";
 #                           otherwise ambiguous, nothing found
-# Class matching is the default and is safe by construction — it carries
-# no risk of the address-reuse problem (a killed app's freed address being
-# recycled by the compositor for an entirely different app's new window).
-# Address is only used to disambiguate when multiple windows currently
-# share the saved class.
+# Class matching is the default and is safe by construction (no risk of a
+# killed app's freed address being recycled for an entirely different
+# app's new window). Address is only used to disambiguate when multiple
+# windows currently share the saved class.
 #
 # Prints 3 lines on success (empty output on failure):
-#   1. selector       ("class:X" or "address:0x...")
-#   2. current address (may differ from the saved address if stale)
+#   1. selector        ("class:X" or "address:0x...")
+#   2. current address  (may differ from the saved one if stale)
 #   3. current workspace id
-# Callers pick whichever lines they need with `sed -n 'Np'` — this is pure
-# in-memory JSON filtering, so calling it multiple times against the same
-# cached snapshot costs nothing extra (unlike the old per-call hyprctl fetch).
+# Callers pick whichever lines they need with `sed -n 'Np'` — pure
+# in-memory JSON filtering, so calling this repeatedly against the same
+# cached snapshot costs nothing extra.
 #   $1 - saved address
 #   $2 - saved class
 #   $3 - clients JSON snapshot (output of `hyprctl clients -j`)
 resolve_client() {
-    local addr="$1" class="$2" clients_json="$3"
-    printf '%s' "$clients_json" | python3 -c "
+    local addr="$1" class="$2" clientsJson="$3"
+    printf '%s' "$clientsJson" | python3 -c "
 import json, sys
 clients = json.load(sys.stdin)
 addr = '$addr'
@@ -305,68 +294,69 @@ print(target['workspace']['id'])
 }
 
 # Restores a single master-layout workspace: places the saved master and
-# slaves back on the right workspace, promotes the correct window to
-# master, then bubble-sorts each slave into its saved slot via swapprev.
-#   ws_id      - target workspace id
-#   m_entry    - saved master "address:class"
-#   $3 (nameref) - array of saved slave "address:class" entries, in order
+# slaves on the right workspace, promotes the correct window to master,
+# then bubble-sorts each slave into its saved slot via swapprev.
+#   wsId          - target workspace id
+#   masterEntry   - saved master "address:class"
+#   $3 (nameref)  - array of saved slave "address:class" entries, in order
 restore_workspace_master() {
-    local ws_id="$1"
-    local m_entry="$2"
-    local -n o_entries="$3"
+    local wsId="$1"
+    local masterEntry="$2"
+    local -n slaveEntries="$3"
 
-    local m_addr="${m_entry%%:*}"
-    local m_class=$(extract_class "$m_entry")
+    local masterAddr="${masterEntry%%:*}"
+    local masterClass=$(extract_class "$masterEntry")
 
-    local master_orientation
-    master_orientation=$(hyprctl getoption master:orientation -j | jq -r '.str')
+    local masterOrientation
+    masterOrientation=$(hyprctl getoption master:orientation -j | jq -r '.str')
 
-    echo "Restoring workspace $ws_id (master: $m_class)"
+    echo "Restoring workspace $wsId (master: $masterClass)"
 
     # One snapshot covers selector resolution for the master and every
-    # slave, plus Step 1's master check below — nothing is dispatched until
-    # after Step 1, so a single fetch is valid for all of it.
-    local clients_json
-    clients_json=$(hyprctl clients -j)
+    # slave, plus the master check below — nothing is dispatched until
+    # after that check, so a single fetch is valid for all of it.
+    local clientsJson
+    clientsJson=$(hyprctl clients -j)
 
-    local m_sel
-    m_sel=$(resolve_client "$m_addr" "$m_class" "$clients_json" | sed -n '1p')
-    if [ -z "$m_sel" ]; then
-        echo "  Skipping master $m_class (not currently open, or ambiguous duplicates)"
+    local masterSel
+    masterSel=$(resolve_client "$masterAddr" "$masterClass" "$clientsJson" | sed -n '1p')
+    if [ -z "$masterSel" ]; then
+        echo "  Skipping master $masterClass (not currently open, or ambiguous duplicates)"
     fi
 
-    # Nothing more to do for a single-window workspace — Phase 1 already
-    # placed it on the correct workspace, and there's no ordering to fix.
-    if [ ${#o_entries[@]} -eq 0 ]; then
+    # Nothing more to do for a single-window workspace — it's already on
+    # the right workspace, with no ordering to fix.
+    if [ ${#slaveEntries[@]} -eq 0 ]; then
         return
     fi
 
     # Build selectors for each slave (used below for focus/swap dispatches).
-    # Cross-workspace placement is Phase 1's job by this point, so this
-    # function only deals with internal ordering (who's master, slot order).
-    local -a slave_sels=()
-    for entry in "${o_entries[@]}"; do
-        local s_addr="${entry%%:*}"
-        local s_class=$(extract_class "$entry")
-        local s_sel
-        s_sel=$(resolve_client "$s_addr" "$s_class" "$clients_json" | sed -n '1p')
-        if [ -z "$s_sel" ]; then
-            echo "  Skipping $s_class (not currently open, or ambiguous duplicates)"
+    # Cross-workspace placement already happened before this function runs,
+    # so this function only deals with internal ordering (who's master,
+    # slot order).
+    local -a slaveSels=()
+    for entry in "${slaveEntries[@]}"; do
+        local slaveAddr="${entry%%:*}"
+        local slaveClass=$(extract_class "$entry")
+        local slaveSel
+        slaveSel=$(resolve_client "$slaveAddr" "$slaveClass" "$clientsJson" | sed -n '1p')
+        if [ -z "$slaveSel" ]; then
+            echo "  Skipping $slaveClass (not currently open, or ambiguous duplicates)"
         fi
-        slave_sels+=("$s_sel")
+        slaveSels+=("$slaveSel")
     done
 
     # Step 1: set correct master only if needed (still using the same
     # snapshot fetched above — nothing's been dispatched yet).
-    if [ -n "$m_sel" ]; then
-        local cur_master_addr
-        cur_master_addr=$(printf '%s' "$clients_json" | python3 -c "
+    if [ -n "$masterSel" ]; then
+        local currentMasterAddr
+        currentMasterAddr=$(printf '%s' "$clientsJson" | python3 -c "
 import json, sys
 clients = json.load(sys.stdin)
-ws_clients = [c for c in clients if c['workspace']['id'] == $ws_id]
+ws_clients = [c for c in clients if c['workspace']['id'] == $wsId]
 if not ws_clients:
     exit(1)
-orientation = '$master_orientation'
+orientation = '$masterOrientation'
 max_area = max(c['size'][0] * c['size'][1] for c in ws_clients)
 candidates = [c for c in ws_clients if c['size'][0] * c['size'][1] == max_area]
 if len(candidates) == 1:
@@ -384,12 +374,12 @@ print(master['address'])
 
         # Confirm current master's address against our resolved target
         # window's actual address (not the possibly-stale saved one).
-        local m_resolved_addr
-        m_resolved_addr=$(resolve_client "$m_addr" "$m_class" "$clients_json" | sed -n '2p')
+        local masterResolvedAddr
+        masterResolvedAddr=$(resolve_client "$masterAddr" "$masterClass" "$clientsJson" | sed -n '2p')
 
-        if [ -n "$cur_master_addr" ] && [ -n "$m_resolved_addr" ] && [ "$cur_master_addr" != "$m_resolved_addr" ]; then
-            echo "  Promoting $m_class to master on ws $ws_id"
-            hyprctl dispatch "hl.dsp.focus({ window = \"$m_sel\", follow = false })" 2>/dev/null
+        if [ -n "$currentMasterAddr" ] && [ -n "$masterResolvedAddr" ] && [ "$currentMasterAddr" != "$masterResolvedAddr" ]; then
+            echo "  Promoting $masterClass to master on ws $wsId"
+            hyprctl dispatch "hl.dsp.focus({ window = \"$masterSel\", follow = false })" 2>/dev/null
             sleep 0.3
             hyprctl dispatch 'hl.dsp.layout("swapwithmaster master")'
             sleep 0.3
@@ -397,35 +387,34 @@ print(master['address'])
     fi
 
     # Step 2: restore each slave slot in order. Each iteration genuinely
-    # needs a FRESH snapshot — an earlier swap in this same loop changes
-    # slot order for everyone after it — but the two lookups within ONE
-    # iteration (resolved address + current slot) now share that one fetch
-    # instead of two.
-    for target_slot in "${!o_entries[@]}"; do
-        local target_sel="${slave_sels[$target_slot]}"
-        [ -z "$target_sel" ] && continue   # skipped entry, nothing to slot
+    # needs a FRESH snapshot — an earlier swap in this loop changes slot
+    # order for everyone after it — but the two lookups within ONE
+    # iteration (resolved address + current slot) share that one fetch.
+    for targetSlot in "${!slaveEntries[@]}"; do
+        local targetSel="${slaveSels[$targetSlot]}"
+        [ -z "$targetSel" ] && continue   # skipped entry, nothing to slot
 
-        local target_addr="${o_entries[$target_slot]%%:*}"
-        local target_class=$(extract_class "${o_entries[$target_slot]}")
+        local targetAddr="${slaveEntries[$targetSlot]%%:*}"
+        local targetClass=$(extract_class "${slaveEntries[$targetSlot]}")
 
-        local step2_clients_json
-        step2_clients_json=$(hyprctl clients -j)
+        local slotClientsJson
+        slotClientsJson=$(hyprctl clients -j)
 
-        # Resolve to the window's actual current address first (handles
-        # the case where the saved address is stale but the class is
-        # unique), then find its slot index among current slaves.
-        local resolved_addr
-        resolved_addr=$(resolve_client "$target_addr" "$target_class" "$step2_clients_json" | sed -n '2p')
-        [ -z "$resolved_addr" ] && continue
+        # Resolve to the window's actual current address first (handles a
+        # stale saved address when the class is still unique), then find
+        # its slot index among current slaves.
+        local resolvedAddr
+        resolvedAddr=$(resolve_client "$targetAddr" "$targetClass" "$slotClientsJson" | sed -n '2p')
+        [ -z "$resolvedAddr" ] && continue
 
-        local cur_slot
-        cur_slot=$(printf '%s' "$step2_clients_json" | python3 -c "
+        local currentSlot
+        currentSlot=$(printf '%s' "$slotClientsJson" | python3 -c "
 import json, sys
 clients = json.load(sys.stdin)
-ws_clients = [c for c in clients if c['workspace']['id'] == $ws_id]
+ws_clients = [c for c in clients if c['workspace']['id'] == $wsId]
 if not ws_clients:
     exit(1)
-orientation = '$master_orientation'
+orientation = '$masterOrientation'
 max_area = max(c['size'][0] * c['size'][1] for c in ws_clients)
 candidates = [c for c in ws_clients if c['size'][0] * c['size'][1] == max_area]
 if len(candidates) == 1:
@@ -439,19 +428,19 @@ elif orientation == 'bottom':
 else:
     master = min(candidates, key=lambda x: x['at'][0])
 slaves = [c for c in ws_clients if c['address'] != master['address']]
-addr = '$resolved_addr'
+addr = '$resolvedAddr'
 for i, c in enumerate(sorted(slaves, key=lambda x: (x['at'][1], x['at'][0]))):
     if c['address'] == addr:
         print(i); break
 " 2>/dev/null)
 
-        if [ -n "$cur_slot" ] && [ "$cur_slot" -gt 0 ]; then
-            local n_swaps=$(( cur_slot - target_slot ))
-            if [ $n_swaps -gt 0 ]; then
-                echo "  Moving slot $cur_slot to slot $target_slot"
-                hyprctl dispatch "hl.dsp.focus({ window = \"$target_sel\", follow = false })" 2>/dev/null
+        if [ -n "$currentSlot" ] && [ "$currentSlot" -gt 0 ]; then
+            local swapCount=$(( currentSlot - targetSlot ))
+            if [ $swapCount -gt 0 ]; then
+                echo "  Moving slot $currentSlot to slot $targetSlot"
+                hyprctl dispatch "hl.dsp.focus({ window = \"$targetSel\", follow = false })" 2>/dev/null
                 sleep 0.2
-                for i in $(seq 1 $n_swaps); do
+                for i in $(seq 1 $swapCount); do
                     hyprctl dispatch 'hl.dsp.layout("swapprev")'
                     sleep 0.2
                 done
@@ -460,25 +449,25 @@ for i, c in enumerate(sorted(slaves, key=lambda x: (x['at'][1], x['at'][0]))):
     done
 }
 
-# Compares each saved dwindle window's position against its current one and
-# issues window.move direction corrections to fix grid placement (e.g. a
-# 2x2 quarters layout). Bucketing into "lo"/"hi" halves (rather than exact
-# coordinates) means this only fixes which half/quadrant a window belongs
-# in, not exact pixel geometry — that's what a directional move can
-# actually influence.
-#   ws_id        - target workspace id
-#   $2 (nameref) - array of saved "address:class:atx:aty:w:h" entries
+# Compares each saved dwindle window's position against its current one
+# and issues window.move direction corrections to fix grid placement (e.g.
+# a 2x2 quarters layout). Bucketing into "lo"/"hi" halves (rather than
+# exact coordinates) only fixes which half/quadrant a window belongs in,
+# not exact pixel geometry — that's what a directional move can actually
+# influence.
+#   wsId          - target workspace id
+#   $2 (nameref)  - array of saved "address:class:atx:aty:w:h" entries
 correct_dwindle_geometry() {
-    local ws_id="$1"
-    local -n g_entries="$2"
+    local wsId="$1"
+    local -n geometryEntries="$2"
 
-    if [ ${#g_entries[@]} -lt 2 ]; then
+    if [ ${#geometryEntries[@]} -lt 2 ]; then
         return
     fi
 
-    local geom_file
-    geom_file=$(mktemp /tmp/hyprDwindleGeom.XXXXXX)
-    printf '%s\n' "${g_entries[@]}" > "$geom_file"
+    local geometryFile
+    geometryFile=$(mktemp /tmp/hyprDwindleGeom.XXXXXX)
+    printf '%s\n' "${geometryEntries[@]}" > "$geometryFile"
 
     for attempt in 1 2 3 4; do
         local actions
@@ -486,9 +475,9 @@ correct_dwindle_geometry() {
 import json, sys
 
 current = json.load(sys.stdin)
-ws_id = $ws_id
+ws_id = $wsId
 saved = []
-with open('$geom_file') as f:
+with open('$geometryFile') as f:
     for line in f:
         line = line.strip()
         if not line:
@@ -516,9 +505,9 @@ def bucket(v, mid):
     return 'lo' if v < mid else 'hi'
 
 def resolve_current(s):
-    # Class-first: safe by construction, no address-reuse risk. Address is
-    # only used to disambiguate if multiple windows of this class are
-    # currently on this workspace.
+    # Class-first: safe by construction, no address-reuse risk. Address
+    # only disambiguates if multiple windows of this class are currently
+    # on this workspace.
     matches = [c for c in ws_clients if s['class'].lower() in c.get('class', '').lower()]
     if len(matches) == 1:
         return matches[0]
@@ -561,135 +550,129 @@ for s in saved:
         done <<< "$actions"
     done
 
-    rm -f "$geom_file"
+    rm -f "$geometryFile"
 }
 
 # Restores a single dwindle-layout workspace. Dwindle has no master/slave
-# concept — order comes purely from the split tree, which is built
-# incrementally as windows are inserted. Rather than try to compute/replay
-# tree splits, we evict all windows from the workspace to a scratch
-# workspace (forgetting their old tree position) and then bring them back
-# one at a time in the saved order, which drives dwindle to rebuild the
-# tree in that same order. A geometry-correction pass then fixes up grid
-# placement that insertion order alone can't guarantee.
-#   ws_id        - target workspace id
-#   $2 (nameref) - array of saved "address:class:atx:aty:w:h" entries,
-#                  in raster (top-to-bottom, left-to-right) order
+# concept — order comes purely from the split tree, built incrementally as
+# windows are inserted. Rather than compute/replay tree splits, evict all
+# windows to a scratch workspace (forgetting their old tree position),
+# then bring them back one at a time in saved order, which drives dwindle
+# to rebuild the tree in that same order. A geometry-correction pass then
+# fixes up grid placement that insertion order alone can't guarantee.
+#   wsId          - target workspace id
+#   $2 (nameref)  - array of saved "address:class:atx:aty:w:h" entries,
+#                   in raster (top-to-bottom, left-to-right) order
 restore_workspace_dwindle() {
-    local ws_id="$1"
-    local -n w_entries="$2"
+    local wsId="$1"
+    local -n windowEntries="$2"
 
-    echo "Restoring workspace $ws_id (dwindle, ${#w_entries[@]} windows)"
+    echo "Restoring workspace $wsId (dwindle, ${#windowEntries[@]} windows)"
 
-    if [ ${#w_entries[@]} -eq 0 ]; then
+    if [ ${#windowEntries[@]} -eq 0 ]; then
         return
     fi
 
-    if [ ${#w_entries[@]} -eq 1 ]; then
-        # Nothing to order — Phase 1 already placed it on the right workspace.
-        return
+    if [ ${#windowEntries[@]} -eq 1 ]; then
+        return   # nothing to order — already on the right workspace
     fi
 
-    local -a movable_sels=()
-    local clients_json
-    clients_json=$(hyprctl clients -j)
-    for entry in "${w_entries[@]}"; do
+    local -a movableSels=()
+    local clientsJson
+    clientsJson=$(hyprctl clients -j)
+    for entry in "${windowEntries[@]}"; do
         local addr="${entry%%:*}"
         local class=$(extract_class "$entry")
         local sel
-        sel=$(resolve_client "$addr" "$class" "$clients_json" | sed -n '1p')
+        sel=$(resolve_client "$addr" "$class" "$clientsJson" | sed -n '1p')
         if [ -z "$sel" ]; then
             echo "  Skipping $class (not currently open, or ambiguous duplicates)"
         else
-            movable_sels+=("$sel")
+            movableSels+=("$sel")
         fi
     done
 
-    if [ ${#movable_sels[@]} -eq 0 ]; then
+    if [ ${#movableSels[@]} -eq 0 ]; then
         return
     fi
 
     # Step 1: evict to scratch, forgetting current tree position
-    for sel in "${movable_sels[@]}"; do
-        hyprctl dispatch "hl.dsp.window.move({ workspace = \"$DWINDLE_SCRATCH_WS\", window = \"$sel\", follow = false })" 2>/dev/null
+    for sel in "${movableSels[@]}"; do
+        hyprctl dispatch "hl.dsp.window.move({ workspace = \"$dwindleScratchWorkspace\", window = \"$sel\", follow = false })" 2>/dev/null
         sleep 0.15
     done
 
     # Step 2: reinsert one at a time, in saved order, rebuilding the split
     # tree in that sequence. Dwindle splits off whichever window is
-    # currently focused, so we must explicitly focus each window right
-    # after moving it in — otherwise every later window keeps splitting
-    # against the same stale focus instead of chaining off the previous
-    # insert, which scrambles the order.
-    for sel in "${movable_sels[@]}"; do
-        hyprctl dispatch "hl.dsp.window.move({ workspace = $ws_id, window = \"$sel\", follow = false })" 2>/dev/null
+    # currently focused, so each window must be explicitly focused right
+    # after moving it in — otherwise later windows keep splitting against
+    # stale focus instead of chaining off the previous insert, scrambling
+    # the order.
+    for sel in "${movableSels[@]}"; do
+        hyprctl dispatch "hl.dsp.window.move({ workspace = $wsId, window = \"$sel\", follow = false })" 2>/dev/null
         sleep 0.15
         hyprctl dispatch "hl.dsp.focus({ window = \"$sel\", follow = false })" 2>/dev/null
         sleep 0.15
     done
 
-    # Step 3: correct grid placement (e.g. a 2x2 quarters layout coming out
-    # as an L-shape), since dwindle picks each split's orientation from the
-    # aspect ratio at insertion time, not from the saved layout.
-    correct_dwindle_geometry "$ws_id" w_entries
+    # Step 3: correct grid placement (e.g. a 2x2 quarters layout coming
+    # out as an L-shape), since dwindle picks each split's orientation
+    # from the aspect ratio at insertion time, not the saved layout.
+    correct_dwindle_geometry "$wsId" windowEntries
 }
 
 # Restores a single scrolling-layout workspace. Scrolling arranges windows
-# in left-to-right columns, where each column can stack multiple windows.
+# in left-to-right columns, each column able to stack multiple windows.
 # Confirmed behavior this relies on:
-#   - a window arriving on the workspace (whether newly opened or moved in
-#     from elsewhere) always becomes its own brand-new column
+#   - a window arriving on the workspace always becomes its own new column
 #   - directional move left merges the focused window into the PREVIOUS
 #     column, appending it at the BOTTOM of that column's stack
-#   - only the focused window moves — its other former column-mates (if
-#     any) are left behind in their original column
+#   - only the focused window moves — other former column-mates stay put
 #
-# Given that, we evict everyone to scratch (forgetting current column
-# layout entirely), then reinsert in saved column-major/row-minor order:
-# the first window of each column is just inserted and focused (becomes
-# the start of a fresh column); every subsequent window in that SAME
-# column is inserted (lands as its own new column) and then immediately
-# merged left into the column we're building, which — since rows are
-# processed top-to-bottom — reconstructs the correct stack order. Staying
-# focused on whatever we just placed keeps each new column appending
-# immediately after the last one, preserving left-to-right column order.
-#   ws_id        - target workspace id
-#   $2 (nameref) - array of saved "address:class:atx:aty:w:h:colidx:rowidx"
-#                  entries, in column-major/row-minor saved order
+# So: evict everyone to scratch (forgetting current columns), then
+# reinsert in saved column-major/row-minor order — each column's first
+# window just gets inserted and focused (starts a fresh column); every
+# later window in that SAME column is inserted (its own new column) then
+# immediately merged left into the column being built, which — since rows
+# are processed top-to-bottom — reconstructs the correct stack order.
+# Staying focused on whatever was just placed keeps new columns appending
+# right after the last one, preserving left-to-right column order.
+#   wsId          - target workspace id
+#   $2 (nameref)  - array of saved "address:class:atx:aty:w:h:colidx:rowidx"
+#                   entries, in column-major/row-minor saved order
 restore_workspace_scrolling() {
-    local ws_id="$1"
-    local -n sc_entries="$2"
+    local wsId="$1"
+    local -n scrollEntries="$2"
 
-    echo "Restoring workspace $ws_id (scrolling, ${#sc_entries[@]} windows)"
+    echo "Restoring workspace $wsId (scrolling, ${#scrollEntries[@]} windows)"
 
-    if [ ${#sc_entries[@]} -le 1 ]; then
-        # Nothing to order — Phase 1 already placed it on the right workspace.
-        return
+    if [ ${#scrollEntries[@]} -le 1 ]; then
+        return   # nothing to order — already on the right workspace
     fi
 
     # Resolve selectors and pull out each entry's column/row indices (last
     # two fields), preserving saved order (already column-major/row-minor).
     local -a sels=()
-    local -a col_idxs=()
-    local -a row_idxs=()
-    local clients_json
-    clients_json=$(hyprctl clients -j)
-    for entry in "${sc_entries[@]}"; do
+    local -a columnIndexes=()
+    local -a rowIndexes=()
+    local clientsJson
+    clientsJson=$(hyprctl clients -j)
+    for entry in "${scrollEntries[@]}"; do
         local addr="${entry%%:*}"
         local class=$(extract_class "$entry")
-        local row_idx="${entry##*:}"
+        local rowIndex="${entry##*:}"
         local tmp="${entry%:*}"
-        local col_idx="${tmp##*:}"
+        local columnIndex="${tmp##*:}"
 
         local sel
-        sel=$(resolve_client "$addr" "$class" "$clients_json" | sed -n '1p')
+        sel=$(resolve_client "$addr" "$class" "$clientsJson" | sed -n '1p')
         if [ -z "$sel" ]; then
             echo "  Skipping $class (not currently open, or ambiguous duplicates)"
             continue
         fi
         sels+=("$sel")
-        col_idxs+=("$col_idx")
-        row_idxs+=("$row_idx")
+        columnIndexes+=("$columnIndex")
+        rowIndexes+=("$rowIndex")
     done
 
     if [ ${#sels[@]} -eq 0 ]; then
@@ -698,7 +681,7 @@ restore_workspace_scrolling() {
 
     # Step 1: evict to scratch, forgetting current column structure
     for sel in "${sels[@]}"; do
-        hyprctl dispatch "hl.dsp.window.move({ workspace = \"$DWINDLE_SCRATCH_WS\", window = \"$sel\", follow = false })" 2>/dev/null
+        hyprctl dispatch "hl.dsp.window.move({ workspace = \"$dwindleScratchWorkspace\", window = \"$sel\", follow = false })" 2>/dev/null
         sleep 0.15
     done
 
@@ -706,42 +689,42 @@ restore_workspace_scrolling() {
     # This reliably rebuilds correct COLUMN membership, but not necessarily
     # correct row order within a column — merging into an existing column
     # doesn't always land at the bottom; the exact slot depends on the
-    # column's current parity/history, not something worth reverse-
-    # engineering. Step 3 fixes row order afterward instead.
-    local prev_col_idx=""
+    # column's current parity/history, not worth reverse-engineering.
+    # Step 3 fixes row order afterward instead.
+    local prevColumnIndex=""
     for i in "${!sels[@]}"; do
         local sel="${sels[$i]}"
-        local col_idx="${col_idxs[$i]}"
+        local columnIndex="${columnIndexes[$i]}"
 
-        hyprctl dispatch "hl.dsp.window.move({ workspace = $ws_id, window = \"$sel\", follow = false })" 2>/dev/null
+        hyprctl dispatch "hl.dsp.window.move({ workspace = $wsId, window = \"$sel\", follow = false })" 2>/dev/null
         sleep 0.2
         hyprctl dispatch "hl.dsp.focus({ window = \"$sel\", follow = false })" 2>/dev/null
         sleep 0.2
 
-        if [ "$col_idx" = "$prev_col_idx" ]; then
+        if [ "$columnIndex" = "$prevColumnIndex" ]; then
             hyprctl dispatch "hl.dsp.window.move({ direction = \"l\" })" 2>/dev/null
             sleep 0.2
         fi
 
-        prev_col_idx="$col_idx"
+        prevColumnIndex="$columnIndex"
     done
 
     # Step 3: correct row order within each column using bounded up/down
     # moves (confirmed to stop at the column's top/bottom rather than
     # wrapping or leaving the column), bubble-sorting each window into its
-    # saved row position — the same technique used for master's slot order.
+    # saved row position — same technique used for master's slot order.
     for attempt in 1 2 3 4 5; do
         local corrected=0
         for i in "${!sels[@]}"; do
             local sel="${sels[$i]}"
-            local desired_row="${row_idxs[$i]}"
+            local desiredRow="${rowIndexes[$i]}"
 
-            local cur_rank
-            cur_rank=$(hyprctl clients -j | python3 -c "
+            local currentRank
+            currentRank=$(hyprctl clients -j | python3 -c "
 import json, sys
 clients = json.load(sys.stdin)
 sel = '$sel'
-ws_id = $ws_id
+ws_id = $wsId
 ws_clients = [c for c in clients if c['workspace']['id'] == ws_id]
 
 target = None
@@ -768,10 +751,10 @@ for idx, c in enumerate(col_clients):
         break
 " 2>/dev/null)
 
-            if [ -n "$cur_rank" ] && [ "$cur_rank" != "$desired_row" ]; then
+            if [ -n "$currentRank" ] && [ "$currentRank" != "$desiredRow" ]; then
                 hyprctl dispatch "hl.dsp.focus({ window = \"$sel\", follow = false })" 2>/dev/null
                 sleep 0.15
-                if [ "$cur_rank" -gt "$desired_row" ]; then
+                if [ "$currentRank" -gt "$desiredRow" ]; then
                     hyprctl dispatch "hl.dsp.window.move({ direction = \"u\" })" 2>/dev/null
                 else
                     hyprctl dispatch "hl.dsp.window.move({ direction = \"d\" })" 2>/dev/null
@@ -785,35 +768,34 @@ for idx, c in enumerate(col_clients):
 }
 
 # Restores a single monocle-layout workspace. Monocle has no native
-# reordering dispatcher (only cyclenext/cycleprev, which move focus through
-# whatever order already exists) and no positional signal to read passively
-# (every window occupies the exact same rect) — so we rely entirely on one
-# confirmed fact: moving a window onto a monocle workspace always makes it
-# the new top of the stack. That's a plain stack push, so inserting the
-# saved entries in REVERSE order (bottom-of-stack first, top-of-stack last)
-# reconstructs the original top-to-bottom order with no reordering command
-# needed at all.
-#   ws_id        - target workspace id
-#   $2 (nameref) - array of saved "address:class" entries, top-to-bottom
-#                  cycle order as captured at save time
+# reordering dispatcher (only cyclenext/cycleprev, which move focus
+# through whatever order already exists) and no positional signal to read
+# passively — so this relies entirely on one confirmed fact: moving a
+# window onto a monocle workspace always makes it the new top of the
+# stack. That's a plain stack push, so inserting the saved entries in
+# REVERSE order (bottom-of-stack first, top-of-stack last) reconstructs
+# the original top-to-bottom order with no reordering command at all.
+#   wsId          - target workspace id
+#   $2 (nameref)  - array of saved "address:class" entries, top-to-bottom
+#                   cycle order as captured at save time
 restore_workspace_monocle() {
-    local ws_id="$1"
-    local -n mo_entries="$2"
+    local wsId="$1"
+    local -n monocleEntries="$2"
 
-    echo "Restoring workspace $ws_id (monocle, ${#mo_entries[@]} windows)"
+    echo "Restoring workspace $wsId (monocle, ${#monocleEntries[@]} windows)"
 
-    if [ ${#mo_entries[@]} -le 1 ]; then
-        return   # nothing to order — Phase 1 already placed it
+    if [ ${#monocleEntries[@]} -le 1 ]; then
+        return   # nothing to order — already on the right workspace
     fi
 
     local -a sels=()
-    local clients_json
-    clients_json=$(hyprctl clients -j)
-    for entry in "${mo_entries[@]}"; do
+    local clientsJson
+    clientsJson=$(hyprctl clients -j)
+    for entry in "${monocleEntries[@]}"; do
         local addr="${entry%%:*}"
         local class=$(extract_class "$entry")
         local sel
-        sel=$(resolve_client "$addr" "$class" "$clients_json" | sed -n '1p')
+        sel=$(resolve_client "$addr" "$class" "$clientsJson" | sed -n '1p')
         if [ -z "$sel" ]; then
             echo "  Skipping $class (not currently open, or ambiguous duplicates)"
         else
@@ -827,7 +809,7 @@ restore_workspace_monocle() {
 
     # Step 1: evict to scratch, forgetting current stack position
     for sel in "${sels[@]}"; do
-        hyprctl dispatch "hl.dsp.window.move({ workspace = \"$DWINDLE_SCRATCH_WS\", window = \"$sel\", follow = false })" 2>/dev/null
+        hyprctl dispatch "hl.dsp.window.move({ workspace = \"$dwindleScratchWorkspace\", window = \"$sel\", follow = false })" 2>/dev/null
         sleep 0.15
     done
 
@@ -836,94 +818,94 @@ restore_workspace_monocle() {
     # leaves the stack in the original order.
     local n=${#sels[@]}
     for (( i = n - 1; i >= 0; i-- )); do
-        hyprctl dispatch "hl.dsp.window.move({ workspace = $ws_id, window = \"${sels[$i]}\", follow = false })" 2>/dev/null
+        hyprctl dispatch "hl.dsp.window.move({ workspace = $wsId, window = \"${sels[$i]}\", follow = false })" 2>/dev/null
         sleep 0.2
     done
 }
 
 restore_layout() {
-    if [ ! -f "$STATE_FILE" ] || [ ! -s "$STATE_FILE" ]; then
+    if [ ! -f "$stateFile" ] || [ ! -s "$stateFile" ]; then
         echo "No saved layout state found, skipping restore"
         return
     fi
 
-    local saved_workspace
-    saved_workspace=$(grep "^current_workspace:" "$STATE_FILE" | cut -d: -f2)
-    local default_layout
-    default_layout=$(grep "^default_layout:" "$STATE_FILE" | cut -d: -f2)
-    echo "Will return to workspace: $saved_workspace"
-    echo "Saved default layout mode: $default_layout"
+    local savedWorkspace
+    savedWorkspace=$(grep "^current_workspace:" "$stateFile" | cut -d: -f2)
+    local defaultLayout
+    defaultLayout=$(grep "^default_layout:" "$stateFile" | cut -d: -f2)
+    echo "Will return to workspace: $savedWorkspace"
+    echo "Saved default layout mode: $defaultLayout"
 
     # === Parse pass: read the whole state file into memory first. No
-    # restore actions happen here — we build a flat list of every saved
+    # restore actions happen here — build a flat list of every saved
     # window (for Phase 1) plus a per-workspace structure (for Phase 2),
     # keeping workspace order as it appeared in the file. Each workspace's
     # actual layout (which may differ per-workspace via a workspace rule)
-    # is read from its own "wslayout:" line rather than assumed globally. ===
-    local loop_ws=""
-    local loop_master=""
-    local loop_layout=""
-    declare -a loop_slaves
-    declare -a loop_windows
-    declare -a loop_monowindows
-    declare -a all_entries=()      # each "ws_id|address:class[:...]"
-    declare -a ws_order=()         # workspace ids, in saved order
-    declare -A ws_layout_map       # ws_id -> layout ("master", "dwindle", ...)
-    declare -A ws_master_map       # ws_id -> "address:class" (master mode)
-    declare -A ws_slaves_map       # ws_id -> newline-joined slave entries
-    declare -A ws_windows_map      # ws_id -> newline-joined window entries
-    declare -A ws_monocle_map      # ws_id -> newline-joined monowindow entries
+    # comes from its own "wslayout:" line rather than a global assumption. ===
+    local loopWorkspace=""
+    local loopMaster=""
+    local loopLayout=""
+    declare -a loopSlaves
+    declare -a loopWindows
+    declare -a loopMonoWindows
+    declare -a allEntries=()          # each "wsId|address:class[:...]"
+    declare -a workspaceOrder=()      # workspace ids, in saved order
+    declare -A workspaceLayoutMap     # wsId -> layout ("master", "dwindle", ...)
+    declare -A workspaceMasterMap     # wsId -> "address:class" (master mode)
+    declare -A workspaceSlavesMap     # wsId -> newline-joined slave entries
+    declare -A workspaceWindowsMap    # wsId -> newline-joined window entries
+    declare -A workspaceMonocleMap    # wsId -> newline-joined monowindow entries
 
     while IFS= read -r line; do
         if [[ "$line" == current_workspace:* ]] || [[ "$line" == default_layout:* ]]; then
             continue
         elif [[ "$line" == workspace:* ]]; then
-            loop_ws="${line#workspace:}"
-            loop_master=""
-            loop_layout=""
-            loop_slaves=()
-            loop_windows=()
-            loop_monowindows=()
+            loopWorkspace="${line#workspace:}"
+            loopMaster=""
+            loopLayout=""
+            loopSlaves=()
+            loopWindows=()
+            loopMonoWindows=()
         elif [[ "$line" == wslayout:* ]]; then
-            loop_layout="${line#wslayout:}"
+            loopLayout="${line#wslayout:}"
         elif [[ "$line" == master:* ]]; then
-            loop_master="${line#master:}"          # "address:class"
+            loopMaster="${line#master:}"          # "address:class"
         elif [[ "$line" == slave:* ]]; then
-            loop_slaves+=("${line#slave:}")          # "address:class"
+            loopSlaves+=("${line#slave:}")          # "address:class"
         elif [[ "$line" == window:* ]]; then
-            loop_windows+=("${line#window:}")        # "address:class:atx:aty:w:h"
+            loopWindows+=("${line#window:}")        # "address:class:atx:aty:w:h"
         elif [[ "$line" == monowindow:* ]]; then
-            loop_monowindows+=("${line#monowindow:}")  # "address:class"
+            loopMonoWindows+=("${line#monowindow:}")  # "address:class"
         elif [[ "$line" == "---" ]]; then
-            if [ -n "$loop_ws" ] && [ -n "$loop_master" ]; then
-                all_entries+=("${loop_ws}|${loop_master}")
+            if [ -n "$loopWorkspace" ] && [ -n "$loopMaster" ]; then
+                allEntries+=("${loopWorkspace}|${loopMaster}")
             fi
-            for e in "${loop_slaves[@]}"; do
-                all_entries+=("${loop_ws}|${e}")
+            for e in "${loopSlaves[@]}"; do
+                allEntries+=("${loopWorkspace}|${e}")
             done
-            for e in "${loop_windows[@]}"; do
-                all_entries+=("${loop_ws}|${e}")
+            for e in "${loopWindows[@]}"; do
+                allEntries+=("${loopWorkspace}|${e}")
             done
-            for e in "${loop_monowindows[@]}"; do
-                all_entries+=("${loop_ws}|${e}")
+            for e in "${loopMonoWindows[@]}"; do
+                allEntries+=("${loopWorkspace}|${e}")
             done
 
-            if [ -n "$loop_ws" ]; then
-                ws_order+=("$loop_ws")
-                ws_layout_map["$loop_ws"]="${loop_layout:-$default_layout}"
-                ws_master_map["$loop_ws"]="$loop_master"
-                ws_slaves_map["$loop_ws"]=$(printf '%s\n' "${loop_slaves[@]}")
-                ws_windows_map["$loop_ws"]=$(printf '%s\n' "${loop_windows[@]}")
-                ws_monocle_map["$loop_ws"]=$(printf '%s\n' "${loop_monowindows[@]}")
+            if [ -n "$loopWorkspace" ]; then
+                workspaceOrder+=("$loopWorkspace")
+                workspaceLayoutMap["$loopWorkspace"]="${loopLayout:-$defaultLayout}"
+                workspaceMasterMap["$loopWorkspace"]="$loopMaster"
+                workspaceSlavesMap["$loopWorkspace"]=$(printf '%s\n' "${loopSlaves[@]}")
+                workspaceWindowsMap["$loopWorkspace"]=$(printf '%s\n' "${loopWindows[@]}")
+                workspaceMonocleMap["$loopWorkspace"]=$(printf '%s\n' "${loopMonoWindows[@]}")
             fi
-            loop_ws=""
-            loop_master=""
-            loop_layout=""
-            loop_slaves=()
-            loop_windows=()
-            loop_monowindows=()
+            loopWorkspace=""
+            loopMaster=""
+            loopLayout=""
+            loopSlaves=()
+            loopWindows=()
+            loopMonoWindows=()
         fi
-    done < "$STATE_FILE"
+    done < "$stateFile"
 
     # === Phase 1: move every saved window to its correct workspace first,
     # globally, before any per-workspace ordering runs. This decouples
@@ -936,93 +918,93 @@ restore_layout() {
     # affect a later record's selector/ambiguity resolution — every record
     # is classified against the same pre-Phase-1 state, which is exactly
     # what "where did this window start" should mean anyway.
-    local phase1_clients_json
-    phase1_clients_json=$(hyprctl clients -j)
-    for rec in "${all_entries[@]}"; do
-        local rec_ws="${rec%%|*}"
-        local rec_rest="${rec#*|}"          # "address:class[:...]"
-        local rec_addr="${rec_rest%%:*}"
-        local rec_class=$(extract_class "$rec_rest")
+    local phase1ClientsJson
+    phase1ClientsJson=$(hyprctl clients -j)
+    for rec in "${allEntries[@]}"; do
+        local recordWorkspace="${rec%%|*}"
+        local recordRest="${rec#*|}"          # "address:class[:...]"
+        local recordAddr="${recordRest%%:*}"
+        local recordClass=$(extract_class "$recordRest")
 
-        local resolved sel cur_ws
-        resolved=$(resolve_client "$rec_addr" "$rec_class" "$phase1_clients_json")
+        local resolved sel currentWorkspaceId
+        resolved=$(resolve_client "$recordAddr" "$recordClass" "$phase1ClientsJson")
         sel=$(echo "$resolved" | sed -n '1p')
         if [ -z "$sel" ]; then
-            echo "  Skipping $rec_class (not currently open, or ambiguous duplicates)"
+            echo "  Skipping $recordClass (not currently open, or ambiguous duplicates)"
             continue
         fi
 
-        cur_ws=$(echo "$resolved" | sed -n '3p')
-        if [ -n "$cur_ws" ] && [ "$cur_ws" != "$rec_ws" ]; then
-            echo "  Moving $rec_class from ws $cur_ws to ws $rec_ws"
-            hyprctl dispatch "hl.dsp.window.move({ workspace = $rec_ws, window = \"$sel\", follow = false })" 2>/dev/null
+        currentWorkspaceId=$(echo "$resolved" | sed -n '3p')
+        if [ -n "$currentWorkspaceId" ] && [ "$currentWorkspaceId" != "$recordWorkspace" ]; then
+            echo "  Moving $recordClass from ws $currentWorkspaceId to ws $recordWorkspace"
+            hyprctl dispatch "hl.dsp.window.move({ workspace = $recordWorkspace, window = \"$sel\", follow = false })" 2>/dev/null
             sleep 0.2
         fi
     done
 
-    # === Phase 2: now that everyone's on the right workspace, go workspace
-    # by workspace and apply the layout-specific ordering (master
-    # promotion + slot order, or dwindle tree rebuild + grid correction). ===
+    # === Phase 2: now that everyone's on the right workspace, go
+    # workspace by workspace and apply the layout-specific ordering
+    # (master promotion + slot order, or dwindle tree rebuild + grid
+    # correction, etc). ===
     echo "Phase 2: restoring layout order per workspace..."
-    for ws_id in "${ws_order[@]}"; do
-        local this_layout="${ws_layout_map[$ws_id]}"
-        if [ "$this_layout" = "master" ]; then
-            local this_master="${ws_master_map[$ws_id]}"
-            if [ -n "$this_master" ]; then
-                declare -a these_slaves=()
+    for wsId in "${workspaceOrder[@]}"; do
+        local thisLayout="${workspaceLayoutMap[$wsId]}"
+        if [ "$thisLayout" = "master" ]; then
+            local thisMaster="${workspaceMasterMap[$wsId]}"
+            if [ -n "$thisMaster" ]; then
+                declare -a theseSlaves=()
                 while IFS= read -r l; do
-                    [ -n "$l" ] && these_slaves+=("$l")
-                done <<< "${ws_slaves_map[$ws_id]}"
-                restore_workspace_master "$ws_id" "$this_master" these_slaves
+                    [ -n "$l" ] && theseSlaves+=("$l")
+                done <<< "${workspaceSlavesMap[$wsId]}"
+                restore_workspace_master "$wsId" "$thisMaster" theseSlaves
             fi
-        elif [ "$this_layout" = "scrolling" ]; then
-            declare -a these_windows=()
+        elif [ "$thisLayout" = "scrolling" ]; then
+            declare -a theseWindows=()
             while IFS= read -r l; do
-                [ -n "$l" ] && these_windows+=("$l")
-            done <<< "${ws_windows_map[$ws_id]}"
-            restore_workspace_scrolling "$ws_id" these_windows
-        elif [ "$this_layout" = "monocle" ]; then
-            declare -a these_mono=()
+                [ -n "$l" ] && theseWindows+=("$l")
+            done <<< "${workspaceWindowsMap[$wsId]}"
+            restore_workspace_scrolling "$wsId" theseWindows
+        elif [ "$thisLayout" = "monocle" ]; then
+            declare -a theseMono=()
             while IFS= read -r l; do
-                [ -n "$l" ] && these_mono+=("$l")
-            done <<< "${ws_monocle_map[$ws_id]}"
-            restore_workspace_monocle "$ws_id" these_mono
+                [ -n "$l" ] && theseMono+=("$l")
+            done <<< "${workspaceMonocleMap[$wsId]}"
+            restore_workspace_monocle "$wsId" theseMono
         else
-            declare -a these_windows=()
+            declare -a theseWindows=()
             while IFS= read -r l; do
-                [ -n "$l" ] && these_windows+=("$l")
-            done <<< "${ws_windows_map[$ws_id]}"
-            restore_workspace_dwindle "$ws_id" these_windows
+                [ -n "$l" ] && theseWindows+=("$l")
+            done <<< "${workspaceWindowsMap[$wsId]}"
+            restore_workspace_dwindle "$wsId" theseWindows
         fi
     done
 
     # Settle pass: some apps (e.g. launched with a hidden/delayed-start
     # flag) create their real window after Phase 1 has already moved on,
-    # and it lands on whatever workspace happens to be active at that
-    # later moment instead of the intended one. Re-check every saved
-    # window's actual workspace a few times over ~1.5s and correct any
-    # stragglers.
+    # landing on whatever workspace happens to be active at that later
+    # moment instead of the intended one. Re-check every saved window's
+    # actual workspace a few times over ~1.5s and correct any stragglers.
     echo "Verifying window placement..."
     for attempt in 1 2 3; do
         local corrected=0
-        local settle_clients_json
-        settle_clients_json=$(hyprctl clients -j)
-        for rec in "${all_entries[@]}"; do
-            local rec_ws="${rec%%|*}"
-            local rec_rest="${rec#*|}"          # "address:class[:...]"
-            local rec_addr="${rec_rest%%:*}"
-            local rec_class=$(extract_class "$rec_rest")
+        local settleClientsJson
+        settleClientsJson=$(hyprctl clients -j)
+        for rec in "${allEntries[@]}"; do
+            local recordWorkspace="${rec%%|*}"
+            local recordRest="${rec#*|}"          # "address:class[:...]"
+            local recordAddr="${recordRest%%:*}"
+            local recordClass=$(extract_class "$recordRest")
 
-            local resolved cur_ws
-            resolved=$(resolve_client "$rec_addr" "$rec_class" "$settle_clients_json")
-            cur_ws=$(echo "$resolved" | sed -n '3p')
+            local resolved currentWorkspaceId
+            resolved=$(resolve_client "$recordAddr" "$recordClass" "$settleClientsJson")
+            currentWorkspaceId=$(echo "$resolved" | sed -n '3p')
 
-            if [ -n "$cur_ws" ] && [ "$cur_ws" != "$rec_ws" ]; then
+            if [ -n "$currentWorkspaceId" ] && [ "$currentWorkspaceId" != "$recordWorkspace" ]; then
                 local sel
                 sel=$(echo "$resolved" | sed -n '1p')
                 if [ -n "$sel" ]; then
-                    echo "  Correcting $rec_class: ws $cur_ws -> ws $rec_ws"
-                    hyprctl dispatch "hl.dsp.window.move({ workspace = $rec_ws, window = \"$sel\", follow = false })" 2>/dev/null
+                    echo "  Correcting $recordClass: ws $currentWorkspaceId -> ws $recordWorkspace"
+                    hyprctl dispatch "hl.dsp.window.move({ workspace = $recordWorkspace, window = \"$sel\", follow = false })" 2>/dev/null
                     corrected=1
                 fi
             fi
@@ -1034,12 +1016,12 @@ restore_layout() {
     # Return to original workspace — retry until it sticks
     for i in $(seq 1 5); do
         sleep 0.3
-        hyprctl dispatch "hl.dsp.focus({ workspace = $saved_workspace })"
+        hyprctl dispatch "hl.dsp.focus({ workspace = $savedWorkspace })"
         current=$(hyprctl activeworkspace -j | jq '.id')
-        [ "$current" = "$saved_workspace" ] && break
+        [ "$current" = "$savedWorkspace" ] && break
     done
 
-    rm -f "$STATE_FILE"
+    rm -f "$stateFile"
     echo "Layout restore complete"
 }
 

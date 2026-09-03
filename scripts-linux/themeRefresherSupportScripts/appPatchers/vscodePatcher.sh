@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 # vscodePatcher.sh
-# Patches VS Code color customizations and activity bar icon with the accent color.
+# Patches VS Code color customizations and the activity-bar icon with the
+# accent color.
+#
+# Prefers matugen's resolved primary color (from vscode-colors.json,
+# written by themeRefresher.sh's earlier `matugen color hex` call) over
+# the raw wallpaper-sampled seed, to match the Matugen Theme VS Code
+# extension's own accent exactly. Falls back to the raw seed if that
+# cache/jq isn't available.
 # Usage: vscodePatcher.sh <hex_color>
 
 color="${1,,}"
@@ -12,43 +19,34 @@ fi
 
 accent="#$color"
 
-# Match the Matugen Theme VS Code extension's actual accent instead of just
-# "the same seed". $color here is the raw wallpaper-sampled seed from
-# colorChooser.sh, but the extension reads matugen's *resolved* colors from
-# ~/.cache/matugen/vscode-colors.json (special.cursor = colors.primary,
-# tonally processed, not the raw seed). Since themeRefresher.sh already runs
-# `matugen color hex` before calling this script, that cache file reflects
-# this exact wallpaper change — read it back rather than re-deriving it here.
-# Falls back to the raw seed if the cache file/jq aren't available, so this
-# degrades to the previous behavior rather than failing.
-VSCODE_MATUGEN_CACHE="$HOME/.cache/matugen/vscode-colors.json"
-if [ -f "$VSCODE_MATUGEN_CACHE" ] && command -v jq &>/dev/null; then
-    resolved_primary=$(jq -r '.special.cursor // empty' "$VSCODE_MATUGEN_CACHE" 2>/dev/null)
-    if [ -n "$resolved_primary" ]; then
-        accent="$resolved_primary"
+vscodeMatugenCacheFile="$HOME/.cache/matugen/vscode-colors.json"
+if [ -f "$vscodeMatugenCacheFile" ] && command -v jq &>/dev/null; then
+    resolvedPrimary=$(jq -r '.special.cursor // empty' "$vscodeMatugenCacheFile" 2>/dev/null)
+    if [ -n "$resolvedPrimary" ]; then
+        accent="$resolvedPrimary"
         color="${accent#\#}"
         color="${color,,}"
         echo "vscodePatcher: using matugen's resolved primary ($accent) instead of the raw wallpaper seed"
     else
-        echo "vscodePatcher: special.cursor not found in $VSCODE_MATUGEN_CACHE, falling back to raw seed color"
+        echo "vscodePatcher: special.cursor not found in $vscodeMatugenCacheFile, falling back to raw seed color"
     fi
 else
-    echo "vscodePatcher: $VSCODE_MATUGEN_CACHE not found (or jq missing), falling back to raw seed color"
+    echo "vscodePatcher: $vscodeMatugenCacheFile not found (or jq missing), falling back to raw seed color"
 fi
 
-VSCODE_SETTINGS="$HOME/.config/Code/User/settings.json"
-VSCODE_BASE_ICON="$HOME/.config/WallpaperChanger/themeRefresherSupportScripts/svg/vscode_base_icon.svg"
+vscodeSettingsFile="$HOME/.config/Code/User/settings.json"
+vscodeBaseIconFile="$HOME/.config/WallpaperChanger/themeRefresherSupportScripts/svg/vscode_base_icon.svg"
 
-if [ ! -f "$VSCODE_SETTINGS" ]; then
+if [ ! -f "$vscodeSettingsFile" ]; then
     echo "VS Code settings not found, skipping"
     exit 0
 fi
 
-# Patch VSCode source SVG (requires ownership of /usr/share/code)
-if [ -f "$VSCODE_BASE_ICON" ]; then
+# Patch VS Code's source SVG (requires ownership of /usr/share/code)
+if [ -f "$vscodeBaseIconFile" ]; then
     python3 - << EOF
 
-with open("$VSCODE_BASE_ICON", "r") as f:
+with open("$vscodeBaseIconFile", "r") as f:
     svg = f.read()
 svg = svg.replace("currentColor", "$accent")
 
@@ -81,7 +79,7 @@ fi
 python3 - << EOF
 import json
 
-with open("$VSCODE_SETTINGS", "r") as f:
+with open("$vscodeSettingsFile", "r") as f:
     s = json.load(f)
 
 s["workbench.colorCustomizations"] = {
@@ -114,7 +112,7 @@ s["workbench.colorCustomizations"] = {
     "agentsUnreadBadge.background":           "$accent",
 }
 
-with open("$VSCODE_SETTINGS", "w") as f:
+with open("$vscodeSettingsFile", "w") as f:
     json.dump(s, f, indent=4)
 print("VS Code colors updated:", "$accent")
 EOF

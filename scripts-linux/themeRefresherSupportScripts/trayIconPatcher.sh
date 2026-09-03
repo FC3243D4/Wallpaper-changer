@@ -1,27 +1,23 @@
 #!/usr/bin/env bash
 # trayIconPatcher.sh
 # Themes system-tray icons for apps that don't pick up breeze-dark-accent's
-# regular app-icon theming automatically — either because they draw their
-# tray icon from their own bundled asset (not looked up by name through the
-# icon theme), or because they expect a literal file path in their own
-# config the way Vesktop does.
+# regular app-icon theming — either because they draw their tray icon from
+# their own bundled asset (not looked up by name through the icon theme),
+# or because they expect a literal file path in their own config, the way
+# Vesktop does. Split out from iconPatcher.sh since each app needs a
+# different hand-rolled approach rather than the generic .desktop engine.
 #
-# Split out from iconPatcher.sh because these apps each need a different,
-# fairly hand-rolled approach rather than the generic .desktop-driven engine.
+# Called automatically from iconPatcher.sh at the end of its run, so the
+# accent-colored app SVGs in $iconThemeDir/apps/scalable/ already exist.
 #
 # Usage: trayIconPatcher.sh <hex_color> [--list]
-#   --list   only discover/report what would be touched for blueman and
-#            onedrivegui (no files written). Use this first on a new
-#            machine to confirm the discovered icon names look right
-#            before doing a real run.
-#
-# Called automatically from iconPatcher.sh at the very end of its run, so
-# the accent-colored app SVGs in $ICON_DIR/apps/scalable/ already exist by
-# the time this runs.
+#   --list   discover/report what would be touched for blueman and
+#            onedrivegui without writing anything. Run this first on a new
+#            machine to confirm the discovered icon names look right.
 
 color="${1,,}"
-LIST_ONLY=0
-[ "${2:-}" = "--list" ] && LIST_ONLY=1
+listOnly=0
+[ "${2:-}" = "--list" ] && listOnly=1
 
 if [ -z "$color" ]; then
     echo "Usage: $0 <hex_color> [--list]" >&2
@@ -29,66 +25,48 @@ if [ -z "$color" ]; then
 fi
 
 accent="#$color"
-SUPPORT="$HOME/.config/WallpaperChanger/themeRefresherSupportScripts"
-ICONS="$SUPPORT/svg"
-GAME_ICONS="$ICONS/games"
-ICON_DIR="$HOME/.local/share/icons/breeze-dark-accent"
+supportDir="$HOME/.config/WallpaperChanger/themeRefresherSupportScripts"
+iconsDir="$supportDir/svg"
+gameIconsDir="$iconsDir/games"
+iconThemeDir="$HOME/.local/share/icons/breeze-dark-accent"
 
-# ---------------------------------------------------------------------------
-# Match waybar's text color exactly, not just "the same seed".
-#
-# $color/$accent here is the raw hex colorChooser.sh sampled from the
-# wallpaper. But waybar's @primary (used for textcolor2 in ML4W-modern.css,
-# and for accents throughout the other themes since the InioX template
-# migration) is matugen's *resolved* colors.primary.default — a
-# tonally-adjusted Material/HCT derivative of that seed, not the seed
-# itself. Icons colored with the raw seed and waybar text colored with the
-# resolved primary are two different colors that happen to be close, which
-# is exactly why the mismatch was "extremely visible" sitting right next
-# to each other in the tray. Since matugen already runs before
-# iconPatcher.sh in themeRefresher.sh, the rendered file already has the
-# real value — read it back rather than re-deriving it here.
-#
-# NOTE: since migrating the waybar template to InioX/matugen-themes, the
-# rendered file moved from .config/waybar/matugen/colors-waybar.css to
-# .config/waybar/colors.css, and the role once called "color4" (raw
-# colors.primary.default.hex) is now just named "primary" — same value,
-# new name.
-#
-# Only affects tray icons. Everything else in the pipeline (breeze theme,
-# KDE colorscheme, GTK, RGB devices) still uses the raw seed as before.
-WAYBAR_COLORS_RENDERED="$HOME/.config/waybar/colors.css"
-if [ -f "$WAYBAR_COLORS_RENDERED" ]; then
-    waybar_accent=$(grep -m1 -oP '@define-color\s+primary\s+\K#[0-9a-fA-F]{6}' "$WAYBAR_COLORS_RENDERED")
-    if [ -n "$waybar_accent" ]; then
-        accent="$waybar_accent"
+# Match waybar's text color exactly, not just "the same seed": $color/
+# $accent here is the raw hex colorChooser.sh sampled from the wallpaper,
+# but waybar's @primary is matugen's *resolved* colors.primary.default —
+# a tonally-adjusted derivative of that seed, not the seed itself. Icons
+# colored with the raw seed and waybar text colored with the resolved
+# primary are two close-but-different colors, which is exactly why the
+# mismatch stands out sitting right next to each other in the tray.
+# matugen already runs before iconPatcher.sh in themeRefresher.sh, so the
+# rendered file already has the real value — read it back instead of
+# re-deriving it. Only affects tray icons; everything else in the
+# pipeline still uses the raw seed.
+waybarColorsRenderedFile="$HOME/.config/waybar/colors.css"
+if [ -f "$waybarColorsRenderedFile" ]; then
+    waybarAccent=$(grep -m1 -oP '@define-color\s+primary\s+\K#[0-9a-fA-F]{6}' "$waybarColorsRenderedFile")
+    if [ -n "$waybarAccent" ]; then
+        accent="$waybarAccent"
         color="${accent#\#}"
         color="${color,,}"
         echo "  tray icons: using waybar's resolved primary ($accent) instead of the raw wallpaper seed"
     else
-        echo "  tray icons: primary not found in $WAYBAR_COLORS_RENDERED, falling back to raw seed color"
+        echo "  tray icons: primary not found in $waybarColorsRenderedFile, falling back to raw seed color"
     fi
 else
-    echo "  tray icons: $WAYBAR_COLORS_RENDERED not found, falling back to raw seed color"
+    echo "  tray icons: $waybarColorsRenderedFile not found, falling back to raw seed color"
 fi
 
-# ---------------------------------------------------------------------------
-# Shared helper — always recolors fresh from the base SVG using THIS
-# script's own $accent (which by this point has already been corrected to
-# match waybar's resolved primary, see above). Deliberately does NOT reuse
-# $ICON_DIR/apps/scalable/<name>.svg even when it exists — that copy was
-# generated by iconPatcher.sh's main engine using the raw wallpaper-seed
-# accent (iconPatcher.sh runs and finishes before this script even starts
-# computing its own corrected value), so reusing it would silently defeat
-# the primary correction for every tray icon that calls this. Costs a
-# redundant recolor of files iconPatcher.sh already colored once, but
-# guarantees tray icons and waybar text always agree.
-# ---------------------------------------------------------------------------
+# Shared helper — always recolors fresh from the base SVG using this
+# script's own (waybar-corrected) $accent. Deliberately does NOT reuse
+# $iconThemeDir/apps/scalable/<name>.svg even when it exists, since that
+# copy was colored by iconPatcher.sh's engine with the raw wallpaper seed
+# — reusing it would silently defeat the primary correction above. Costs
+# a redundant recolor, but guarantees tray icons and waybar text agree.
 resolve_themed_svg() {
     local name="$1"
     local base=""
-    [ -f "$GAME_ICONS/${name}_base_icon.svg" ] && base="$GAME_ICONS/${name}_base_icon.svg"
-    [ -z "$base" ] && [ -f "$ICONS/${name}_base_icon.svg" ] && base="$ICONS/${name}_base_icon.svg"
+    [ -f "$gameIconsDir/${name}_base_icon.svg" ] && base="$gameIconsDir/${name}_base_icon.svg"
+    [ -z "$base" ] && [ -f "$iconsDir/${name}_base_icon.svg" ] && base="$iconsDir/${name}_base_icon.svg"
     [ -z "$base" ] && return 1
 
     local tmp
@@ -143,7 +121,7 @@ patch_nativmix_tray() {
         echo "  nativmix: no themed base icon found, skipping tray"; return 1
     }
 
-    if [ "$LIST_ONLY" -eq 1 ]; then
+    if [ "$listOnly" -eq 1 ]; then
         echo "nativmix: would overwrite $target with themed nativmix-alt/nativmix icon"
         return 0
     fi
@@ -169,9 +147,9 @@ patch_ferdium_tray() {
     # at this path, root-owned (AUR package installs to /opt). No per-user
     # config indirection like Vesktop's trayIconPath — these files are what
     # Ferdium actually loads.
-    local tray_dir="/opt/ferdium-bin/assets/images/tray/linux"
-    [ -d "$tray_dir" ] || {
-        echo "  ferdium: $tray_dir not found (package layout may have changed)"
+    local trayDir="/opt/ferdium-bin/assets/images/tray/linux"
+    [ -d "$trayDir" ] || {
+        echo "  ferdium: $trayDir not found (package layout may have changed)"
         return 1
     }
 
@@ -184,8 +162,8 @@ patch_ferdium_tray() {
     # you'd like a red-dot badge burned into tray-unread.png specifically.
     local names=(tray tray-indirect tray-unread)
 
-    if [ "$LIST_ONLY" -eq 1 ]; then
-        echo "ferdium: would overwrite in $tray_dir:"
+    if [ "$listOnly" -eq 1 ]; then
+        echo "ferdium: would overwrite in $trayDir:"
         for n in "${names[@]}"; do
             printf '  %s.png / %s@2x.png\n' "$n" "$n"
         done
@@ -195,15 +173,15 @@ patch_ferdium_tray() {
     command -v rsvg-convert >/dev/null 2>&1 || {
         echo "  ferdium: rsvg-convert not found, cannot rasterize"; return 1
     }
-    fix_system_dir_permissions "$tray_dir" "ferdium" || return 1
+    fix_system_dir_permissions "$trayDir" "ferdium" || return 1
 
     local patched=0
-    local job_dir
-    job_dir=$(mktemp -d)
+    local jobDir
+    jobDir=$(mktemp -d)
     local i=0
     for n in "${names[@]}"; do
         for variant in "$n.png" "$n@2x.png"; do
-            local f="$tray_dir/$variant"
+            local f="$trayDir/$variant"
             [ -f "$f" ] || continue
             i=$((i + 1))
             (
@@ -218,14 +196,14 @@ patch_ferdium_tray() {
                 size="${dims%x*}"
                 [ -z "$size" ] && size=22
 
-                rsvg-convert -w "$size" -h "$size" "$svg" -o "$f" && touch "$job_dir/$i"
+                rsvg-convert -w "$size" -h "$size" "$svg" -o "$f" && touch "$jobDir/$i"
             ) &
         done
     done
     wait
-    patched=$(find "$job_dir" -mindepth 1 | wc -l)
-    rm -rf "$job_dir"
-    echo "Ferdium tray icons patched in place ($patched files, $tray_dir)"
+    patched=$(find "$jobDir" -mindepth 1 | wc -l)
+    rm -rf "$jobDir"
+    echo "Ferdium tray icons patched in place ($patched files, $trayDir)"
 }
 
 #localsend tray icon
@@ -237,9 +215,9 @@ patch_localsend_tray() {
     # variants (standard cross-platform tray convention); logo-32.png is
     # the plain fallback. Recolor all three since we can't tell at rest
     # which one LocalSend's tray plugin actually selects at runtime.
-    local img_dir="/usr/lib/localsend/data/flutter_assets/assets/img"
-    [ -d "$img_dir" ] || {
-        echo "  localsend: $img_dir not found (package layout may have changed)"
+    local imgDir="/usr/lib/localsend/data/flutter_assets/assets/img"
+    [ -d "$imgDir" ] || {
+        echo "  localsend: $imgDir not found (package layout may have changed)"
         return 1
     }
 
@@ -248,8 +226,8 @@ patch_localsend_tray() {
 
     local names=(logo-32.png logo-32-black.png logo-32-white.png)
 
-    if [ "$LIST_ONLY" -eq 1 ]; then
-        echo "localsend: would overwrite in $img_dir:"
+    if [ "$listOnly" -eq 1 ]; then
+        echo "localsend: would overwrite in $imgDir:"
         printf '  %s\n' "${names[@]}"
         return 0
     fi
@@ -257,17 +235,17 @@ patch_localsend_tray() {
     command -v rsvg-convert >/dev/null 2>&1 || {
         echo "  localsend: rsvg-convert not found, cannot rasterize"; return 1
     }
-    fix_system_dir_permissions "$img_dir" "localsend" || return 1
+    fix_system_dir_permissions "$imgDir" "localsend" || return 1
 
     local patched=0
     for n in "${names[@]}"; do
-        local f="$img_dir/$n"
+        local f="$imgDir/$n"
         [ -f "$f" ] || continue
         local backup="${f}.orig"
         [ -f "$backup" ] || cp "$f" "$backup"
         rsvg-convert -w 32 -h 32 "$svg" -o "$f" && patched=$((patched + 1))
     done
-    echo "LocalSend tray icons patched in place ($patched/${#names[@]}, $img_dir)"
+    echo "LocalSend tray icons patched in place ($patched/${#names[@]}, $imgDir)"
 }
 
 #streamcontroller tray icon
@@ -279,16 +257,16 @@ patch_streamcontroller_tray() {
     # the active icon theme entirely) and requests icon name
     # "com.core447.StreamController" — which resolves to exactly these two
     # files, per the standard hicolor apps/<size> layout.
-    local icon_base="/usr/lib/streamcontroller/Assets/icons/hicolor"
+    local iconBase="/usr/lib/streamcontroller/Assets/icons/hicolor"
     local targets=(
-        "$icon_base/48x48/apps/com.core447.StreamController.png"
-        "$icon_base/512x512/apps/com.core447.StreamController.png"
+        "$iconBase/48x48/apps/com.core447.StreamController.png"
+        "$iconBase/512x512/apps/com.core447.StreamController.png"
     )
 
     local svg
     svg=$(resolve_themed_svg "elgato") || { echo "  streamcontroller: no themed base icon found, skipping tray"; return 1; }
 
-    if [ "$LIST_ONLY" -eq 1 ]; then
+    if [ "$listOnly" -eq 1 ]; then
         echo "streamcontroller: would overwrite:"
         printf '  %s\n' "${targets[@]}"
         return 0
@@ -297,7 +275,7 @@ patch_streamcontroller_tray() {
     command -v rsvg-convert >/dev/null 2>&1 || {
         echo "  streamcontroller: rsvg-convert not found, cannot rasterize"; return 1
     }
-    fix_system_dir_permissions "$icon_base" "streamcontroller" || return 1
+    fix_system_dir_permissions "$iconBase" "streamcontroller" || return 1
 
     local patched=0
     for f in "${targets[@]}"; do
@@ -325,7 +303,7 @@ patch_steam_tray() {
         "/usr/share/pixmaps/steam_tray_mono.png"
     )
 
-    if [ "$LIST_ONLY" -eq 1 ]; then
+    if [ "$listOnly" -eq 1 ]; then
         echo "steam: would overwrite:"
         printf '  %s\n' "${targets[@]}"
         return 0
@@ -366,13 +344,13 @@ patch_steam_tray() {
 patch_blueman_tray() {
     command -v blueman-applet >/dev/null 2>&1 || return 0
 
-    local search_dirs=(
+    local searchDirs=(
         "/usr/share/icons/hicolor"
         "/usr/share/pixmaps"
         "/usr/share/blueman/icons"
     )
     local found=()
-    for dir in "${search_dirs[@]}"; do
+    for dir in "${searchDirs[@]}"; do
         [ -d "$dir" ] || continue
         while IFS= read -r f; do
             found+=("$f")
@@ -380,9 +358,9 @@ patch_blueman_tray() {
     done
 
     if [ "${#found[@]}" -eq 0 ]; then
-        echo "  blueman: no blueman-tray-* icon files found under ${search_dirs[*]}"
+        echo "  blueman: no blueman-tray-* icon files found under ${searchDirs[*]}"
         echo "  (run 'find / -iname \"*blueman-tray*\" 2>/dev/null' once to locate them,"
-        echo "   then adjust search_dirs in patch_blueman_tray)"
+        echo "   then adjust searchDirs in patch_blueman_tray)"
         return 1
     fi
 
@@ -391,13 +369,13 @@ patch_blueman_tray() {
     # tinting blueman's own vendor art — vendor blueman-tray icons are a
     # filled badge shape, so a plain -colorize just turns into a flat blob
     # instead of a recognizable glyph.
-    local src_svg
-    src_svg=$(resolve_themed_svg "bluetooth") || {
-        echo "  blueman: $ICONS/bluetooth_base_icon.svg not found, can't substitute — falling back to plain recolor"
-        src_svg=""
+    local srcSvg
+    srcSvg=$(resolve_themed_svg "bluetooth") || {
+        echo "  blueman: $iconsDir/bluetooth_base_icon.svg not found, can't substitute — falling back to plain recolor"
+        srcSvg=""
     }
 
-    if [ "$LIST_ONLY" -eq 1 ]; then
+    if [ "$listOnly" -eq 1 ]; then
         echo "blueman: would replace ${#found[@]} file(s) with bluetooth_base_icon.svg:"
         printf '  %s\n' "${found[@]}"
         return 0
@@ -407,17 +385,17 @@ patch_blueman_tray() {
     command -v magick >/dev/null 2>&1 && tool="magick"
     [ -z "$tool" ] && command -v convert >/dev/null 2>&1 && tool="convert"
 
-    local tmp_svg=""
-    if [ -n "$src_svg" ]; then
+    local tmpSvg=""
+    if [ -n "$srcSvg" ]; then
         # resolve_themed_svg already returns accent-colored content (either
         # the engine's already-generated app icon, or a freshly recolored
         # temp copy of the base SVG) — just use it directly.
-        tmp_svg="$src_svg"
+        tmpSvg="$srcSvg"
     fi
 
     local patched=0
-    local job_dir
-    job_dir=$(mktemp -d)
+    local jobDir
+    jobDir=$(mktemp -d)
     local i=0
     for f in "${found[@]}"; do
         i=$((i + 1))
@@ -425,19 +403,19 @@ patch_blueman_tray() {
             case "$f" in
                 *hicolor*)
                     rel="${f#/usr/share/icons/hicolor/}"
-                    dst="$ICON_DIR/$rel"
+                    dst="$iconThemeDir/$rel"
                     ;;
                 *)
                     # pixmaps/blueman's own dir — no theme-relative path, so
                     # just mirror basename under a flat "blueman" subfolder.
-                    dst="$ICON_DIR/blueman/$(basename "$f")"
+                    dst="$iconThemeDir/blueman/$(basename "$f")"
                     ;;
             esac
             mkdir -p "$(dirname "$dst")"
 
-            if [ -n "$tmp_svg" ]; then
+            if [ -n "$tmpSvg" ]; then
                 if [[ "$f" == *.svg ]]; then
-                    cp "$tmp_svg" "$dst"
+                    cp "$tmpSvg" "$dst"
                 elif command -v rsvg-convert >/dev/null 2>&1; then
                     # Size comes from the hicolor directory name (e.g. 24x24);
                     # default to 48 for anything outside that layout (pixmaps).
@@ -446,7 +424,7 @@ patch_blueman_tray() {
                         sizedir="${f#/usr/share/icons/hicolor/}"
                         size="${sizedir%%x*}"
                     fi
-                    rsvg-convert -w "$size" -h "$size" "$tmp_svg" -o "$dst"
+                    rsvg-convert -w "$size" -h "$size" "$tmpSvg" -o "$dst"
                 else
                     echo "  blueman: rsvg-convert not found, skipping raster icon $f"
                     exit 1
@@ -460,59 +438,59 @@ patch_blueman_tray() {
                 echo "  blueman: no ImageMagick found, skipping raster icon $f"
                 exit 1
             fi
-            touch "$job_dir/$i"
+            touch "$jobDir/$i"
         ) &
     done
     wait
-    patched=$(find "$job_dir" -mindepth 1 | wc -l)
-    rm -rf "$job_dir"
+    patched=$(find "$jobDir" -mindepth 1 | wc -l)
+    rm -rf "$jobDir"
     # resolve_themed_svg now always returns a throwaway temp file (never a
-    # path under $ICON_DIR), but keep this guard as cheap insurance rather
+    # path under $iconThemeDir), but keep this guard as cheap insurance rather
     # than assume that never changes again.
-    case "$tmp_svg" in
-        "$ICON_DIR"/*) : ;;   # would be permanent — leave it alone
+    case "$tmpSvg" in
+        "$iconThemeDir"/*) : ;;   # would be permanent — leave it alone
         "") : ;;
-        *) rm -f "$tmp_svg" ;;
+        *) rm -f "$tmpSvg" ;;
     esac
     echo "Blueman tray icons patched ($patched/${#found[@]})"
 }
 
 #onedrivegui tray icon
-ONEDRIVEGUI_IMAGES_DIR="/usr/lib/OneDriveGUI/resources/images"
+oneDriveGuiImagesDir="/usr/lib/OneDriveGUI/resources/images"
 
-declare -A ONEDRIVEGUI_SVG_OVERRIDES=(
+declare -A oneDriveGuiSvgOverrides=(
     ["icons8-cloud-done-80.png"]="cloud-check:accent"      # ok/synced
     ["warning.png"]="cloud-exclamation:#f39c12"            # warning
     ["icons8-cloud-error-80.png"]="cloud-x:#e74c3c"        # error
     ["icons8-cloud-sync-80.png"]="cloud-cog:accent"        # syncing
 )
 
-declare -A ONEDRIVEGUI_COLORIZE_ONLY=(
+declare -A oneDriveGuiColorizeOnly=(
     ["icons8-cloud-80.png"]="accent"        # idle
     ["icons8-cloud-stop-80.png"]="accent"   # paused (unless this is actually "warning" — see above)
 )
 
-fix_onedrivegui_permissions() {
-    fix_system_dir_permissions "$ONEDRIVEGUI_IMAGES_DIR" "onedrivegui"
+fix_onedrive_gui_permissions() {
+    fix_system_dir_permissions "$oneDriveGuiImagesDir" "onedrivegui"
 }
 
-patch_onedrivegui_tray() {
+patch_onedrive_gui_tray() {
     command -v onedrivegui >/dev/null 2>&1 || return 0
-    [ -d "$ONEDRIVEGUI_IMAGES_DIR" ] || {
-        echo "  onedrivegui: $ONEDRIVEGUI_IMAGES_DIR not found (package layout may have changed)"
+    [ -d "$oneDriveGuiImagesDir" ] || {
+        echo "  onedrivegui: $oneDriveGuiImagesDir not found (package layout may have changed)"
         return 1
     }
 
-    if [ "$LIST_ONLY" -eq 1 ]; then
+    if [ "$listOnly" -eq 1 ]; then
         echo "onedrivegui: custom SVG replacements:"
-        for name in "${!ONEDRIVEGUI_SVG_OVERRIDES[@]}"; do
-            IFS=':' read -r icon_name target <<< "${ONEDRIVEGUI_SVG_OVERRIDES[$name]}"
+        for name in "${!oneDriveGuiSvgOverrides[@]}"; do
+            IFS=':' read -r iconName target <<< "${oneDriveGuiSvgOverrides[$name]}"
             [ "$target" = "accent" ] && target="$accent"
-            printf '  %-28s -> %s_base_icon.svg (%s)\n' "$name" "$icon_name" "$target"
+            printf '  %-28s -> %s_base_icon.svg (%s)\n' "$name" "$iconName" "$target"
         done
         echo "onedrivegui: plain recolor (existing vendor art):"
-        for name in "${!ONEDRIVEGUI_COLORIZE_ONLY[@]}"; do
-            local target="${ONEDRIVEGUI_COLORIZE_ONLY[$name]}"
+        for name in "${!oneDriveGuiColorizeOnly[@]}"; do
+            local target="${oneDriveGuiColorizeOnly[$name]}"
             [ "$target" = "accent" ] && target="$accent"
             printf '  %-28s -> %s\n' "$name" "$target"
         done
@@ -533,21 +511,21 @@ patch_onedrivegui_tray() {
         return 1
     }
 
-    fix_onedrivegui_permissions || return 1
+    fix_onedrive_gui_permissions || return 1
 
     local patched=0 skipped=0
 
     # -- custom SVG replacements --
-    for name in "${!ONEDRIVEGUI_SVG_OVERRIDES[@]}"; do
-        local f="$ONEDRIVEGUI_IMAGES_DIR/$name"
+    for name in "${!oneDriveGuiSvgOverrides[@]}"; do
+        local f="$oneDriveGuiImagesDir/$name"
         [ -f "$f" ] || { echo "  onedrivegui: vendor file $name not found, skipping"; continue; }
 
-        IFS=':' read -r icon_name target <<< "${ONEDRIVEGUI_SVG_OVERRIDES[$name]}"
+        IFS=':' read -r iconName target <<< "${oneDriveGuiSvgOverrides[$name]}"
         [ "$target" = "accent" ] && target="$accent"
 
-        local src_svg="$ICONS/${icon_name}_base_icon.svg"
-        if [ ! -f "$src_svg" ]; then
-            echo "  onedrivegui: $src_svg not found — add it, or drop this override for $name"
+        local srcSvg="$iconsDir/${iconName}_base_icon.svg"
+        if [ ! -f "$srcSvg" ]; then
+            echo "  onedrivegui: $srcSvg not found — add it, or drop this override for $name"
             skipped=$((skipped + 1))
             continue
         fi
@@ -567,23 +545,23 @@ patch_onedrivegui_tray() {
         [ -z "$w" ] && w=80
         [ -z "$h" ] && h=80
 
-        local tmp_svg tmp_png
-        tmp_svg=$(mktemp --suffix=.svg)
-        tmp_png=$(mktemp --suffix=.png)
-        sed "s/currentColor/$target/g" "$src_svg" > "$tmp_svg"
-        rsvg-convert -w "$w" -h "$h" "$tmp_svg" -o "$tmp_png"
-        cp "$tmp_png" "$f"
-        rm -f "$tmp_svg" "$tmp_png"
+        local tmpSvg tmpPng
+        tmpSvg=$(mktemp --suffix=.svg)
+        tmpPng=$(mktemp --suffix=.png)
+        sed "s/currentColor/$target/g" "$srcSvg" > "$tmpSvg"
+        rsvg-convert -w "$w" -h "$h" "$tmpSvg" -o "$tmpPng"
+        cp "$tmpPng" "$f"
+        rm -f "$tmpSvg" "$tmpPng"
         patched=$((patched + 1))
-        echo "  $name replaced with ${icon_name}_base_icon.svg ($target)"
+        echo "  $name replaced with ${iconName}_base_icon.svg ($target)"
     done
 
     # -- plain recolor of remaining vendor art --
-    for name in "${!ONEDRIVEGUI_COLORIZE_ONLY[@]}"; do
-        local f="$ONEDRIVEGUI_IMAGES_DIR/$name"
+    for name in "${!oneDriveGuiColorizeOnly[@]}"; do
+        local f="$oneDriveGuiImagesDir/$name"
         [ -f "$f" ] || { echo "  onedrivegui: vendor file $name not found, skipping"; continue; }
 
-        local target="${ONEDRIVEGUI_COLORIZE_ONLY[$name]}"
+        local target="${oneDriveGuiColorizeOnly[$name]}"
         [ "$target" = "accent" ] && target="$accent"
 
         local backup="${f}.orig"
@@ -601,7 +579,7 @@ patch_onedrivegui_tray() {
 patch_vesktop_tray() {
     command -v vesktop >/dev/null 2>&1 || return 0
 
-    local user_assets="$HOME/.config/vesktop/userAssets"
+    local userAssets="$HOME/.config/vesktop/userAssets"
 
     # Don't create userAssets/ ourselves if Vesktop has never initialized
     # it — writing files there before Vesktop knows about custom assets
@@ -609,8 +587,8 @@ patch_vesktop_tray() {
     # pick any file, for both Tray and Tray Unread) so Vesktop creates
     # its own tray/trayUnread files, then this script just keeps
     # overwriting them from then on.
-    [ -d "$user_assets" ] || {
-        echo "  vesktop: $user_assets doesn't exist yet — open Vesktop's"
+    [ -d "$userAssets" ] || {
+        echo "  vesktop: $userAssets doesn't exist yet — open Vesktop's"
         echo "  Settings -> User Assets -> Tray/Tray Unread -> Customize"
         echo "  and pick any image once for each, then re-run this script."
         return 1
@@ -628,8 +606,8 @@ patch_vesktop_tray() {
         echo "  vesktop: no themed base icon found for tray, skipping"
     }
     if [ -n "$svg" ]; then
-        local target="$user_assets/tray"
-        if [ "$LIST_ONLY" -eq 1 ]; then
+        local target="$userAssets/tray"
+        if [ "$listOnly" -eq 1 ]; then
             echo "vesktop: would overwrite $target"
         else
             rsvg-convert -w 64 -h 64 "$svg" -o "$target" \
@@ -642,27 +620,27 @@ patch_vesktop_tray() {
     # (unlike Ferdium/OneDriveGUI, there's no separate dot overlay step
     # here — whatever discord-unread_base_icon.svg draws is exactly what
     # shows in the tray). --
-    local svg_unread
-    svg_unread=$(resolve_themed_svg "discord-unread") || {
+    local svgUnread
+    svgUnread=$(resolve_themed_svg "discord-unread") || {
         echo "  vesktop: discord-unread_base_icon.svg not found, skipping trayUnread"
     }
-    if [ -n "$svg_unread" ]; then
-        local target_unread="$user_assets/trayUnread"
-        if [ "$LIST_ONLY" -eq 1 ]; then
-            echo "vesktop: would overwrite $target_unread"
+    if [ -n "$svgUnread" ]; then
+        local targetUnread="$userAssets/trayUnread"
+        if [ "$listOnly" -eq 1 ]; then
+            echo "vesktop: would overwrite $targetUnread"
         else
-            rsvg-convert -w 64 -h 64 "$svg_unread" -o "$target_unread" \
-                && { echo "Vesktop trayUnread icon patched in place ($target_unread)"; patched=$((patched + 1)); }
+            rsvg-convert -w 64 -h 64 "$svgUnread" -o "$targetUnread" \
+                && { echo "Vesktop trayUnread icon patched in place ($targetUnread)"; patched=$((patched + 1)); }
         fi
     fi
 
-    [ "$LIST_ONLY" -eq 1 ] && return 0
+    [ "$listOnly" -eq 1 ] && return 0
     [ "$patched" -gt 0 ]
 }
 
 #ytmdesktop tray icons
-patch_ytmdesktop_tray() {
-    local resource_dir=""
+patch_ytm_desktop_tray() {
+    local resourceDir=""
     local candidates=(
         "/opt/ytmdesktop/resources"
         "/opt/YouTube Music Desktop App/resources"
@@ -671,11 +649,11 @@ patch_ytmdesktop_tray() {
     local d
     for d in "${candidates[@]}"; do
         if [ -f "$d/ytmd_white.png" ] && [ -f "$d/ytmd_black.png" ]; then
-            resource_dir="$d"
+            resourceDir="$d"
             break
         fi
     done
-    [ -n "$resource_dir" ] || {
+    [ -n "$resourceDir" ] || {
         echo "  ytmdesktop: ytmd_white.png/ytmd_black.png not found under any of:"
         printf '    %s\n' "${candidates[@]}"
         echo "  (package layout may differ — find them with:"
@@ -686,9 +664,9 @@ patch_ytmdesktop_tray() {
     local svg
     svg=$(resolve_themed_svg "music") || { echo "  ytmdesktop: music_base_icon.svg not found, skipping tray"; return 1; }
 
-    local targets=("$resource_dir/ytmd_white.png" "$resource_dir/ytmd_black.png")
+    local targets=("$resourceDir/ytmd_white.png" "$resourceDir/ytmd_black.png")
 
-    if [ "$LIST_ONLY" -eq 1 ]; then
+    if [ "$listOnly" -eq 1 ]; then
         echo "ytmdesktop: would overwrite:"
         printf '  %s\n' "${targets[@]}"
         return 0
@@ -697,7 +675,7 @@ patch_ytmdesktop_tray() {
     command -v rsvg-convert >/dev/null 2>&1 || {
         echo "  ytmdesktop: rsvg-convert not found, cannot rasterize"; return 1
     }
-    fix_system_dir_permissions "$resource_dir" "ytmdesktop" || return 1
+    fix_system_dir_permissions "$resourceDir" "ytmdesktop" || return 1
 
     local patched=0
     local f
@@ -708,20 +686,19 @@ patch_ytmdesktop_tray() {
         # behaves the same as upstream's own icon.
         rsvg-convert -w 512 -h 512 "$svg" -o "$f" && patched=$((patched + 1))
     done
-    echo "YTMDesktop tray icons patched in place ($patched/${#targets[@]}, $resource_dir)"
+    echo "YTMDesktop tray icons patched in place ($patched/${#targets[@]}, $resourceDir)"
 
-    [ "$patched" -gt 0 ] && ytmdesktop_force_reload
+    [ "$patched" -gt 0 ] && force_ytm_desktop_reload
 }
 
 # Makes one durable change to trayIconStyle in YTMDesktop's own config.json
-# so its `conf` store — polling via fs.watchFile on Linux, see the long
-# comment above — actually notices it and calls setTrayIcon() itself,
-# re-reading the PNGs we just overwrote. Values: Auto=0, White=1, Black=2
-# (src/shared/store/schema.ts). Schedules a delayed, detached revert back
-# to your real setting — cosmetic only, since ytmd_white.png and
-# ytmd_black.png are now identical, so which one gets selected doesn't
-# change what's actually drawn in the tray.
-ytmdesktop_force_reload() {
+# so its `conf` store (polls via fs.watchFile on Linux) notices it and
+# calls setTrayIcon() itself, re-reading the PNGs just overwritten above.
+# Values: Auto=0, White=1, Black=2 (src/shared/store/schema.ts). Schedules
+# a delayed, detached revert to the real setting afterward — cosmetic
+# only, since ytmd_white.png and ytmd_black.png are now identical, so
+# which one gets selected doesn't change what's drawn in the tray.
+force_ytm_desktop_reload() {
     { pgrep -x youtube-music-desktop-app >/dev/null 2>&1 || pgrep -f ytmdesktop >/dev/null 2>&1; } || {
         echo "  ytmdesktop: not currently running, nothing to notify"
         return 0
@@ -759,7 +736,7 @@ ytmdesktop_force_reload() {
 }
 
 #betterbird tray icons
-betterbird_tray_patch() {
+patch_betterbird_tray() {
     local betterbirdTarget isFlatpak=0
 
     if [ -d "$HOME/.var/app/eu.betterbird.Betterbird" ]; then
@@ -776,7 +753,7 @@ betterbird_tray_patch() {
     newmailsvg=$(resolve_themed_svg "new-mail") || { echo "  betterbird: no themed new-mail icon found, skipping tray"; return 1; }
 
     if [ "$isFlatpak" -eq 1 ]; then
-        if [ "$LIST_ONLY" -eq 1 ]; then
+        if [ "$listOnly" -eq 1 ]; then
             echo "betterbird: would overwrite:"
             echo "  $betterbirdTarget/eu.betterbird.Betterbird-default.svg"
             echo "  $betterbirdTarget/eu.betterbird.Betterbird-newmail.svg"
@@ -810,7 +787,7 @@ betterbird_tray_patch() {
         16 22 24 32 48 64 128 256
     )
 
-    if [ "$LIST_ONLY" -eq 1 ]; then
+    if [ "$listOnly" -eq 1 ]; then
         echo "betterbird: would overwrite:"
         printf '  %s\n' "${targets[@]}"
         return 0
@@ -833,49 +810,49 @@ betterbird_tray_patch() {
 }
 
 #cohesion tray icons
-cohesion_tray_patch() {
-    local app_id="io.github.brunofin.Cohesion"
+patch_cohesion_tray() {
+    local appId="io.github.brunofin.Cohesion"
     command -v flatpak >/dev/null 2>&1 || return 0
-    flatpak info "$app_id" >/dev/null 2>&1 || return 0
+    flatpak info "$appId" >/dev/null 2>&1 || return 0
 
-    local override_dir="$HOME/.local/share/cohesion-icons"
-    local icon_dir="$override_dir/icons/hicolor/512x512/apps"
+    local overrideDir="$HOME/.local/share/cohesion-icons"
+    local iconDir="$overrideDir/icons/hicolor/512x512/apps"
 
     # One-time sandbox grant, checked (not blindly re-applied) every run so
     # this doesn't spam `flatpak override` on every theme refresh — same
     # spirit as fix_system_dir_permissions's one-time chown above.
-    if ! flatpak override --user --show "$app_id" 2>/dev/null | grep -q "$override_dir"; then
-        echo "  cohesion: granting one-time sandbox access to $override_dir"
-        flatpak override --user "$app_id" \
-            --filesystem="$override_dir:ro" \
-            --env=XDG_DATA_DIRS="$override_dir:/app/share:/usr/share:/var/lib/flatpak/exports/share:$HOME/.local/share/flatpak/exports/share" \
+    if ! flatpak override --user --show "$appId" 2>/dev/null | grep -q "$overrideDir"; then
+        echo "  cohesion: granting one-time sandbox access to $overrideDir"
+        flatpak override --user "$appId" \
+            --filesystem="$overrideDir:ro" \
+            --env=XDG_DATA_DIRS="$overrideDir:/app/share:/usr/share:/var/lib/flatpak/exports/share:$HOME/.local/share/flatpak/exports/share" \
             || { echo "  cohesion: flatpak override failed, skipping tray"; return 1; }
     fi
 
-    mkdir -p "$icon_dir" || return 1
+    mkdir -p "$iconDir" || return 1
 
     local svg
     svg=$(resolve_themed_svg "notion") || {
-        echo "  cohesion: no themed base icon found ($ICONS/cohesion_base_icon.svg), skipping tray"
+        echo "  cohesion: no themed base icon found ($iconsDir/cohesion_base_icon.svg), skipping tray"
         return 1
     }
-    svg_unread=$(resolve_themed_svg "notion-unread") || {
-        echo "  cohesion: no themed unread base icon found ($ICONS/cohesion_unread_base_icon.svg), skipping tray"
+    svgUnread=$(resolve_themed_svg "notion-unread") || {
+        echo "  cohesion: no themed unread base icon found ($iconsDir/cohesion_unread_base_icon.svg), skipping tray"
         return 1
     }
 
-    local color_targets=(
-        "$icon_dir/io.github.brunofin.Cohesion.png"
-        "$icon_dir/io.github.brunofin.Cohesion-unread.png"
+    local colorTargets=(
+        "$iconDir/io.github.brunofin.Cohesion.png"
+        "$iconDir/io.github.brunofin.Cohesion-unread.png"
     )
-    local grey_targets=(
-        "$icon_dir/io.github.brunofin.Cohesion-greyscale.png"
-        "$icon_dir/io.github.brunofin.Cohesion-greyscale-unread.png"
+    local greyTargets=(
+        "$iconDir/io.github.brunofin.Cohesion-greyscale.png"
+        "$iconDir/io.github.brunofin.Cohesion-greyscale-unread.png"
     )
 
-    if [ "$LIST_ONLY" -eq 1 ]; then
+    if [ "$listOnly" -eq 1 ]; then
         echo "cohesion: would write:"
-        printf '  %s\n' "${color_targets[@]}" "${grey_targets[@]}"
+        printf '  %s\n' "${colorTargets[@]}" "${greyTargets[@]}"
         return 0
     fi
 
@@ -885,9 +862,9 @@ cohesion_tray_patch() {
 
     local patched=0
     local f
-    for f in "${color_targets[@]}"; do
+    for f in "${colorTargets[@]}"; do
         if [[ "$f" == *-unread.png ]]; then
-            rsvg="$svg_unread"
+            rsvg="$svgUnread"
         else
             rsvg="$svg"
         fi
@@ -900,63 +877,48 @@ cohesion_tray_patch() {
     # target back to the color file it should be derived from (...
     # -greyscale.png -> ...png, ...-greyscale-unread.png -> ...-unread.png).
     if command -v magick >/dev/null 2>&1; then
-        for f in "${grey_targets[@]}"; do
+        for f in "${greyTargets[@]}"; do
             magick "${f/-greyscale/}" -colorspace Gray "$f" && patched=$((patched + 1))
         done
     elif command -v convert >/dev/null 2>&1; then
-        for f in "${grey_targets[@]}"; do
+        for f in "${greyTargets[@]}"; do
             convert "${f/-greyscale/}" -colorspace Gray "$f" && patched=$((patched + 1))
         done
     else
         echo "  cohesion: imagemagick not found, copying color icon into greyscale slots unmodified"
-        for f in "${grey_targets[@]}"; do
+        for f in "${greyTargets[@]}"; do
             cp "${f/-greyscale/}" "$f" && patched=$((patched + 1))
         done
     fi
 
-    echo "Cohesion tray icons patched ($patched/4, $icon_dir)"
+    echo "Cohesion tray icons patched ($patched/4, $iconDir)"
     echo "  (restart Cohesion for the new icons to take effect)"
 }
 
 
 # time_step_bg <label> <function> — same contract as time_step, but
-# backgrounds the function instead of waiting for it, and prefixes every
-# line it prints (stdout AND stderr, merged) with "[label] " so concurrent
-# jobs' interleaved output stays attributable — same technique
-# themeRefresher.sh's timed_bg uses, for the same reason.
+# backgrounds the function and prefixes every line it prints (stdout+
+# stderr merged) with "[label] " so concurrent jobs' output stays
+# attributable (same technique themeRefresher.sh's time_step_bg uses).
 #
-# Output is captured to a temp file, not piped live through sed. This
-# matters here specifically: several of these functions run rsvg-convert,
-# fix_system_dir_permissions (which can invoke sudo), and
-# ytmdesktop_force_reload backgrounds+disowns a 12-second delayed revert of
-# its own (already redirected to /dev/null internally, so it's not the
-# culprit — but it's exactly the shape of thing that would be). If ANY
-# function here (now or added later) ever backgrounds+disowns work without
-# redirecting that work's own output first, a live pipe would let that
-# orphaned writer hold the pipe open indefinitely, blocking this whole job
-# from ever being seen as "finished" — turning a fast step into a
-# multi-second (or worse) one. A regular file has no such blocking
-# semantics. Confirmed this exact failure mode by reproducing it against
-# rgbApply.sh's disowned ratbagctl loop elsewhere in this pipeline, which
-# is what originally exposed the bug.
+# Output is captured to a temp file, not piped live through sed: if any
+# function here backgrounds+disowns work of its own without redirecting
+# that work's output first (e.g. force_ytm_desktop_reload's 12s delayed
+# revert — already safely redirected, but exactly the risky shape), a
+# live pipe would let that orphaned writer hold the pipe open
+# indefinitely, turning a fast step into a stuck one. A regular file has
+# no such blocking semantics — confirmed by reproducing the failure
+# against rgbApply.sh's disowned ratbagctl loop elsewhere in this pipeline.
 #
-# Every function below writes to a completely different app's own asset
-# directory (verified pairwise: nativmix, ferdium, localsend,
-# streamcontroller, steam, blueman, onedrivegui, vesktop, ytmdesktop,
-# betterbird, and cohesion all target disjoint paths — blueman is the only
-# one writing under $ICON_DIR, and none of the other ten touch $ICON_DIR
-# at all), so they're safe to run fully concurrently instead of one after
-# another. The shared helpers they all call (resolve_themed_svg,
-# fix_system_dir_permissions) are safe under concurrency too:
-# resolve_themed_svg's mktemp is unique per call, and
-# fix_system_dir_permissions's chown is idempotent even in the
-# (nonexistent, since every call here uses a distinct dir) case of two
-# calls targeting the same directory.
+# Every function below writes to a different app's own disjoint asset
+# directory (blueman is the only one touching $iconThemeDir), and the
+# shared helpers they call (resolve_themed_svg, fix_system_dir_permissions)
+# are safe under concurrency too — so running them all in parallel is fine.
 #
-# Never wrap this in $(...) to grab the PID — command substitution runs in
-# its own subshell, and a job backgrounded inside that subshell gets
-# reparented away (not a waitable child of this script) the instant the
-# substitution's subshell exits. Call directly, then read $! right after.
+# Never wrap this in $(...) to grab the PID — that runs in its own
+# subshell, and a job backgrounded inside it gets reparented away (not a
+# waitable child of this script) once the subshell exits. Call directly,
+# then read $! right after.
 time_step_bg() {
     local label="$1"; shift
     local outfile
@@ -976,21 +938,21 @@ time_step_bg() {
 }
 
 # ---- Run everything ----
-declare -a tray_pids=()
-time_step_bg "nativmix"         patch_nativmix_tray;         tray_pids+=("$!")
-time_step_bg "ferdium"          patch_ferdium_tray;          tray_pids+=("$!")
-time_step_bg "localsend"        patch_localsend_tray;        tray_pids+=("$!")
-time_step_bg "streamcontroller" patch_streamcontroller_tray; tray_pids+=("$!")
-time_step_bg "steam"            patch_steam_tray;            tray_pids+=("$!")
-time_step_bg "blueman"          patch_blueman_tray;          tray_pids+=("$!")
-time_step_bg "onedrivegui"      patch_onedrivegui_tray;      tray_pids+=("$!")
-time_step_bg "vesktop"          patch_vesktop_tray;          tray_pids+=("$!")
-time_step_bg "ytmdesktop"       patch_ytmdesktop_tray;       tray_pids+=("$!")
-time_step_bg "betterbird"       betterbird_tray_patch;       tray_pids+=("$!")
-time_step_bg "cohesion"         cohesion_tray_patch;         tray_pids+=("$!")
+declare -a trayPids=()
+time_step_bg "nativmix"         patch_nativmix_tray;         trayPids+=("$!")
+time_step_bg "ferdium"          patch_ferdium_tray;          trayPids+=("$!")
+time_step_bg "localsend"        patch_localsend_tray;        trayPids+=("$!")
+time_step_bg "streamcontroller" patch_streamcontroller_tray; trayPids+=("$!")
+time_step_bg "steam"            patch_steam_tray;            trayPids+=("$!")
+time_step_bg "blueman"          patch_blueman_tray;          trayPids+=("$!")
+time_step_bg "onedrivegui"      patch_onedrive_gui_tray;      trayPids+=("$!")
+time_step_bg "vesktop"          patch_vesktop_tray;          trayPids+=("$!")
+time_step_bg "ytmdesktop"       patch_ytm_desktop_tray;       trayPids+=("$!")
+time_step_bg "betterbird"       patch_betterbird_tray;       trayPids+=("$!")
+time_step_bg "cohesion"         patch_cohesion_tray;         trayPids+=("$!")
 
-for pid in "${tray_pids[@]}"; do
+for pid in "${trayPids[@]}"; do
     wait "$pid"
 done
 
-[ "$LIST_ONLY" -eq 0 ] && echo "Tray icons patched with $accent"
+[ "$listOnly" -eq 0 ] && echo "Tray icons patched with $accent"

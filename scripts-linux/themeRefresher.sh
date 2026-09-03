@@ -20,9 +20,15 @@ timed() {
 # Same contract as timed(), but backgrounds "$@" instead of waiting for it.
 # The timing line still prints itself once the job actually finishes
 # (from inside the subshell), so callers just fire-and-collect $! —
-# there's no return-code/label to relay back separately. Concurrent jobs'
-# stdout/stderr WILL interleave line-by-line in the log; that's the
-# accepted tradeoff of running them in parallel.
+# there's no return-code/label to relay back separately.
+#
+# Every line "$@" itself prints (stdout AND stderr — merged into one
+# stream here, so a script's own error messages and normal output both
+# get labeled the same way) is prefixed with "[label] ", so concurrent
+# jobs' interleaved output stays attributable without editing a single
+# echo in the wrapped scripts. `sed -u` keeps this unbuffered so lines
+# still appear as they're generated rather than arriving in one block
+# when the job exits.
 #
 # IMPORTANT: never wrap this in $(...) to grab the PID — command
 # substitution runs in its own subshell, and a job backgrounded inside
@@ -37,8 +43,8 @@ timed_bg() {
     (
         local t0 t1 elapsed rc
         t0=$(date +%s%N)
-        "$@"
-        rc=$?
+        { "$@" 2>&1; } | sed -u "s/^/[$label] /"
+        rc=${PIPESTATUS[0]}
         t1=$(date +%s%N)
         elapsed=$(awk -v a="$t0" -v b="$t1" 'BEGIN{printf "%.3f", (b-a)/1000000000}')
         echo "[timing] ${label}: ${elapsed}s" >&2

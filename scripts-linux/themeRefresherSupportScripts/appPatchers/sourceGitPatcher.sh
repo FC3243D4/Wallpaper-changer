@@ -32,22 +32,29 @@ if [ ! -f "$RENDERED" ]; then
     exit 1
 fi
 
-if ! python3 -c "import json; json.load(open('$RENDERED'))" 2>/dev/null; then
+# Validates the file is real JSON and normalizes hex case in one pass —
+# SourceGit's theme loader expects uppercase hex (#RRGGBB); matugen renders
+# lowercase, so normalize in place rather than depending on a to_upper
+# filter (not available in every matugen version). Previously two separate
+# python3 invocations each opened this same file; merged since the second
+# one has nothing to do until the first has already proven the file parses.
+if ! python3 - << EOF
+import json, re, sys
+path = '$RENDERED'
+with open(path, 'r') as f:
+    content = f.read()
+try:
+    json.loads(content)
+except ValueError:
+    sys.exit(1)
+content = re.sub(r'#[0-9a-fA-F]{6}', lambda m: m.group(0).upper(), content)
+with open(path, 'w') as f:
+    f.write(content)
+EOF
+then
     echo "Rendered theme at $RENDERED is not valid JSON, aborting" >&2
     exit 1
 fi
-
-# SourceGit's theme loader expects uppercase hex (#RRGGBB); matugen renders
-# lowercase, so normalize in place rather than depending on a to_upper
-# filter (not available in every matugen version).
-python3 - << EOF
-import re
-with open('$RENDERED', 'r') as f:
-    content = f.read()
-content = re.sub(r'#[0-9a-fA-F]{6}', lambda m: m.group(0).upper(), content)
-with open('$RENDERED', 'w') as f:
-    f.write(content)
-EOF
 
 mkdir -p "$SOURCEGIT_DIR"
 

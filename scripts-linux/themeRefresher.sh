@@ -24,11 +24,24 @@ timed() {
 #
 # Every line "$@" itself prints (stdout AND stderr — merged into one
 # stream here, so a script's own error messages and normal output both
-# get labeled the same way) is prefixed with "[label] ", so concurrent
-# jobs' interleaved output stays attributable without editing a single
-# echo in the wrapped scripts. `sed -u` keeps this unbuffered so lines
-# still appear as they're generated rather than arriving in one block
-# when the job exits.
+# get labeled the same way) is prefixed with "[label] ".
+#
+# Output is captured to a temp file rather than piped live through sed.
+# This is deliberate, not just an implementation detail: a wrapped script
+# that backgrounds and disowns some work of its own (rgbApply.sh's
+# ratbagctl loop does exactly this) inherits whatever fd this job's
+# stdout/stderr point to at the moment it forks. Piped through sed, that
+# disowned grandchild holds the pipe open until IT finishes too — even
+# though the wrapped script itself already returned — so `wait` ends up
+# blocked for however long that orphaned background work takes, silently
+# turning a near-instant step into a multi-second (or worse) one. A
+# regular file has no such semantics: a write to it just lands, regardless
+# of who else still holds the fd open, so an orphaned writer can't block
+# anything downstream. Trade-off: output only appears (all at once,
+# labeled) once the wrapped command's own script portion finishes — no
+# more true real-time line-by-line interleaving — and a disowned
+# grandchild's OWN output past that point is only ever captured by
+# accident, not guaranteed. Both are acceptable next to actually hanging.
 #
 # IMPORTANT: never wrap this in $(...) to grab the PID — command
 # substitution runs in its own subshell, and a job backgrounded inside
@@ -40,12 +53,16 @@ timed() {
 #   my_pids+=("$!")
 timed_bg() {
     local label="$1"; shift
+    local outfile
+    outfile=$(mktemp)
     (
         local t0 t1 elapsed rc
         t0=$(date +%s%N)
-        { "$@" 2>&1; } | sed -u "s/^/[$label] /"
-        rc=${PIPESTATUS[0]}
+        "$@" > "$outfile" 2>&1
+        rc=$?
         t1=$(date +%s%N)
+        sed "s/^/[$label] /" "$outfile"
+        rm -f "$outfile"
         elapsed=$(awk -v a="$t0" -v b="$t1" 'BEGIN{printf "%.3f", (b-a)/1000000000}')
         echo "[timing] ${label}: ${elapsed}s" >&2
         exit $rc

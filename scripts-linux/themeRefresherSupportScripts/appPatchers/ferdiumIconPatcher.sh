@@ -56,23 +56,32 @@ is_shared_recipe() {
     return 1
 }
 
-for recipe_dir in "$FERDIUM_RECIPES"/*/; do
+# Processes one recipe. Runs in its own backgrounded subshell per recipe
+# (see the loop below) — safe because each recipe writes to its own
+# uniquely-named output SVG and its own package.json, never touching
+# another recipe's files. Returns 2 specifically (not just "nonzero") to
+# signal "this recipe's icon URI changed, Ferdium needs a restart" — a
+# background subshell can't set a variable in the parent shell directly,
+# so the exit code is how that signal gets back out; the loop below turns
+# any 2 into restarted_needed=1 once every recipe has finished.
+process_recipe() {
+    local recipe_dir="$1"
+    local recipe_id
     recipe_id="$(basename "$recipe_dir")"
-    [ "$recipe_id" = "temp" ] && continue
 
-    pkg="$recipe_dir/package.json"
+    local pkg="$recipe_dir/package.json"
     if [ ! -f "$pkg" ]; then
         echo "Recipe '$recipe_id' has no package.json — skipping"
-        continue
+        return 0
     fi
     echo "Recipe '$recipe_id' found"
 
-    icon_file="${ICON_FILE_OVERRIDES[$recipe_id]:-${recipe_id}_base_icon.svg}"
-    src="$ICONS/$icon_file"
+    local icon_file="${ICON_FILE_OVERRIDES[$recipe_id]:-${recipe_id}_base_icon.svg}"
+    local src="$ICONS/$icon_file"
 
     if [ ! -f "$src" ]; then
         echo "  no base icon (expected $src) — skipping"
-        continue
+        return 0
     fi
 
     if is_shared_recipe "$recipe_id"; then
@@ -82,7 +91,7 @@ for recipe_dir in "$FERDIUM_RECIPES"/*/; do
         echo "  by name isn't possible from this script."
     fi
 
-    dst="$FERDIUM_ICON_OUT/$recipe_id.svg"
+    local dst="$FERDIUM_ICON_OUT/$recipe_id.svg"
 
     # Strip any DOCTYPE declaration referencing an external DTD — Electron's
     # sandboxed webview can fail to render the whole SVG if it can't resolve
@@ -116,16 +125,41 @@ with open(dst, "w") as f:
     f.write(content)
 EOF
 
-    new_uri="file://$dst"
+    local new_uri="file://$dst"
+    local current_uri
     current_uri=$(grep -m1 '"defaultIcon"' "$pkg" | sed -E 's/.*"defaultIcon"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/')
 
     if [ "$current_uri" != "$new_uri" ]; then
         sed -i -E "s|\"defaultIcon\"[[:space:]]*:[[:space:]]*\"[^\"]*\"|\"defaultIcon\": \"$new_uri\"|" "$pkg"
         echo "  patched"
-        restarted_needed=1
+        return 2
     else
         echo "  already up to date"
+        return 0
     fi
+}
+
+declare -a recipe_pids=()
+
+for recipe_dir in "$FERDIUM_RECIPES"/*/; do
+    recipe_id="$(basename "$recipe_dir")"
+    [ "$recipe_id" = "temp" ] && continue
+
+    (
+        outfile=$(mktemp)
+        process_recipe "$recipe_dir" > "$outfile" 2>&1
+        rc=$?
+        sed "s/^/[$recipe_id] /" "$outfile"
+        rm -f "$outfile"
+        exit "$rc"
+    ) &
+    recipe_pids+=("$!")
+done
+
+for pid in "${recipe_pids[@]}"; do
+    wait "$pid"
+    rc=$?
+    [ "$rc" -eq 2 ] && restarted_needed=1
 done
 
 echo "Ferdium icons patched with $accent"

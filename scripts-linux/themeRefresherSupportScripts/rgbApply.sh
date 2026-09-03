@@ -92,6 +92,6 @@ if ratbagctl --version &>/dev/null; then
                 ratbagctl "$device" profile $profile led 0 set mode on color "$color"
             done
         done
-    ) &
+    ) >/dev/null 2>&1 &
     disown
 fi

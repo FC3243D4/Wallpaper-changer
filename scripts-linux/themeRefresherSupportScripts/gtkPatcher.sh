@@ -138,7 +138,12 @@ gsettings set org.gnome.desktop.interface gtk-theme ''
 sleep 0.1
 gsettings set org.gnome.desktop.interface gtk-theme "$current_theme"
 rm -rf "$HOME/.cache/gtk-3.0" "$HOME/.cache/gtk-4.0"
-systemctl --user restart xdg-desktop-portal-gtk
-systemctl --user restart xdg-desktop-portal
+# These target different systemd units and don't depend on each other,
+# so there's no reason to wait for one before starting the other.
+systemctl --user restart xdg-desktop-portal-gtk &
+portal_gtk_pid=$!
+systemctl --user restart xdg-desktop-portal &
+portal_pid=$!
+wait "$portal_gtk_pid" "$portal_pid"
 
 echo "GTK theme patched with $accent"

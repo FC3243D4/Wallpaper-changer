@@ -919,30 +919,78 @@ cohesion_tray_patch() {
 }
 
 
-# time_step <label> <function> — runs the given function, prints its
-# wall-clock time to stderr afterward. awk instead of bc for the float
-# subtraction so this doesn't need an extra package installed.
-time_step() {
+# time_step_bg <label> <function> — same contract as time_step, but
+# backgrounds the function instead of waiting for it, and prefixes every
+# line it prints (stdout AND stderr, merged) with "[label] " so concurrent
+# jobs' interleaved output stays attributable — same technique
+# themeRefresher.sh's timed_bg uses, for the same reason.
+#
+# Output is captured to a temp file, not piped live through sed. This
+# matters here specifically: several of these functions run rsvg-convert,
+# fix_system_dir_permissions (which can invoke sudo), and
+# ytmdesktop_force_reload backgrounds+disowns a 12-second delayed revert of
+# its own (already redirected to /dev/null internally, so it's not the
+# culprit — but it's exactly the shape of thing that would be). If ANY
+# function here (now or added later) ever backgrounds+disowns work without
+# redirecting that work's own output first, a live pipe would let that
+# orphaned writer hold the pipe open indefinitely, blocking this whole job
+# from ever being seen as "finished" — turning a fast step into a
+# multi-second (or worse) one. A regular file has no such blocking
+# semantics. Confirmed this exact failure mode by reproducing it against
+# rgbApply.sh's disowned ratbagctl loop elsewhere in this pipeline, which
+# is what originally exposed the bug.
+#
+# Every function below writes to a completely different app's own asset
+# directory (verified pairwise: nativmix, ferdium, localsend,
+# streamcontroller, steam, blueman, onedrivegui, vesktop, ytmdesktop,
+# betterbird, and cohesion all target disjoint paths — blueman is the only
+# one writing under $ICON_DIR, and none of the other ten touch $ICON_DIR
+# at all), so they're safe to run fully concurrently instead of one after
+# another. The shared helpers they all call (resolve_themed_svg,
+# fix_system_dir_permissions) are safe under concurrency too:
+# resolve_themed_svg's mktemp is unique per call, and
+# fix_system_dir_permissions's chown is idempotent even in the
+# (nonexistent, since every call here uses a distinct dir) case of two
+# calls targeting the same directory.
+#
+# Never wrap this in $(...) to grab the PID — command substitution runs in
+# its own subshell, and a job backgrounded inside that subshell gets
+# reparented away (not a waitable child of this script) the instant the
+# substitution's subshell exits. Call directly, then read $! right after.
+time_step_bg() {
     local label="$1"; shift
-    local start end
-    start=$(date +%s.%N)
-    "$@"
-    end=$(date +%s.%N)
-    awk -v s="$start" -v e="$end" -v l="$label" \
-        'BEGIN { printf "  [%7.3fs] %s\n", e - s, l }' >&2
+    local outfile
+    outfile=$(mktemp)
+    (
+        local start end rc
+        start=$(date +%s.%N)
+        "$@" > "$outfile" 2>&1
+        rc=$?
+        end=$(date +%s.%N)
+        sed "s/^/[$label] /" "$outfile"
+        rm -f "$outfile"
+        awk -v s="$start" -v e="$end" -v l="$label" \
+            'BEGIN { printf "  [%7.3fs] %s\n", e - s, l }' >&2
+        exit $rc
+    ) &
 }
 
 # ---- Run everything ----
-time_step "nativmix"        patch_nativmix_tray
-time_step "ferdium"         patch_ferdium_tray
-time_step "localsend"       patch_localsend_tray
-time_step "streamcontroller" patch_streamcontroller_tray
-time_step "steam"           patch_steam_tray
-time_step "blueman"         patch_blueman_tray
-time_step "onedrivegui"     patch_onedrivegui_tray
-time_step "vesktop"         patch_vesktop_tray
-time_step "ytmdesktop"      patch_ytmdesktop_tray
-time_step "betterbird"      betterbird_tray_patch
-time_step "cohesion"        cohesion_tray_patch
+declare -a tray_pids=()
+time_step_bg "nativmix"         patch_nativmix_tray;         tray_pids+=("$!")
+time_step_bg "ferdium"          patch_ferdium_tray;          tray_pids+=("$!")
+time_step_bg "localsend"        patch_localsend_tray;        tray_pids+=("$!")
+time_step_bg "streamcontroller" patch_streamcontroller_tray; tray_pids+=("$!")
+time_step_bg "steam"            patch_steam_tray;            tray_pids+=("$!")
+time_step_bg "blueman"          patch_blueman_tray;          tray_pids+=("$!")
+time_step_bg "onedrivegui"      patch_onedrivegui_tray;      tray_pids+=("$!")
+time_step_bg "vesktop"          patch_vesktop_tray;          tray_pids+=("$!")
+time_step_bg "ytmdesktop"       patch_ytmdesktop_tray;       tray_pids+=("$!")
+time_step_bg "betterbird"       betterbird_tray_patch;       tray_pids+=("$!")
+time_step_bg "cohesion"         cohesion_tray_patch;         tray_pids+=("$!")
+
+for pid in "${tray_pids[@]}"; do
+    wait "$pid"
+done
 
 [ "$LIST_ONLY" -eq 0 ] && echo "Tray icons patched with $accent"

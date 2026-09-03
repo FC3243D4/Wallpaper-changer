@@ -1464,6 +1464,34 @@ time_step() {
         'BEGIN { printf "[TIMING] [%7.3fs] %s\n", e - s, l }' >&2
 }
 
+# Same contract as time_step, but backgrounds the command and prefixes
+# every line it prints (stdout AND stderr, merged) with "[label] ".
+# Output is captured to a temp file rather than piped live through sed —
+# see trayIconPatcher.sh's time_step_bg for why: a live pipe can be held
+# open by any backgrounded+disowned grandchild that doesn't redirect its
+# own output away first, blocking this whole job from ever finishing even
+# though the wrapped command itself already returned. A regular file has
+# no such blocking semantics. Never wrap this in $(...) to grab the PID —
+# see trayIconPatcher.sh's time_step_bg for why that reparents the job
+# away from this script's job table.
+time_step_bg() {
+    local label="$1"; shift
+    local outfile
+    outfile=$(mktemp)
+    (
+        local start end rc
+        start=$(date +%s.%N)
+        "$@" > "$outfile" 2>&1
+        rc=$?
+        end=$(date +%s.%N)
+        sed "s/^/[$label] /" "$outfile"
+        rm -f "$outfile"
+        awk -v s="$start" -v e="$end" -v l="$label" \
+            'BEGIN { printf "[TIMING] [%7.3fs] %s\n", e - s, l }' >&2
+        exit $rc
+    ) &
+}
+
 # ---- Run everything, in order ----
 if [ "$DRY_RUN" -eq 1 ]; then
     echo "(dry run: dedicated functions are skipped, nothing is written)"
@@ -1471,6 +1499,21 @@ if [ "$DRY_RUN" -eq 1 ]; then
     patch_all_desktop_icons
     exit 0
 fi
+
+# patch_wlogout_icons and patch_osd_icons read only from raw
+# $ICONS/*_base_icon.svg source files and write only to their own
+# app-specific config dirs (wlogout/icons, swaync/icons) — they don't
+# touch $ICON_DIR, any .desktop file, or HANDLED_DESKTOPS/GENERATED_ICONS,
+# so unlike the dedicated icon functions below (which populate
+# HANDLED_DESKTOPS for the engine to read — genuinely can't background
+# those without breaking that hand-off) these two have no dependency on
+# anything else in this script. Launched here so they run for the whole
+# rest of the script instead of waiting their turn at the end; waited on
+# right before the final "Icons patched" line.
+time_step_bg "patch_wlogout_icons" patch_wlogout_icons
+wlogout_pid=$!
+time_step_bg "patch_osd_icons" patch_osd_icons
+osd_pid=$!
 
 # Prune stale overrides before anything else scans DESKTOP_DIRS, so a
 # removed entry doesn't shadow a nonexistent original for the rest of
@@ -1500,10 +1543,6 @@ time_step "patch_discord_vesktop_icons"    patch_discord_vesktop_icons
 # The generic engine — everything else, games included
 time_step "patch_all_desktop_icons" patch_all_desktop_icons
 
-# Non-.desktop icon sets
-time_step "patch_wlogout_icons" patch_wlogout_icons
-time_step "patch_osd_icons"     patch_osd_icons
-
 # Tray icons — split into its own file, see trayIconPatcher.sh
 time_step "trayIconPatcher.sh" "$SUPPORT/trayIconPatcher.sh" "$color"
 
@@ -1513,5 +1552,7 @@ _run_update_desktop_database() {
 time_step "update-desktop-database" _run_update_desktop_database
 
 time_step "cleanup_icon_cache" cleanup_icon_cache
+
+wait "$wlogout_pid" "$osd_pid"
 
 echo "Icons patched with $accent"

@@ -62,6 +62,11 @@ save_layout() {
     local master_orientation
     master_orientation=$(hyprctl getoption master:orientation -j | jq -r '.str')
 
+    # One fetch covers both this snapshot and the all_ws_ids lookup below —
+    # nothing is dispatched in between, so it stays valid for both.
+    local clients_json
+    clients_json=$(hyprctl clients -j)
+
     {
         echo "current_workspace:$current_ws"
         echo "default_layout:$default_layout"
@@ -70,7 +75,7 @@ save_layout() {
         # else the global default) is decided here and saved directly per
         # workspace as a "wslayout:" line, so restore doesn't need to query
         # hyprctl at all — it just uses what was actually true at save time.
-        hyprctl clients -j | python3 -c "
+        printf '%s' "$clients_json" | python3 -c "
 import json, sys
 clients = json.load(sys.stdin)
 default_layout = '$default_layout'
@@ -169,7 +174,7 @@ for ws_id, ws_clients in sorted(workspaces.items()):
     # briefly disrupts the view for any monocle workspace, unlike every
     # other layout above which is captured with zero side effects.
     local all_ws_ids
-    all_ws_ids=$(hyprctl clients -j | jq -r '[.[].workspace.id] | unique | .[]')
+    all_ws_ids=$(printf '%s' "$clients_json" | jq -r '[.[].workspace.id] | unique | .[]')
     for ws_id in $all_ws_ids; do
         [ "$ws_id" -le 0 ] 2>/dev/null && continue
 
@@ -249,69 +254,53 @@ extract_class() {
     echo "${rest%%:*}"
 }
 
-# Resolve the safest window selector for a saved (address, class) pair.
+# Resolves a saved (address, class) pair against a SNAPSHOT of
+# `hyprctl clients -j` output passed in by the caller (never fetched here),
+# using the same class-first / address-to-disambiguate strategy everywhere
+# in this script:
+#   - 0 current matches -> nothing found, caller should skip
+#   - 1 current match    -> unambiguous; selector "class:$class"
+#   - 2+ current matches -> only usable if the exact saved (address+class)
+#                           pair is still among them -> "address:0x...";
+#                           otherwise ambiguous, nothing found
 # Class matching is the default and is safe by construction — it carries
 # no risk of the address-reuse problem (a killed app's freed address being
 # recycled by the compositor for an entirely different app's new window).
-# Address is only used to disambiguate the rare case where MULTIPLE
-# windows currently share this class and we need to know which specific
-# one we saved:
-#   - 0 current matches -> nothing to move, skip
-#   - 1 current match    -> "class:$class" (unambiguous, no address needed)
-#   - 2+ current matches -> only usable if the exact saved (address+class)
-#                           pair is still among them -> "address:0x...";
-#                           otherwise we can't safely tell which one we
-#                           saved, so skip
-resolve_selector() {
-    local addr="$1"
-    local class="$2"
-
-    local match_count
-    match_count=$(hyprctl clients -j | jq -r --arg c "${class,,}" \
-        '[.[] | select((.class // "" | ascii_downcase | contains($c)))] | length' 2>/dev/null)
-    [ -z "$match_count" ] && match_count=0
-
-    if [ "$match_count" -eq 0 ] 2>/dev/null; then
-        return 1
-    fi
-
-    if [ "$match_count" -eq 1 ] 2>/dev/null; then
-        echo "class:$class"
-        return 0
-    fi
-
-    # Multiple current instances of this class — only safe if the exact
-    # saved window (same address AND class) is still one of them.
-    if [ -n "$addr" ] && hyprctl clients -j | jq -e --arg a "$addr" --arg c "${class,,}" \
-        'any(.[]; .address == $a and (.class // "" | ascii_downcase | contains($c)))' >/dev/null 2>&1; then
-        echo "address:$addr"
-        return 0
-    fi
-
-    return 1
-}
-
-# Returns the JSON object for the CURRENT window matching a saved
-# (address, class) pair, using the same class-first / address-to-
-# disambiguate strategy as resolve_selector. Prints nothing if there's no
-# safe match. Used by callers that need to read the window's current
-# properties (workspace, position, etc.), not just build a selector string.
-resolve_current_client() {
-    local addr="$1"
-    local class="$2"
-    hyprctl clients -j | python3 -c "
+# Address is only used to disambiguate when multiple windows currently
+# share the saved class.
+#
+# Prints 3 lines on success (empty output on failure):
+#   1. selector       ("class:X" or "address:0x...")
+#   2. current address (may differ from the saved address if stale)
+#   3. current workspace id
+# Callers pick whichever lines they need with `sed -n 'Np'` — this is pure
+# in-memory JSON filtering, so calling it multiple times against the same
+# cached snapshot costs nothing extra (unlike the old per-call hyprctl fetch).
+#   $1 - saved address
+#   $2 - saved class
+#   $3 - clients JSON snapshot (output of `hyprctl clients -j`)
+resolve_client() {
+    local addr="$1" class="$2" clients_json="$3"
+    printf '%s' "$clients_json" | python3 -c "
 import json, sys
 clients = json.load(sys.stdin)
 addr = '$addr'
 cls = '$class'.lower()
 matches = [c for c in clients if cls in c.get('class', '').lower()]
+target = None
 if len(matches) == 1:
-    print(json.dumps(matches[0]))
+    target = matches[0]
 elif len(matches) > 1:
     for c in matches:
         if c['address'] == addr:
-            print(json.dumps(c))
+            target = c
             break
+if target is None:
+    sys.exit(0)
+sel = 'class:' + '$class' if len(matches) == 1 else 'address:' + target['address']
+print(sel)
+print(target['address'])
+print(target['workspace']['id'])
 " 2>/dev/null
 }
 
@@ -334,8 +323,14 @@ restore_workspace_master() {
 
     echo "Restoring workspace $ws_id (master: $m_class)"
 
+    # One snapshot covers selector resolution for the master and every
+    # slave, plus Step 1's master check below — nothing is dispatched until
+    # after Step 1, so a single fetch is valid for all of it.
+    local clients_json
+    clients_json=$(hyprctl clients -j)
+
     local m_sel
-    m_sel=$(resolve_selector "$m_addr" "$m_class") || m_sel=""
+    m_sel=$(resolve_client "$m_addr" "$m_class" "$clients_json" | sed -n '1p')
     if [ -z "$m_sel" ]; then
         echo "  Skipping master $m_class (not currently open, or ambiguous duplicates)"
     fi
@@ -354,17 +349,18 @@ restore_workspace_master() {
         local s_addr="${entry%%:*}"
         local s_class=$(extract_class "$entry")
         local s_sel
-        s_sel=$(resolve_selector "$s_addr" "$s_class") || s_sel=""
+        s_sel=$(resolve_client "$s_addr" "$s_class" "$clients_json" | sed -n '1p')
         if [ -z "$s_sel" ]; then
             echo "  Skipping $s_class (not currently open, or ambiguous duplicates)"
         fi
         slave_sels+=("$s_sel")
     done
 
-    # Step 1: set correct master only if needed
+    # Step 1: set correct master only if needed (still using the same
+    # snapshot fetched above — nothing's been dispatched yet).
     if [ -n "$m_sel" ]; then
         local cur_master_addr
-        cur_master_addr=$(hyprctl clients -j | python3 -c "
+        cur_master_addr=$(printf '%s' "$clients_json" | python3 -c "
 import json, sys
 clients = json.load(sys.stdin)
 ws_clients = [c for c in clients if c['workspace']['id'] == $ws_id]
@@ -389,7 +385,7 @@ print(master['address'])
         # Confirm current master's address against our resolved target
         # window's actual address (not the possibly-stale saved one).
         local m_resolved_addr
-        m_resolved_addr=$(resolve_current_client "$m_addr" "$m_class" | jq -r '.address // empty')
+        m_resolved_addr=$(resolve_client "$m_addr" "$m_class" "$clients_json" | sed -n '2p')
 
         if [ -n "$cur_master_addr" ] && [ -n "$m_resolved_addr" ] && [ "$cur_master_addr" != "$m_resolved_addr" ]; then
             echo "  Promoting $m_class to master on ws $ws_id"
@@ -400,7 +396,11 @@ print(master['address'])
         fi
     fi
 
-    # Step 2: restore each slave slot in order
+    # Step 2: restore each slave slot in order. Each iteration genuinely
+    # needs a FRESH snapshot — an earlier swap in this same loop changes
+    # slot order for everyone after it — but the two lookups within ONE
+    # iteration (resolved address + current slot) now share that one fetch
+    # instead of two.
     for target_slot in "${!o_entries[@]}"; do
         local target_sel="${slave_sels[$target_slot]}"
         [ -z "$target_sel" ] && continue   # skipped entry, nothing to slot
@@ -408,15 +408,18 @@ print(master['address'])
         local target_addr="${o_entries[$target_slot]%%:*}"
         local target_class=$(extract_class "${o_entries[$target_slot]}")
 
+        local step2_clients_json
+        step2_clients_json=$(hyprctl clients -j)
+
         # Resolve to the window's actual current address first (handles
         # the case where the saved address is stale but the class is
         # unique), then find its slot index among current slaves.
         local resolved_addr
-        resolved_addr=$(resolve_current_client "$target_addr" "$target_class" | jq -r '.address // empty')
+        resolved_addr=$(resolve_client "$target_addr" "$target_class" "$step2_clients_json" | sed -n '2p')
         [ -z "$resolved_addr" ] && continue
 
         local cur_slot
-        cur_slot=$(hyprctl clients -j | python3 -c "
+        cur_slot=$(printf '%s' "$step2_clients_json" | python3 -c "
 import json, sys
 clients = json.load(sys.stdin)
 ws_clients = [c for c in clients if c['workspace']['id'] == $ws_id]
@@ -588,11 +591,13 @@ restore_workspace_dwindle() {
     fi
 
     local -a movable_sels=()
+    local clients_json
+    clients_json=$(hyprctl clients -j)
     for entry in "${w_entries[@]}"; do
         local addr="${entry%%:*}"
         local class=$(extract_class "$entry")
         local sel
-        sel=$(resolve_selector "$addr" "$class") || sel=""
+        sel=$(resolve_client "$addr" "$class" "$clients_json" | sed -n '1p')
         if [ -z "$sel" ]; then
             echo "  Skipping $class (not currently open, or ambiguous duplicates)"
         else
@@ -667,6 +672,8 @@ restore_workspace_scrolling() {
     local -a sels=()
     local -a col_idxs=()
     local -a row_idxs=()
+    local clients_json
+    clients_json=$(hyprctl clients -j)
     for entry in "${sc_entries[@]}"; do
         local addr="${entry%%:*}"
         local class=$(extract_class "$entry")
@@ -675,7 +682,7 @@ restore_workspace_scrolling() {
         local col_idx="${tmp##*:}"
 
         local sel
-        sel=$(resolve_selector "$addr" "$class") || sel=""
+        sel=$(resolve_client "$addr" "$class" "$clients_json" | sed -n '1p')
         if [ -z "$sel" ]; then
             echo "  Skipping $class (not currently open, or ambiguous duplicates)"
             continue
@@ -800,11 +807,13 @@ restore_workspace_monocle() {
     fi
 
     local -a sels=()
+    local clients_json
+    clients_json=$(hyprctl clients -j)
     for entry in "${mo_entries[@]}"; do
         local addr="${entry%%:*}"
         local class=$(extract_class "$entry")
         local sel
-        sel=$(resolve_selector "$addr" "$class") || sel=""
+        sel=$(resolve_client "$addr" "$class" "$clients_json" | sed -n '1p')
         if [ -z "$sel" ]; then
             echo "  Skipping $class (not currently open, or ambiguous duplicates)"
         else
@@ -922,21 +931,28 @@ restore_layout() {
     # workspace's ordering logic never runs while a window meant for it is
     # still elsewhere (or vice versa). ===
     echo "Phase 1: moving all windows to their correct workspaces..."
+    # One snapshot for the whole loop: a workspace-only move doesn't change
+    # any window's class or address, so an earlier record's move can't
+    # affect a later record's selector/ambiguity resolution — every record
+    # is classified against the same pre-Phase-1 state, which is exactly
+    # what "where did this window start" should mean anyway.
+    local phase1_clients_json
+    phase1_clients_json=$(hyprctl clients -j)
     for rec in "${all_entries[@]}"; do
         local rec_ws="${rec%%|*}"
         local rec_rest="${rec#*|}"          # "address:class[:...]"
         local rec_addr="${rec_rest%%:*}"
         local rec_class=$(extract_class "$rec_rest")
 
-        local sel
-        sel=$(resolve_selector "$rec_addr" "$rec_class") || sel=""
+        local resolved sel cur_ws
+        resolved=$(resolve_client "$rec_addr" "$rec_class" "$phase1_clients_json")
+        sel=$(echo "$resolved" | sed -n '1p')
         if [ -z "$sel" ]; then
             echo "  Skipping $rec_class (not currently open, or ambiguous duplicates)"
             continue
         fi
 
-        local cur_ws
-        cur_ws=$(resolve_current_client "$rec_addr" "$rec_class" | jq -r '.workspace.id // empty')
+        cur_ws=$(echo "$resolved" | sed -n '3p')
         if [ -n "$cur_ws" ] && [ "$cur_ws" != "$rec_ws" ]; then
             echo "  Moving $rec_class from ws $cur_ws to ws $rec_ws"
             hyprctl dispatch "hl.dsp.window.move({ workspace = $rec_ws, window = \"$sel\", follow = false })" 2>/dev/null
@@ -989,18 +1005,21 @@ restore_layout() {
     echo "Verifying window placement..."
     for attempt in 1 2 3; do
         local corrected=0
+        local settle_clients_json
+        settle_clients_json=$(hyprctl clients -j)
         for rec in "${all_entries[@]}"; do
             local rec_ws="${rec%%|*}"
             local rec_rest="${rec#*|}"          # "address:class[:...]"
             local rec_addr="${rec_rest%%:*}"
             local rec_class=$(extract_class "$rec_rest")
 
-            local cur_ws
-            cur_ws=$(resolve_current_client "$rec_addr" "$rec_class" | jq -r '.workspace.id // empty')
+            local resolved cur_ws
+            resolved=$(resolve_client "$rec_addr" "$rec_class" "$settle_clients_json")
+            cur_ws=$(echo "$resolved" | sed -n '3p')
 
             if [ -n "$cur_ws" ] && [ "$cur_ws" != "$rec_ws" ]; then
                 local sel
-                sel=$(resolve_selector "$rec_addr" "$rec_class") || sel=""
+                sel=$(echo "$resolved" | sed -n '1p')
                 if [ -n "$sel" ]; then
                     echo "  Correcting $rec_class: ws $cur_ws -> ws $rec_ws"
                     hyprctl dispatch "hl.dsp.window.move({ workspace = $rec_ws, window = \"$sel\", follow = false })" 2>/dev/null

@@ -2,18 +2,18 @@
 # dependency_check.sh
 # Checks for required dependencies and installs any that are missing.
 # Meant to be SOURCED from install-Linux.sh (not executed) so that
-# UseXrandr / UseWayland are visible to the caller.
+# useXrandr / useWayland are visible to the caller.
 #
 # Returns 0 on success, 1 on failure (caller should check $? and stop).
 
-source "$SUPPORT/pkg_manager.sh" || return 1
+source "$supportDir/pkg_manager.sh" || return 1
 
 packageList=()
 
 echo "Checking dependencies..."
 
 if [ "$XDG_SESSION_TYPE" != "wayland" ]; then
-    UseWayland=false
+    useWayland=false
     if ! xrandr -v foo &> /dev/null; then
         echo "You are not using Wayland, but xrandr is not installed."
         echo ""
@@ -21,10 +21,10 @@ if [ "$XDG_SESSION_TYPE" != "wayland" ]; then
     else
         echo "You are not using Wayland. The script will use xrandr instead."
         echo ""
-        UseXrandr=true
+        useXrandr=true
     fi
 fi
-if [ "$UseXrandr" = true ]; then
+if [ "$useXrandr" = true ]; then
     if ! xrandr | grep primary &> /dev/null; then
         cat << EOF2
 xrandr is installed but no primary display is set. To ensure the script works correctly, please set a primary display with:

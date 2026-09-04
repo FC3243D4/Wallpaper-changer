@@ -2,19 +2,17 @@
 # wallpaper_install.sh
 # Creates the Pictures/wallpapers directory if needed and copies wallpapers
 # from the repo, including the nsfw prompt.
-# Meant to be SOURCED from install-Linux.sh; relies on $CreatePicturesDir,
-# $WallpapersDirExists, and $CopyWallpapers being set by directory_setup.sh.
-# Sets $CopyNsfw for use by final_message.sh.
+# Meant to be SOURCED from install-Linux.sh; relies on $createPicturesDir,
+# $wallpapersDirExists, and $copyWallpapers being set by directory_setup.sh.
+# Sets $copyNsfw for use by final_message.sh.
 
-source "$SUPPORT/utils.sh"
+source "$supportDir/utils.sh"
 
-VALID_EXTENSIONS=("jpg" "jpeg" "png" "pnm" "tga" "tiff" "webp" "bmp" "farbfeld" "gif")
-DEFAULT_WALLPAPERS_DIR="./wallpapersDefaultInstall"
+validExtensions=("jpg" "jpeg" "png" "pnm" "tga" "tiff" "webp" "bmp" "farbfeld" "gif")
+defaultWallpapersDir="./wallpapersDefaultInstall"
 
-# ---------------------------------------------------------------------------
 # detect_aspect_ratios: lists the aspect-ratio subfolders found under
 # <base>/sfw. Populates the array named in $2 via nameref.
-# ---------------------------------------------------------------------------
 detect_aspect_ratios() {
     local base="$1"
     local -n out=$2
@@ -25,7 +23,6 @@ detect_aspect_ratios() {
     done
 }
 
-# ---------------------------------------------------------------------------
 # validate_wallpaper_structure: checks:
 #   - at least one aspect ratio folder is present under sfw
 #   - every ratio folder under sfw (and nsfw, if present) has the same
@@ -33,13 +30,12 @@ detect_aspect_ratios() {
 #   - all files inside nsfw are prefixed with "nsfw-"
 #   - all files use one of the supported extensions
 # Returns 0 if valid, 1 otherwise.
-# ---------------------------------------------------------------------------
 validate_wallpaper_structure() {
     local base="$1"
-    local sfw_dir="$base/sfw"
-    local nsfw_dir="$base/nsfw"
+    local sfwDir="$base/sfw"
+    local nsfwDir="$base/nsfw"
 
-    [ -d "$sfw_dir" ] || return 1
+    [ -d "$sfwDir" ] || return 1
 
     local ratios=()
     detect_aspect_ratios "$base" ratios
@@ -50,7 +46,7 @@ validate_wallpaper_structure() {
         local ext="${1##*.}"
         ext="${ext,,}"
         local valid
-        for valid in "${VALID_EXTENSIONS[@]}"; do
+        for valid in "${validExtensions[@]}"; do
             [ "$ext" = "$valid" ] && return 0
         done
         return 1
@@ -59,14 +55,14 @@ validate_wallpaper_structure() {
     local reference=()
     while IFS= read -r -d '' f; do
         reference+=("$(basename "$f")")
-    done < <(find "$sfw_dir/${ratios[0]}" -maxdepth 1 -type f -print0)
+    done < <(find "$sfwDir/${ratios[0]}" -maxdepth 1 -type f -print0)
 
     local files f
     for ratio in "${ratios[@]}"; do
         files=()
         while IFS= read -r -d '' f; do
             files+=("$(basename "$f")")
-        done < <(find "$sfw_dir/$ratio" -maxdepth 1 -type f -print0)
+        done < <(find "$sfwDir/$ratio" -maxdepth 1 -type f -print0)
 
         for f in "${files[@]}"; do
             is_valid_ext "$f" || return 1
@@ -77,13 +73,13 @@ validate_wallpaper_structure() {
         fi
     done
 
-    if [ -d "$nsfw_dir" ]; then
+    if [ -d "$nsfwDir" ]; then
         for ratio in "${ratios[@]}"; do
-            [ -d "$nsfw_dir/$ratio" ] || return 1
+            [ -d "$nsfwDir/$ratio" ] || return 1
             files=()
             while IFS= read -r -d '' f; do
                 files+=("$(basename "$f")")
-            done < <(find "$nsfw_dir/$ratio" -maxdepth 1 -type f -print0)
+            done < <(find "$nsfwDir/$ratio" -maxdepth 1 -type f -print0)
 
             for f in "${files[@]}"; do
                 is_valid_ext "$f" || return 1
@@ -95,16 +91,16 @@ validate_wallpaper_structure() {
     return 0
 }
 
-if [ "$CreatePicturesDir" = true ]; then
+if [ "$createPicturesDir" = true ]; then
     mkdir "$HOME/Pictures"
     mkdir "$HOME/Pictures/wallpapers"
 else
-    if [ "$WallpapersDirExists" = false ]; then
+    if [ "$wallpapersDirExists" = false ]; then
         mkdir "$HOME/Pictures/wallpapers"
     fi
 fi
 
-if [ "$CopyWallpapers" = true ]; then
+if [ "$copyWallpapers" = true ]; then
     if [ -f "$HOME/.cache/wallpaper_ratios.cache" ]; then
         echo "removing wallpaper_ratios.cache"
         rm "$HOME/.cache/wallpaper_ratios.cache"
@@ -112,28 +108,28 @@ if [ "$CopyWallpapers" = true ]; then
         rm -r "$HOME/.cache/wallpaper-thumbnails"
     fi
 
-    WALLPAPERS_SOURCE="./wallpapers"
-    if ! validate_wallpaper_structure "$WALLPAPERS_SOURCE"; then
+    wallpapersSource="./wallpapers"
+    if ! validate_wallpaper_structure "$wallpapersSource"; then
         echo "The wallpapers folder structure is invalid or incomplete (no aspect ratio folders found, or filenames/extensions are inconsistent across them)."
-        echo "Falling back to the default wallpapers included with this install: $DEFAULT_WALLPAPERS_DIR"
+        echo "Falling back to the default wallpapers included with this install: $defaultWallpapersDir"
         echo ""
-        WALLPAPERS_SOURCE="$DEFAULT_WALLPAPERS_DIR"
+        wallpapersSource="$defaultWallpapersDir"
     fi
 
     #Checks if nsfw wallpapers exist and in case asks the user if he wants to install them
-    if [ -d "$WALLPAPERS_SOURCE/nsfw" ]; then
+    if [ -d "$wallpapersSource/nsfw" ]; then
         read -p "Do you want to copy the nsfw wallpapers? [y/N]" -n 1 -r
         echo ""
         echo ""
         if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-            CopyNsfw=false
+            copyNsfw=false
         else
-            CopyNsfw=true
+            copyNsfw=true
         fi
     fi
 
     detectedRatios=()
-    detect_aspect_ratios "$WALLPAPERS_SOURCE" detectedRatios
+    detect_aspect_ratios "$wallpapersSource" detectedRatios
 
     noneLocked=()
     chosenRatios=()
@@ -157,11 +153,11 @@ if [ "$CopyWallpapers" = true ]; then
     # progress bar reflects the entire transfer rather than one folder at a time.
     sourceDirs=()
     for ratio in "${chosenRatios[@]}"; do
-        [ -d "$WALLPAPERS_SOURCE/sfw/$ratio" ] && sourceDirs+=("$WALLPAPERS_SOURCE/sfw/$ratio")
+        [ -d "$wallpapersSource/sfw/$ratio" ] && sourceDirs+=("$wallpapersSource/sfw/$ratio")
     done
-    if [ "$CopyNsfw" = true ]; then
+    if [ "$copyNsfw" = true ]; then
         for ratio in "${chosenRatios[@]}"; do
-            [ -d "$WALLPAPERS_SOURCE/nsfw/$ratio" ] && sourceDirs+=("$WALLPAPERS_SOURCE/nsfw/$ratio")
+            [ -d "$wallpapersSource/nsfw/$ratio" ] && sourceDirs+=("$wallpapersSource/nsfw/$ratio")
         done
     fi
 

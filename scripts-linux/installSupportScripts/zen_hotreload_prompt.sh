@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 # zen_hotreload_prompt.sh
 # Sourced from cmd_install. Detects a Zen Browser install and, if found,
 # offers to set up live theme reload (zen_hotreload_install.sh) — which
@@ -16,14 +17,14 @@ zen_hotreload_prompt_detect() {
     return 1
 }
 
-_zen_dir="${ZEN_INSTALL_DIR:-}"
-if [ -z "$_zen_dir" ]; then
-    _zen_dir="$(zen_hotreload_prompt_detect)" || _zen_dir=""
+zenDir="${ZEN_INSTALL_DIR:-}"
+if [ -z "$zenDir" ]; then
+    zenDir="$(zen_hotreload_prompt_detect)" || zenDir=""
 fi
 
-if [ -n "$_zen_dir" ]; then
+if [ -n "$zenDir" ]; then
     echo ""
-    echo "Zen Browser detected at $_zen_dir."
+    echo "Zen Browser detected at $zenDir."
 
     case "${ZEN_HOTRELOAD_AUTO:-}" in
         yes|y|Y) reply="y" ;;
@@ -40,8 +41,8 @@ if [ -n "$_zen_dir" ]; then
 
     case "$reply" in
         [yY]|[yY][eE][sS])
-            export ZEN_INSTALL_DIR="$_zen_dir"
-            source "$SUPPORT/zen_hotreload_install.sh"
+            export ZEN_INSTALL_DIR="$zenDir"
+            source "$supportDir/zen_hotreload_install.sh"
             ;;
         *)
             echo "Skipping Zen hot reload setup. Run './install-Linux.sh --zen-hotreload' anytime to add it later."
@@ -49,4 +50,4 @@ if [ -n "$_zen_dir" ]; then
     esac
 fi
 
-unset _zen_dir
+unset zenDir

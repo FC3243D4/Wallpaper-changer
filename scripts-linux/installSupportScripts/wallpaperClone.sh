@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+# wallpaperClone.sh
+# Prompts the user to either provide their own wallpapers folder or clone
+# one from a git repo, and explains the required folder structure/rules.
+# Sets $wallpapersRepo for use by final_message.sh. Meant to be SOURCED
+# from install-Linux.sh (uses `return` to bail out, not `exit`).
 
 read -p "Do you want to clone a repo's wallpapers or provide your own for this script? [y/N]"
 echo ""

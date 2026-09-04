@@ -1,9 +1,18 @@
 #!/usr/bin/env bash
+# install-Linux.sh
+# Entry point for installing/updating WallpaperChanger: dependency checks,
+# wallpaper/script copying, theme package install, optional Zen hot-reload
+# support, and an initial wallpaper application to theme the system
+# immediately. Each numbered step in cmd_install is a module under
+# $supportDir, sourced so its variables and functions land in this shell.
+#
+# Usage: install-Linux.sh --install|--thumbnails|--update-scripts|
+#                          --update-wallpapers|--zen-hotreload|--help
 
 # Kill all child processes (e.g. rsync) if the script is interrupted or killed.
 trap 'echo ""; echo "Installation interrupted. Cleaning up..."; kill 0' SIGINT SIGTERM
 
-SUPPORT="./scripts-linux/installSupportScripts"
+supportDir="./scripts-linux/installSupportScripts"
 
 usage() {
     cat << EOF
@@ -26,17 +35,17 @@ EOF
 # rewrites the file and reloads/restarts the watcher if it's actually
 # installed and enabled.
 generate_thumbnails_path_unit() {
-    local wallBaseDIR="$HOME/Pictures/wallpapers"
+    local wallBaseDir="$HOME/Pictures/wallpapers"
     local unitDir="$HOME/.config/systemd/user"
     local pathUnit="$unitDir/wallpaper-thumbnails.path"
 
     # Base dir first (catches new/removed ratio folders themselves),
     # then every existing ratio subfolder (catches files dropped inside).
-    local watchDirs=("$wallBaseDIR")
-    if [ -d "$wallBaseDIR" ]; then
+    local watchDirs=("$wallBaseDir")
+    if [ -d "$wallBaseDir" ]; then
         while IFS= read -r dir; do
             watchDirs+=("$dir")
-        done < <(find "$wallBaseDIR" -mindepth 1 -maxdepth 1 -type d | sort)
+        done < <(find "$wallBaseDir" -mindepth 1 -maxdepth 1 -type d | sort)
     fi
 
     mkdir -p "$unitDir"
@@ -67,7 +76,7 @@ cmd_thumbnails() {
 
 cmd_zen_hotreload() {
     echo "Installing Zen Browser live theme reload support..."
-    source "$SUPPORT/zen_hotreload_install.sh"
+    source "$supportDir/zen_hotreload_install.sh"
 }
 
 cmd_update_wallpapers() {
@@ -79,12 +88,12 @@ cmd_update_wallpapers() {
 
     # Sourcing wallpaper_install.sh only defines detect_aspect_ratios and
     # validate_wallpaper_structure here — its copy logic is gated behind
-    # $CreatePicturesDir/$WallpapersDirExists/$CopyWallpapers, which are
+    # $createPicturesDir/$wallpapersDirExists/$copyWallpapers, which are
     # never set to true in this code path, so nothing else in it runs.
-    source "$SUPPORT/wallpaper_install.sh"
+    source "$supportDir/wallpaper_install.sh"
 
-    WALLPAPERS_SOURCE="./wallpapers"
-    if ! validate_wallpaper_structure "$WALLPAPERS_SOURCE"; then
+    wallpapersSource="./wallpapers"
+    if ! validate_wallpaper_structure "$wallpapersSource"; then
         echo "The wallpapers folder structure in the repo is invalid or incomplete, skipping wallpaper update."
         exit 1
     fi
@@ -92,7 +101,7 @@ cmd_update_wallpapers() {
     # Detect aspect ratios dynamically instead of relying on a hardcoded list,
     # so new ratio folders added to the repo are picked up automatically.
     detectedRatios=()
-    detect_aspect_ratios "$WALLPAPERS_SOURCE" detectedRatios
+    detect_aspect_ratios "$wallpapersSource" detectedRatios
 
     # Check if any nsfw wallpapers are already present in the destination
     # by looking for files whose names start with "nsfw".
@@ -104,11 +113,11 @@ cmd_update_wallpapers() {
 
     sourceDirs=()
     for ratio in "${detectedRatios[@]}"; do
-        [ -d "$WALLPAPERS_SOURCE/sfw/$ratio" ] && sourceDirs+=("$WALLPAPERS_SOURCE/sfw/$ratio")
+        [ -d "$wallpapersSource/sfw/$ratio" ] && sourceDirs+=("$wallpapersSource/sfw/$ratio")
     done
     if [ "$syncNsfw" = true ]; then
         for ratio in "${detectedRatios[@]}"; do
-            [ -d "$WALLPAPERS_SOURCE/nsfw/$ratio" ] && sourceDirs+=("$WALLPAPERS_SOURCE/nsfw/$ratio")
+            [ -d "$wallpapersSource/nsfw/$ratio" ] && sourceDirs+=("$wallpapersSource/nsfw/$ratio")
         done
     fi
 
@@ -140,7 +149,7 @@ cmd_update_wallpapers() {
 }
 
 cmd_update_scripts() {
-    source "$SUPPORT/utils.sh"
+    source "$supportDir/utils.sh"
 
     if [ ! -d "$HOME/.config/WallpaperChanger" ]; then
         echo "WallpaperChanger directory not found at $HOME/.config/WallpaperChanger."
@@ -150,12 +159,12 @@ cmd_update_scripts() {
 
     # Detect which display utility was originally installed
     if [ -f "$HOME/.config/WallpaperChanger/WallpaperMenuXrandr.sh" ]; then
-        UseXrandr=true
+        useXrandr=true
     else
-        UseXrandr=false
+        useXrandr=false
     fi
 
-    if [ "$UseXrandr" = true ]; then
+    if [ "$useXrandr" = true ]; then
         copy_with_bar "Updating Xrandr scripts..." \
             "./scripts-linux/Xrandr/" "$HOME/.config/WallpaperChanger/"
     else
@@ -178,21 +187,21 @@ cmd_update_scripts() {
 
 cmd_install() {
     echo "Starting installation process..."
-    chmod +x "$SUPPORT"/*
+    chmod +x "$supportDir"/*
 
     packageList=()
-    UseWayland=true
-    UseXrandr=false
-    CreatePicturesDir=false
-    ConfigDirExists=false
-    CopyScripts=true
-    WallpapersDirExists=false
-    CopyWallpapers=true
-    CopyNsfw=false
+    useWayland=true
+    useXrandr=false
+    createPicturesDir=false
+    configDirExists=false
+    copyScripts=true
+    wallpapersDirExists=false
+    copyWallpapers=true
+    copyNsfw=false
     wallpapersRepo=false
 
     # 1 CHECK DEPENDENCIES
-    if ! source "$SUPPORT/dependency_check.sh"; then
+    if ! source "$supportDir/dependency_check.sh"; then
         echo "Dependency check failed. Stopping."
         exit 1
     fi
@@ -200,7 +209,7 @@ cmd_install() {
     # 2 WALLPAPER CLONE AND FALLBACK
     # If no wallpapers are cloned it will use the fallback
     if [ ! -d "./wallpapers" ] && [ -d "./wallpapersDefaultInstall" ]; then
-        source "$SUPPORT/wallpaperClone.sh"
+        source "$supportDir/wallpaperClone.sh"
         if [ ! -d "./wallpapers" ] && [ -d "./wallpapersDefaultInstall" ]; then
             echo "No ./wallpapers folder found — using bundled wallpapersDefaultInstall instead."
             ln -s "./wallpapersDefaultInstall" "./wallpapers"
@@ -208,19 +217,19 @@ cmd_install() {
     fi
 
     # 3 CHECK FOR EXISTING DIRECTORIES AND FILES
-    source "$SUPPORT/directory_setup.sh"
+    source "$supportDir/directory_setup.sh"
 
     # 4 SCRIPT INSTALLATION
-    source "$SUPPORT/script_install.sh"
+    source "$supportDir/script_install.sh"
 
     # 5 WALLPAPER INSTALLATION
-    source "$SUPPORT/wallpaper_install.sh"
+    source "$supportDir/wallpaper_install.sh"
 
     # 6 INSTALL THEMES
-    source "$SUPPORT/install_themes.sh"
+    source "$supportDir/install_themes.sh"
 
     # 7 OFFER ZEN BROWSER HOT RELOAD (only if Zen is detected)
-    source "$SUPPORT/zen_hotreload_prompt.sh"
+    source "$supportDir/zen_hotreload_prompt.sh"
 
     # 8 APPLY WALLPAPER/THEME NOW
     # Nearly everything downstream (matugen, icon theming, GTK/KDE colors,
@@ -230,8 +239,8 @@ cmd_install() {
     # fully themed the moment installation finishes.
     if [ -x "$HOME/.config/WallpaperChanger/WallpaperApplicator.sh" ]; then
         read -p "wallpaperApplicator.sh random will now be run, be advised that some of your programs might be closed and open again for the theming to be applied, do you wish to procede? [Y/n]"
-        echo""
-        echo""
+        echo ""
+        echo ""
         if [[ ! $REPLY =~ ^[Nn]$ ]]; then
             echo "Applying a random wallpaper to finish setting up theming..."
             "$HOME/.config/WallpaperChanger/WallpaperApplicator.sh" random
@@ -241,7 +250,7 @@ cmd_install() {
     fi
 
     # 9 FINAL MESSAGE
-    source "$SUPPORT/final_message.sh"
+    source "$supportDir/final_message.sh"
 }
 
 case "$1" in

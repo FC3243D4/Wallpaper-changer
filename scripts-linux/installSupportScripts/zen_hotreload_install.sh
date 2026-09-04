@@ -1,10 +1,11 @@
+#!/usr/bin/env bash
 # zen_hotreload_install.sh
 # Installs MrOtherGuy/fx-autoconfig into a zen-browser-bin (AUR) install and
 # drops zenThemeReloader.uc.js into every Zen profile zenPatcher.sh targets,
 # so edits to userChrome.css/userContent.css apply live without a restart.
 #
-# Intended to be sourced from install-Linux.sh (expects $SUPPORT to be set).
-# Override the detected install dir with:
+# Intended to be sourced from install-Linux.sh (expects $supportDir to be
+# set). Override the detected install dir with:
 #   ZEN_INSTALL_DIR=/opt/zen-browser-bin ./install-Linux.sh --zen-hotreload
 # Override which profiles get patched (colon-separated absolute paths) with:
 #   ZEN_PROFILE_DIRS="/home/you/.zen/xxxx.default:/home/you/.zen/yyyy.work" ./install-Linux.sh --zen-hotreload
@@ -12,7 +13,7 @@
 ZEN_INSTALL_DIR="${ZEN_INSTALL_DIR:-}"
 ZEN_HOME="${ZEN_HOME:-$HOME/.zen}"
 ZEN_PROFILE_DIRS="${ZEN_PROFILE_DIRS:-}"
-ZEN_RELOAD_SCRIPT="$SUPPORT/zenThemeReloader.uc.js"
+zenReloadScript="$supportDir/zenThemeReloader.uc.js"
 
 zen_hotreload_detect_install_dir() {
     local candidate
@@ -30,8 +31,8 @@ if [ -z "$ZEN_INSTALL_DIR" ]; then
     }
 fi
 
-if [ ! -f "$ZEN_RELOAD_SCRIPT" ]; then
-    echo "zenThemeReloader.uc.js not found at $ZEN_RELOAD_SCRIPT."
+if [ ! -f "$zenReloadScript" ]; then
+    echo "zenThemeReloader.uc.js not found at $zenReloadScript."
     exit 1
 fi
 
@@ -43,13 +44,13 @@ zen_hotreload_find_profiles() {
     local ini="$ZEN_HOME/profiles.ini"
     [ -f "$ini" ] || return 1
 
-    local path="" is_relative="1" in_profile_section=false found=false
+    local path="" isRelative="1" inProfileSection=false found=false
     local line
 
     _emit() {
-        [ "$in_profile_section" = true ] || return 0
+        [ "$inProfileSection" = true ] || return 0
         [ -n "$path" ] || return 0
-        if [ "$is_relative" = "1" ]; then
+        if [ "$isRelative" = "1" ]; then
             echo "$ZEN_HOME/$path"
         else
             echo "$path"
@@ -61,21 +62,21 @@ zen_hotreload_find_profiles() {
         case "$line" in
             \[Profile*\])
                 _emit
-                in_profile_section=true
+                inProfileSection=true
                 path=""
-                is_relative="1"
+                isRelative="1"
                 ;;
             \[*\])
                 _emit
-                in_profile_section=false
+                inProfileSection=false
                 path=""
-                is_relative="1"
+                isRelative="1"
                 ;;
             Path=*)
                 path="${line#Path=}"
                 ;;
             IsRelative=*)
-                is_relative="${line#IsRelative=}"
+                isRelative="${line#IsRelative=}"
                 ;;
         esac
     done < "$ini"
@@ -86,26 +87,26 @@ zen_hotreload_find_profiles() {
 
 echo "Zen install dir: $ZEN_INSTALL_DIR"
 
-WORK=$(mktemp -d)
-trap 'rm -rf "$WORK"' EXIT
+workDir=$(mktemp -d)
+trap 'rm -rf "$workDir"' EXIT
 
 echo "Downloading fx-autoconfig..."
-if ! curl -sL https://github.com/MrOtherGuy/fx-autoconfig/archive/refs/heads/master.tar.gz -o "$WORK/fxac.tar.gz"; then
+if ! curl -sL https://github.com/MrOtherGuy/fx-autoconfig/archive/refs/heads/master.tar.gz -o "$workDir/fxac.tar.gz"; then
     echo "Download failed. Check your network connection."
     exit 1
 fi
-tar -xzf "$WORK/fxac.tar.gz" -C "$WORK"
-FXAC_SRC="$WORK/fx-autoconfig-master"
+tar -xzf "$workDir/fxac.tar.gz" -C "$workDir"
+fxacSrc="$workDir/fx-autoconfig-master"
 
 echo "Installing loader into $ZEN_INSTALL_DIR (requires sudo)..."
-sudo cp -r "$FXAC_SRC/program/"* "$ZEN_INSTALL_DIR/"
+sudo cp -r "$fxacSrc/program/"* "$ZEN_INSTALL_DIR/"
 
-ZEN_PROFILES=()
+zenProfiles=()
 if [ -n "$ZEN_PROFILE_DIRS" ]; then
-    IFS=':' read -ra ZEN_PROFILES <<< "$ZEN_PROFILE_DIRS"
+    IFS=':' read -ra zenProfiles <<< "$ZEN_PROFILE_DIRS"
 else
-    while IFS= read -r profile_dir; do
-        ZEN_PROFILES+=("$profile_dir")
+    while IFS= read -r profileDir; do
+        zenProfiles+=("$profileDir")
     done < <(zen_hotreload_find_profiles) || {
         echo "Could not find $ZEN_HOME/profiles.ini, so no profiles were auto-detected."
         echo "Re-run with: ZEN_PROFILE_DIRS=\"/path/to/profile1:/path/to/profile2\" ./install-Linux.sh --zen-hotreload"
@@ -114,15 +115,15 @@ else
 fi
 
 patchedAny=false
-for ZEN_PROFILE in "${ZEN_PROFILES[@]}"; do
-    [ ! -d "$ZEN_PROFILE" ] && continue
-    echo "Setting up profile: $ZEN_PROFILE"
-    mkdir -p "$ZEN_PROFILE/chrome"
+for zenProfile in "${zenProfiles[@]}"; do
+    [ ! -d "$zenProfile" ] && continue
+    echo "Setting up profile: $zenProfile"
+    mkdir -p "$zenProfile/chrome"
     # Merge fx-autoconfig's JS/resources/utils folders without touching
     # the userChrome.css / userContent.css / prefs.js zenPatcher.sh manages.
-    cp -rn "$FXAC_SRC/profile/chrome/"* "$ZEN_PROFILE/chrome/" 2>/dev/null || true
-    mkdir -p "$ZEN_PROFILE/chrome/JS"
-    cp "$ZEN_RELOAD_SCRIPT" "$ZEN_PROFILE/chrome/JS/zenThemeReloader.uc.js"
+    cp -rn "$fxacSrc/profile/chrome/"* "$zenProfile/chrome/" 2>/dev/null || true
+    mkdir -p "$zenProfile/chrome/JS"
+    cp "$zenReloadScript" "$zenProfile/chrome/JS/zenThemeReloader.uc.js"
     echo "    -> loader files + reload script in place"
     patchedAny=true
 done

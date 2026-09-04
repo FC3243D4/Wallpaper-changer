@@ -4,17 +4,16 @@
 # Meant to be SOURCED by dependency_check.sh and install_themes.sh.
 #
 # Exports:
-#   PKG_MANAGER   — detected package manager (pacman, apt, dnf, zypper)
+#   pkgManager    — detected package manager (pacman, apt, dnf, zypper)
 #   sync_repos    — refresh package database
 #   install_pkgs  — install a list of logical package names
-#   install_from_github — download and install a binary from GitHub releases
 
 # ─── Detect package manager ──────────────────────────────────────────────────
 
-if command -v pacman &>/dev/null;  then PKG_MANAGER="pacman"
-elif command -v apt &>/dev/null;   then PKG_MANAGER="apt"
-elif command -v dnf &>/dev/null;   then PKG_MANAGER="dnf"
-elif command -v zypper &>/dev/null; then PKG_MANAGER="zypper"
+if command -v pacman &>/dev/null;  then pkgManager="pacman"
+elif command -v apt &>/dev/null;   then pkgManager="apt"
+elif command -v dnf &>/dev/null;   then pkgManager="dnf"
+elif command -v zypper &>/dev/null; then pkgManager="zypper"
 else
     echo "Unsupported package manager. Please install dependencies manually."
     return 1
@@ -23,12 +22,10 @@ fi
 # ─── Package name map ────────────────────────────────────────────────────────
 # Maps logical names used in dependency_check.sh / install_themes.sh to the
 # distro-specific package name. Add entries here when names differ.
-#
-# Format: _pkg_name_<LOGICAL> — one variable per logical name.
 
 _resolve_pkg() {
     local logical="$1"
-    case "$PKG_MANAGER" in
+    case "$pkgManager" in
         pacman)
             case "$logical" in
                 imagemagick)    echo "imagemagick" ;;
@@ -84,7 +81,7 @@ _resolve_pkg() {
 
 sync_repos() {
     echo "Syncing package databases..."
-    case "$PKG_MANAGER" in
+    case "$pkgManager" in
         pacman) sudo pacman -Sy ;;
         apt)    sudo apt-get update ;;
         dnf)    sudo dnf check-update || true ;;  # dnf returns 100 when updates are available, not an error
@@ -95,15 +92,16 @@ sync_repos() {
 # ─── Install packages ─────────────────────────────────────────────────────────
 # Usage: install_pkgs <logical_name> [<logical_name> ...]
 # Handles repo vs AUR split on Arch; on other distros installs everything
-# via the system package manager, with GitHub fallback for AUR-only tools.
+# via the system package manager, with a cargo-build fallback for
+# AUR-only tools.
 
 # Packages that must be built with cargo when not found in official repos
 # and no AUR helper is available.
-_CARGO_BUILDABLE=("matugen" "awww")
+_cargoBuildable=("matugen" "awww")
 
 _is_cargo_buildable() {
     local pkg="$1"
-    for p in "${_CARGO_BUILDABLE[@]}"; do
+    for p in "${_cargoBuildable[@]}"; do
         [ "$p" = "$pkg" ] && return 0
     done
     return 1
@@ -114,7 +112,7 @@ _install_with_cargo() {
 
     if ! command -v cargo &>/dev/null; then
         echo "cargo is required to build ${pkgs[*]} but is not installed. Installing Rust toolchain..."
-        case "$PKG_MANAGER" in
+        case "$pkgManager" in
             apt)    sudo apt-get install -y cargo ;;
             dnf)    sudo dnf install -y cargo ;;
             zypper) sudo zypper install -y cargo ;;
@@ -139,13 +137,13 @@ _install_with_cargo() {
                     echo "git is required to build awww but is not installed."
                     return 1
                 fi
-                local tmp
-                tmp="$(mktemp -d)"
-                git clone https://codeberg.org/LGFae/awww "$tmp/awww" || { echo "Failed to clone awww."; rm -rf "$tmp"; return 1; }
-                (cd "$tmp/awww" && cargo build --release) || { echo "Failed to build awww."; rm -rf "$tmp"; return 1; }
-                sudo install -m755 "$tmp/awww/target/release/awww" /usr/local/bin/awww
-                sudo install -m755 "$tmp/awww/target/release/awww-daemon" /usr/local/bin/awww-daemon
-                rm -rf "$tmp"
+                local tmpDir
+                tmpDir="$(mktemp -d)"
+                git clone https://codeberg.org/LGFae/awww "$tmpDir/awww" || { echo "Failed to clone awww."; rm -rf "$tmpDir"; return 1; }
+                (cd "$tmpDir/awww" && cargo build --release) || { echo "Failed to build awww."; rm -rf "$tmpDir"; return 1; }
+                sudo install -m755 "$tmpDir/awww/target/release/awww" /usr/local/bin/awww
+                sudo install -m755 "$tmpDir/awww/target/release/awww-daemon" /usr/local/bin/awww-daemon
+                rm -rf "$tmpDir"
                 echo "awww installed successfully."
                 ;;
             *)
@@ -168,7 +166,7 @@ install_pkgs() {
 
         # Check if the package exists in official repos
         local inRepo=false
-        case "$PKG_MANAGER" in
+        case "$pkgManager" in
             pacman) pacman -Si "$resolved" &>/dev/null && inRepo=true ;;
             apt)    apt-cache show "$resolved" &>/dev/null && inRepo=true ;;
             dnf)    dnf info "$resolved" &>/dev/null && inRepo=true ;;
@@ -177,7 +175,7 @@ install_pkgs() {
 
         if [ "$inRepo" = true ]; then
             repoPkgs+=("$resolved")
-        elif [ "$PKG_MANAGER" = "pacman" ]; then
+        elif [ "$pkgManager" = "pacman" ]; then
             # Not in official repos on Arch — try AUR
             aurPkgs+=("$pkg")
         elif _is_cargo_buildable "$pkg"; then
@@ -192,7 +190,7 @@ install_pkgs() {
     # Install repo packages
     if (( ${#repoPkgs[@]} != 0 )); then
         echo "Installing from official repos: ${repoPkgs[*]}"
-        case "$PKG_MANAGER" in
+        case "$pkgManager" in
             pacman) sudo pacman -S --needed --noconfirm "${repoPkgs[@]}" ;;
             apt)    sudo apt-get install -y "${repoPkgs[@]}" ;;
             dnf)    sudo dnf install -y "${repoPkgs[@]}" ;;

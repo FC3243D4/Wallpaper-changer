@@ -1,43 +1,47 @@
 #!/usr/bin/env bash
+# AspectRatioChecker.sh
+# Echoes the wallpaper folder (e.g. "16-9/") whose aspect ratio is closest
+# to the given display resolution. Folder ratios are cached on first run
+# so later calls don't have to recompute them.
+# Usage: AspectRatioChecker.sh <WIDTHxHEIGHT>
 
-#get resolution width and height of display
 width=$(cut -d 'x' -f1 <<< $1)
 height=$(cut -d 'x' -f2 <<< $1)
 
-actual_ratio=$(awk "BEGIN {print $width/$height}")
+actualRatio=$(awk "BEGIN {print $width/$height}")
 
 declare -A ratios
 
-cache_file="$HOME/.cache/wallpaper_ratios.cache"
-cache_dir=$(dirname "$cache_file")
-mkdir -p "$cache_dir"
+cacheFile="$HOME/.cache/wallpaper_ratios.cache"
+cacheDir=$(dirname "$cacheFile")
+mkdir -p "$cacheDir"
 
-if [[ -f "$cache_file" ]]; then
+if [[ -f "$cacheFile" ]]; then
     while IFS='=' read -r key value; do
         ratios[$key]=$value
-    done < "$cache_file"
+    done < "$cacheFile"
 else
     for dir in "$HOME/Pictures/wallpapers/"*; do
-        dir_name=${dir##*/}
-        width=${dir_name%%-*}
-        height=${dir_name#*-}
+        dirName=${dir##*/}
+        width=${dirName%%-*}
+        height=${dirName#*-}
         height=${height%%-*}
         ratio=$(awk "BEGIN {print $width/$height}")
-        ratios[$ratio]=$dir_name/
+        ratios[$ratio]=$dirName/
     done
-    
+
     for key in "${!ratios[@]}"; do
-        echo "$key=${ratios[$key]}" >> "$cache_file"
+        echo "$key=${ratios[$key]}" >> "$cacheFile"
     done
 fi
 
-closest_key=$(
+closestKey=$(
 for key in "${!ratios[@]}"; do
-    awk -v a="$actual_ratio" -v b="$key" 'BEGIN{
+    awk -v a="$actualRatio" -v b="$key" 'BEGIN{
         d=a-b; if(d<0)d=-d;
         printf "%.12f %s\n", d, b
     }'
 done | sort -n | head -1 | awk '{print $2}'
 )
 
-echo "$HOME/Pictures/wallpapers/${ratios[$closest_key]}"
+echo "$HOME/Pictures/wallpapers/${ratios[$closestKey]}"

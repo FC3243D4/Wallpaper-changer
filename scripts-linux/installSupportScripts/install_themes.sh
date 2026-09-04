@@ -7,30 +7,30 @@ set -euo pipefail
 
 # Packages required for accent-color patching to work.
 # All available in the official Arch 'extra' repo (no AUR needed).
-THEME_PACKAGES=(
+themePackages=(
     breeze         # Base color schemes (BreezeDark.colors) + Breeze icon theme
     breeze-gtk     # GTK 3/4 Breeze-Dark theme files
     breeze-icons   # Breeze icon SVGs (folder, system-file-manager, etc.)
 )
 
-missing_packages=()
+missingPackages=()
 
-for pkg in "${THEME_PACKAGES[@]}"; do
+for pkg in "${themePackages[@]}"; do
     if ! pacman -Qi "$pkg" &>/dev/null; then
-        missing_packages+=("$pkg")
+        missingPackages+=("$pkg")
     fi
 done
 
-if [ ${#missing_packages[@]} -eq 0 ]; then
+if [ ${#missingPackages[@]} -eq 0 ]; then
     echo "All base theme packages already installed."
 else
-    echo "Installing missing theme packages: ${missing_packages[*]}"
+    echo "Installing missing theme packages: ${missingPackages[*]}"
     if command -v paru &>/dev/null; then
-        paru -S --needed --noconfirm "${missing_packages[@]}"
+        paru -S --needed --noconfirm "${missingPackages[@]}"
     elif command -v yay &>/dev/null; then
-        yay -S --needed --noconfirm "${missing_packages[@]}"
+        yay -S --needed --noconfirm "${missingPackages[@]}"
     else
-        sudo pacman -S --needed --noconfirm "${missing_packages[@]}"
+        sudo pacman -S --needed --noconfirm "${missingPackages[@]}"
     fi
 fi
 

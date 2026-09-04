@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
+# WallpaperRandomAutoXrandr.sh (Xrandr, for non-Wayland users)
+# Applies a random wallpaper on a fixed interval.
+# Usage: WallpaperRandomAutoXrandr.sh [sfw|nsfw]
 
-#$1 nsfw or sfw flag
-
-# This controls (in seconds) when to switch to the next image
-INTERVAL=1800 #30 minutes
+interval=1800   # seconds between switches (30 minutes)
 
 while true; do
     if ! [ -z "$1" ]; then
@@ -15,5 +15,5 @@ while true; do
             $HOME/.config/WallpaperChanger/WallpaperApplicatorXrandr.sh random
         fi
     fi
-    sleep $INTERVAL
+    sleep $interval
 done

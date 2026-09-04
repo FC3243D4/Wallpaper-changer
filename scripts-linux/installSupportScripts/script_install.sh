@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
 # script_install.sh
 # Copies the WallpaperChanger scripts into ~/.config/WallpaperChanger.
-# Meant to be SOURCED from install-Linux.sh; relies on $ConfigDirExists,
-# $CopyScripts, and $UseXrandr being set by earlier modules.
+# Meant to be SOURCED from install-Linux.sh; relies on $configDirExists,
+# $copyScripts, and $useXrandr being set by earlier modules.
 
-source "$SUPPORT/utils.sh"
+source "$supportDir/utils.sh"
 
-if [ "$ConfigDirExists" = false ]; then
+if [ "$configDirExists" = false ]; then
     mkdir "$HOME/.config/WallpaperChanger"
 fi
 
-if [ "$CopyScripts" = true ]; then
-    if [ "$UseXrandr" = true ]; then
+if [ "$copyScripts" = true ]; then
+    if [ "$useXrandr" = true ]; then
         copy_with_bar "Copying Xrandr scripts..." \
             "./scripts-linux/Xrandr/" "$HOME/.config/WallpaperChanger/"
     else

@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # final_message.sh
 # Prints the post-install usage instructions.
-# Meant to be SOURCED from install-Linux.sh; relies on $UseXrandr,
-# $CopyScripts, $CopyNsfw, and $wallpapersRepo being set by earlier modules.
+# Meant to be SOURCED from install-Linux.sh; relies on $useXrandr,
+# $copyScripts, $copyNsfw, and $wallpapersRepo being set by earlier modules.
 
 echo "Installation complete!"
 
-if [ "$UseXrandr" = true ]; then
-    if [ "$CopyScripts" = true ]; then
+if [ "$useXrandr" = true ]; then
+    if [ "$copyScripts" = true ]; then
         cat << EOF
 
 Open the wallpaper menu anytime with:
@@ -17,7 +17,7 @@ Or apply a random wallpaper directly:
 $HOME/.config/WallpaperChanger/WallpaperApplicatorXrandr.sh random
 
 EOF
-        if [ "$CopyNsfw" = true ]; then
+        if [ "$copyNsfw" = true ]; then
             cat << EOF
 Since you installed the nsfw wallpapers too, you can target either set specifically:
 $HOME/.config/WallpaperChanger/WallpaperApplicatorXrandr.sh random sfw
@@ -40,7 +40,7 @@ Wallpapers are applied across all connected displays at the correct aspect ratio
 EOF
     fi
 else
-    if [ "$CopyScripts" = true ]; then
+    if [ "$copyScripts" = true ]; then
         cat << EOF
 
 Open the wallpaper menu anytime with:
@@ -53,7 +53,7 @@ Or apply a random wallpaper directly:
 $HOME/.config/WallpaperChanger/WallpaperApplication.sh random
 
 EOF
-        if [ "$CopyNsfw" = true ]; then
+        if [ "$copyNsfw" = true ]; then
             cat << EOF
 Since you installed the nsfw wallpapers too, you can target either set specifically:
 $HOME/.config/WallpaperChanger/WallpaperApplicator.sh random sfw

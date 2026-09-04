@@ -3,9 +3,9 @@
 # Patches Ferdium service recipe icons with the accent color by rewriting
 # each recipe's package.json "defaultIcon" field to a local file:// URI.
 #
-# NOTE: Ferdium only re-reads recipe package.json on process start. A window
-# reload is not enough if Ferdium runs in the tray/background — you must
-# fully kill and relaunch the process (see reminder at the end of this script).
+# NOTE: Ferdium only re-reads recipe package.json on process start — a
+# window reload isn't enough if it's running in the tray/background. If
+# any icon changed, this prints a reminder to fully restart it.
 #
 # Usage: ferdiumIconPatcher.sh <hex_color>
 
@@ -17,23 +17,23 @@ if [ -z "$color" ]; then
 fi
 
 accent="#$color"
-SUPPORT="$HOME/.config/WallpaperChanger/themeRefresherSupportScripts"
-ICONS="$SUPPORT/svg"
-FERDIUM_RECIPES="$HOME/.config/Ferdium/recipes"
-FERDIUM_ICON_OUT="$HOME/.config/Ferdium/themed-icons"
+supportDir="$HOME/.config/WallpaperChanger/themeRefresherSupportScripts"
+iconsDir="$supportDir/svg"
+ferdiumRecipesDir="$HOME/.config/Ferdium/recipes"
+ferdiumIconOutDir="$HOME/.config/Ferdium/themed-icons"
 
-mkdir -p "$FERDIUM_ICON_OUT"
+mkdir -p "$ferdiumIconOutDir"
 
-if [ ! -d "$FERDIUM_RECIPES" ]; then
-    echo "Ferdium recipes directory not found: $FERDIUM_RECIPES" >&2
+if [ ! -d "$ferdiumRecipesDir" ]; then
+    echo "Ferdium recipes directory not found: $ferdiumRecipesDir" >&2
     exit 1
 fi
 
-restarted_needed=0
+restartNeeded=0
 
-# Some downloaded icon filenames don't match their Ferdium recipe folder name
-# 1:1. Map recipe_id -> actual filename in $ICONS here as needed.
-declare -A ICON_FILE_OVERRIDES=(
+# Some downloaded icon filenames don't match their Ferdium recipe folder
+# name 1:1 — map recipeId -> actual filename in $iconsDir here as needed.
+declare -A iconFileOverrides=(
     ["instagram-direct-messages"]="instagram_base_icon.svg"
     ["android-messages"]="messages_base_icon.svg"
     ["home-assistant"]="home_assistant_base_icon.svg"
@@ -41,64 +41,61 @@ declare -A ICON_FILE_OVERRIDES=(
     ["office365-owa"]="outlook_base_icon.svg"
 )
 
-# Recipes that are SHARED across multiple configured services rather than
-# dedicated to one app (e.g. Ferdium's generic "Custom Website" recipe).
-# Ferdium doesn't expose a per-instance icon override at the recipe-file
-# level, so patching these affects every service built on that recipe —
-# there is no reliable way to target just one instance by name from here.
-SHARED_RECIPES=("franz-custom-website")
+# Recipes shared across multiple configured services (e.g. Ferdium's
+# generic "Custom Website" recipe) rather than dedicated to one app.
+# Ferdium has no per-instance icon override at the recipe-file level, so
+# patching these affects every service built on that recipe.
+sharedRecipes=("franz-custom-website")
 
 is_shared_recipe() {
-    local id="$1"
-    for shared in "${SHARED_RECIPES[@]}"; do
-        [ "$id" = "$shared" ] && return 0
+    local recipeId="$1"
+    for shared in "${sharedRecipes[@]}"; do
+        [ "$recipeId" = "$shared" ] && return 0
     done
     return 1
 }
 
-for recipe_dir in "$FERDIUM_RECIPES"/*/; do
-    recipe_id="$(basename "$recipe_dir")"
-    [ "$recipe_id" = "temp" ] && continue
+# Processes one recipe in its own backgrounded subshell (see the loop
+# below) — safe since each recipe writes only its own output SVG/
+# package.json. Returns 2 specifically to signal "icon changed, Ferdium
+# needs a restart" — a background subshell can't set a parent-shell
+# variable directly, so the exit code carries that signal back out.
+process_recipe() {
+    local recipeDir="$1"
+    local recipeId
+    recipeId="$(basename "$recipeDir")"
 
-    pkg="$recipe_dir/package.json"
-    if [ ! -f "$pkg" ]; then
-        echo "Recipe '$recipe_id' has no package.json — skipping"
-        continue
+    local pkgFile="$recipeDir/package.json"
+    if [ ! -f "$pkgFile" ]; then
+        echo "Recipe '$recipeId' has no package.json — skipping"
+        return 0
     fi
-    echo "Recipe '$recipe_id' found"
+    echo "Recipe '$recipeId' found"
 
-    icon_file="${ICON_FILE_OVERRIDES[$recipe_id]:-${recipe_id}_base_icon.svg}"
-    src="$ICONS/$icon_file"
+    local iconFile="${iconFileOverrides[$recipeId]:-${recipeId}_base_icon.svg}"
+    local srcSvg="$iconsDir/$iconFile"
 
-    if [ ! -f "$src" ]; then
-        echo "  no base icon (expected $src) — skipping"
-        continue
+    if [ ! -f "$srcSvg" ]; then
+        echo "  no base icon (expected $srcSvg) — skipping"
+        return 0
     fi
 
-    if is_shared_recipe "$recipe_id"; then
-        echo "  WARNING: '$recipe_id' is a shared recipe — this icon will apply"
+    if is_shared_recipe "$recipeId"; then
+        echo "  WARNING: '$recipeId' is a shared recipe — this icon will apply"
         echo "  to ALL services using it, not just one. Ferdium has no per-instance"
         echo "  icon override at the recipe-file level, so per-service targeting"
         echo "  by name isn't possible from this script."
     fi
 
-    dst="$FERDIUM_ICON_OUT/$recipe_id.svg"
+    local dstSvg="$ferdiumIconOutDir/$recipeId.svg"
 
-    # Strip any DOCTYPE declaration referencing an external DTD — Electron's
-    # sandboxed webview can fail to render the whole SVG if it can't resolve
-    # that reference over file://. Harmless to remove; doesn't affect the icon.
-    # Then patch flat-hex, near-black gray, and currentColor conventions —
-    # whichever the source icon actually uses, this covers it.
-    #
-    # Two currentColor conventions exist in the icon set:
-    #   - filled icons: fill="currentColor"  -> recolor the fill
-    #   - Tabler-style stroke icons: fill="none" stroke="currentColor" -> recolor
-    #     only the stroke, fill must stay "none" or the icon renders as a
-    #     solid blob instead of an outline
-    # currentColor is never resolved as-is: Ferdium loads these via a
-    # file:// defaultIcon URI, which Electron renders without inheriting any
-    # page color context, so an untouched currentColor falls back to black.
-    python3 - "$src" "$dst" "$accent" << 'EOF'
+    # Strip any external-DTD DOCTYPE (Electron's sandboxed webview can
+    # fail to render the whole SVG otherwise) and recolor whichever
+    # convention the source icon uses: flat hex, near-black gray, or
+    # currentColor (fill and/or Tabler-style stroke). currentColor must be
+    # resolved here — Ferdium loads these via a file:// defaultIcon URI
+    # with no page color context, so it would otherwise fall back to black.
+    python3 - "$srcSvg" "$dstSvg" "$accent" << 'EOF'
 import re
 import sys
 
@@ -116,21 +113,46 @@ with open(dst, "w") as f:
     f.write(content)
 EOF
 
-    new_uri="file://$dst"
-    current_uri=$(grep -m1 '"defaultIcon"' "$pkg" | sed -E 's/.*"defaultIcon"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/')
+    local newUri="file://$dstSvg"
+    local currentUri
+    currentUri=$(grep -m1 '"defaultIcon"' "$pkgFile" | sed -E 's/.*"defaultIcon"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/')
 
-    if [ "$current_uri" != "$new_uri" ]; then
-        sed -i -E "s|\"defaultIcon\"[[:space:]]*:[[:space:]]*\"[^\"]*\"|\"defaultIcon\": \"$new_uri\"|" "$pkg"
+    if [ "$currentUri" != "$newUri" ]; then
+        sed -i -E "s|\"defaultIcon\"[[:space:]]*:[[:space:]]*\"[^\"]*\"|\"defaultIcon\": \"$newUri\"|" "$pkgFile"
         echo "  patched"
-        restarted_needed=1
+        return 2
     else
         echo "  already up to date"
+        return 0
     fi
+}
+
+declare -a recipePids=()
+
+for recipeDir in "$ferdiumRecipesDir"/*/; do
+    recipeId="$(basename "$recipeDir")"
+    [ "$recipeId" = "temp" ] && continue
+
+    (
+        outFile=$(mktemp)
+        process_recipe "$recipeDir" > "$outFile" 2>&1
+        rc=$?
+        sed "s/^/[$recipeId] /" "$outFile"
+        rm -f "$outFile"
+        exit "$rc"
+    ) &
+    recipePids+=("$!")
+done
+
+for pid in "${recipePids[@]}"; do
+    wait "$pid"
+    rc=$?
+    [ "$rc" -eq 2 ] && restartNeeded=1
 done
 
 echo "Ferdium icons patched with $accent"
 
-if [ "$restarted_needed" -eq 1 ]; then
+if [ "$restartNeeded" -eq 1 ]; then
     echo
     echo "NOTE: Ferdium caches recipe metadata in memory. If it's running in the"
     echo "background/tray, a window reload will NOT pick up these changes."

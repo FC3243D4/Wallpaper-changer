@@ -1,20 +1,66 @@
 #!/usr/bin/env bash
+# themeRefresher.sh
+# Entry point for the whole theming pipeline. Picks an accent color from
+# the wallpaper, then fans out to every per-app/per-subsystem patcher
+# (RGB, KDE, GTK, browsers, mail, Discord, icons, VS Code, SourceGit,
+# ...), restarts the apps it just patched, and restores window layout.
+#
+# Usage: themeRefresher.sh --full|--rgb|--softrun|--tray|--help
 
-SUPPORT="$HOME/.config/WallpaperChanger/themeRefresherSupportScripts"
+supportDir="$HOME/.config/WallpaperChanger/themeRefresherSupportScripts"
 
-# Runs "$@" and prints how long it took, e.g. "[timing] iconPatcher: 0.842s".
-# The timing line goes to stderr, so `color=$(timed colorChooser ...)` still
-# only captures the wrapped command's real stdout.
-timed() {
+# Runs "$@", prints its wall-clock time to stderr as "[timing] label: Ns".
+# Timing goes to stderr so `color=$(time_step colorChooser ...)` still only
+# captures the wrapped command's real stdout.
+time_step() {
     local label="$1"; shift
-    local t0 t1 elapsed rc
-    t0=$(date +%s%N)
+    local startTime endTime elapsed rc
+    startTime=$(date +%s%N)
     "$@"
     rc=$?
-    t1=$(date +%s%N)
-    elapsed=$(awk -v a="$t0" -v b="$t1" 'BEGIN{printf "%.3f", (b-a)/1000000000}')
+    endTime=$(date +%s%N)
+    elapsed=$(awk -v a="$startTime" -v b="$endTime" 'BEGIN{printf "%.3f", (b-a)/1000000000}')
     echo "[timing] ${label}: ${elapsed}s" >&2
     return $rc
+}
+
+# Same contract as time_step, but backgrounds "$@" instead of waiting for
+# it. Callers fire-and-collect $! themselves; the timing line still prints
+# once the job finishes (from inside the subshell).
+#
+# Every line "$@" prints (stdout+stderr merged) is prefixed "[label] ".
+# Output is captured to a temp file rather than piped live through sed:
+# a wrapped script that itself backgrounds+disowns work (rgbApply.sh's
+# ratbagctl loop does this) inherits this job's stdout/stderr fd. Piped
+# through sed, that disowned grandchild would hold the pipe open until IT
+# finishes too — even though the wrapped script already returned — so
+# `wait` would block on unrelated background work. A regular file has no
+# such blocking semantics. Trade-off: output only appears (all at once,
+# labeled) once the wrapped command's own script portion finishes.
+#
+# IMPORTANT: never wrap this in $(...) to grab the PID — command
+# substitution runs in its own subshell, so a job backgrounded inside it
+# gets reparented away (not a child of this script) once that subshell
+# exits, and `wait $pid` from here would silently fail to wait for it.
+# Call directly, then read $! right after:
+#   time_step_bg "label" some_cmd args...
+#   myPids+=("$!")
+time_step_bg() {
+    local label="$1"; shift
+    local outFile
+    outFile=$(mktemp)
+    (
+        local startTime endTime elapsed rc
+        startTime=$(date +%s%N)
+        "$@" > "$outFile" 2>&1
+        rc=$?
+        endTime=$(date +%s%N)
+        sed "s/^/[$label] /" "$outFile"
+        rm -f "$outFile"
+        elapsed=$(awk -v a="$startTime" -v b="$endTime" 'BEGIN{printf "%.3f", (b-a)/1000000000}')
+        echo "[timing] ${label}: ${elapsed}s" >&2
+        exit $rc
+    ) &
 }
 
 usage() {
@@ -30,14 +76,128 @@ Options:
 EOF
 }
 
-cmd_full() {
-    # Save Hyprland layout state before any restarts
-    if [ "$XDG_CURRENT_DESKTOP" == "Hyprland" ]; then
-        "$SUPPORT/hyprLayoutPreservation.sh" save
+# Blocks until a window of each given Hyprland class appears (or the
+# shared 5s deadline is hit). Used so hyprLayoutPreservation.sh's restore
+# only runs once every relaunched window actually exists — otherwise a
+# late-appearing window (e.g. Spotify) grabs focus after restore already
+# set it. Every app shares one deadline and is checked every tick, so one
+# slow app no longer blocks the ones behind it, and each tick costs one
+# `hyprctl clients -j` call total instead of one per app.
+#   $1 (nameref) - array of "app|class" entries to wait for
+wait_for_hypr_classes() {
+    local -n pending="$1"
+    local deadline=$(( $(date +%s) + 5 ))
+    local startTime=$(date +%s%N)
+
+    while [ ${#pending[@]} -gt 0 ] && [ "$(date +%s)" -lt "$deadline" ]; do
+        local clientsJson
+        clientsJson=$(hyprctl clients -j)
+        local -a stillPending=()
+        for entry in "${pending[@]}"; do
+            local app="${entry%%|*}"
+            local windowClass="${entry#*|}"
+            if printf '%s' "$clientsJson" | python3 -c "
+import json, sys
+clients = json.load(sys.stdin)
+sys.exit(0 if any('$windowClass'.lower() in c.get('class', '').lower() for c in clients) else 1)
+" 2>/dev/null; then
+                local endTime=$(date +%s%N)
+                local elapsed=$(awk -v a="$startTime" -v b="$endTime" 'BEGIN{printf "%.3f", (b-a)/1000000000}')
+                echo "[timing] wait_for_hypr_class(${app}): ${elapsed}s" >&2
+            else
+                stillPending+=("$entry")
+            fi
+        done
+        pending=("${stillPending[@]}")
+        [ ${#pending[@]} -gt 0 ] && sleep 0.1
+    done
+
+    # Anything left never appeared within the shared deadline — still emit
+    # a timing line for it.
+    if [ ${#pending[@]} -gt 0 ]; then
+        local endTime=$(date +%s%N)
+        local elapsed=$(awk -v a="$startTime" -v b="$endTime" 'BEGIN{printf "%.3f", (b-a)/1000000000}')
+        for entry in "${pending[@]}"; do
+            echo "[timing] wait_for_hypr_class(${entry%%|*}): ${elapsed}s" >&2
+        done
+    fi
+}
+
+# Group A: patchers that only need the raw hex color, write to a file
+# tree none of the others touch, and never read anything matugen renders
+# — safe to launch fully concurrently with each other and with matugen.
+# Group B: patchers that need matugen's rendered output (iconPatcher and
+# vscodePatcher degrade gracefully to the raw seed if it's missing;
+# sourceGitPatcher hard-requires it) — wait for matugen, but not Group A.
+run_patchers() {
+    local color="$1"
+    declare -a patcherPids=()
+
+    time_step_bg "rgbApply" "$supportDir/rgbApply.sh" "$color"
+    patcherPids+=("$!")
+    time_step_bg "kdePatcher" "$supportDir/kdePatcher.sh" "$color"
+    patcherPids+=("$!")
+    time_step_bg "gtkPatcher" "$supportDir/gtkPatcher.sh" "$color"
+    patcherPids+=("$!")
+    if command -v ferdium >/dev/null 2>&1; then
+        time_step_bg "ferdiumPatcher" "$supportDir/appPatchers/ferdiumPatcher.sh" "$color"
+        patcherPids+=("$!")
+        time_step_bg "ferdiumIconPatcher" "$supportDir/appPatchers/ferdiumIconPatcher.sh" "$color"
+        patcherPids+=("$!")
+    fi
+    if command -v vesktop >/dev/null 2>&1; then
+        time_step_bg "discordPatcher" "$supportDir/appPatchers/discordPatcher.sh" "$color"
+        patcherPids+=("$!")
+    fi
+    if command -v zen-browser >/dev/null 2>&1; then
+        time_step_bg "zenPatcher" "$supportDir/appPatchers/zenPatcher.sh" "$color"
+        patcherPids+=("$!")
+    fi
+    if command -v firefox >/dev/null 2>&1; then
+        time_step_bg "firefoxPatcher" "$supportDir/appPatchers/firefoxPatcher.sh" "$color"
+        patcherPids+=("$!")
+    fi
+    if command -v betterbird >/dev/null 2>&1 || command -v thunderbird >/dev/null 2>&1; then
+        time_step_bg "thunderbirdPatcher" "$supportDir/appPatchers/thunderbirdPatcher.sh" "$color"
+        patcherPids+=("$!")
     fi
 
-    # 1. Choose accent color from wallpaper
-    color=$(timed "colorChooser" "$SUPPORT/colorChooser.sh")
+    # matugen, launched alongside Group A — nothing in Group A reads its output.
+    time_step_bg "matugen" matugen color hex "#$color" --quiet
+    local matugenPid=$!
+
+    wait "$matugenPid"
+
+    time_step_bg "iconPatcher" "$supportDir/iconPatcher.sh" "$color"
+    patcherPids+=("$!")
+    if command -v code >/dev/null 2>&1; then
+        time_step_bg "vscodePatcher" "$supportDir/appPatchers/vscodePatcher.sh" "$color"
+        patcherPids+=("$!")
+    fi
+    if command -v sourcegit >/dev/null 2>&1; then
+        time_step_bg "sourceGitPatcher" "$supportDir/appPatchers/sourceGitPatcher.sh" "$color"
+        patcherPids+=("$!")
+    fi
+
+    for pid in "${patcherPids[@]}"; do
+        wait "$pid"
+    done
+}
+
+cmd_full() {
+    # Save Hyprland layout state before any restarts. Backgrounded: it
+    # touches neither color nor any theme file, so colorChooser doesn't
+    # need to wait on it — it only needs to finish before appRestarter
+    # runs, much further down, so it gets this whole pipeline's worth of
+    # headroom for free. Waited on right before appRestarter below.
+    hyprSavePid=""
+    if [ "$XDG_CURRENT_DESKTOP" == "Hyprland" ]; then
+        time_step_bg "hyprLayoutPreservation save" "$supportDir/hyprLayoutPreservation.sh" save
+        hyprSavePid=$!
+    fi
+
+    # Choosing the color is genuinely serial — every patcher below needs it.
+    color=$(time_step "colorChooser" "$supportDir/colorChooser.sh")
     if [ $? -ne 0 ] || [ -z "$color" ]; then
         echo "ERROR: colorChooser failed, aborting"
         exit 1
@@ -47,102 +207,52 @@ cmd_full() {
     accent="#$color"
     echo "Final color: $accent"
 
-    # Run matugen once with the final chosen color
-    timed "matugen" matugen color hex "$accent" --quiet
+    # Every patcher must be fully finished before appRestarter (below)
+    # relaunches the apps they theme — a relaunch racing an in-flight
+    # patcher could load a half-written or stale config. Concurrent jobs'
+    # own stdout/stderr interleave line-by-line above; accepted tradeoff
+    # of running them in parallel.
+    run_patchers "$color"
 
-    # 2. Apply to RGB devices (backgrounded — fire and forget)
-    timed "rgbApply" "$SUPPORT/rgbApply.sh" "$color"
+    declare -A apps
+    apps[dolphin]="x|dolphin|dolphin|dolphin|dolphin"
+    apps[ferdium]="f|electron.*ferdium-bin|electron.*ferdium-bin|ferdium|ferdium"
+    apps[sourcegit]="x|sourcegit|sourcegit|sourcegit|sourcegit"
+    apps[code]="x|code|code|code|code"
+    apps[vesktop]="x|vesktop|vesktop|vesktop -m|"
+    apps[nativmix]="x|nativmix|nativmix|nativmix --hidden --restart|"
+    apps[localsend]="x|localsend|localsend|localsend --hidden|"
+    apps[betterbird]="f|betterbird|betterbird|betterbird|eu.betterbird.Betterbird"
+    apps[thunderbird]="f|thunderbird|thunderbird|thunderbird|org.mozilla.Thunderbird"
+    apps[swaync]="x|swaync|swaync|swaync"
 
-    # 3. Patch KDE color schemes
-    timed "kdePatcher" "$SUPPORT/kdePatcher.sh" "$color"
+    # hyprLayoutPreservation save (backgrounded above) must finish before
+    # appRestarter starts killing/relaunching windows.
+    [ -n "$hyprSavePid" ] && wait "$hyprSavePid"
 
-    # 4. Patch GTK themes
-    timed "gtkPatcher" "$SUPPORT/gtkPatcher.sh" "$color"
-
-    # 5. Patch icons
-    timed "iconPatcher" "$SUPPORT/iconPatcher.sh" "$color"
-
-    # 6. Patch app-specific themes
-    if command -v code >/dev/null 2>&1; then
-        timed "vscodePatcher" "$SUPPORT/appPatchers/vscodePatcher.sh" "$color"
-    fi
-    if command -v sourcegit >/dev/null 2>&1; then
-        timed "sourceGitPatcher" "$SUPPORT/appPatchers/sourceGitPatcher.sh" "$color"
-    fi
-    if command -v ferdium >/dev/null 2>&1; then
-        timed "ferdiumPatcher" "$SUPPORT/appPatchers/ferdiumPatcher.sh" "$color"
-        timed "ferdiumIconPatcher" "$SUPPORT/appPatchers/ferdiumIconPatcher.sh" "$color"
-    fi
-    if command -v vesktop >/dev/null 2>&1; then
-        timed "discordPatcher" "$SUPPORT/appPatchers/discordPatcher.sh" "$color"
-    fi
-    #browser patchers
-    if command -v zen-browser >/dev/null 2>&1; then
-        timed "zenPatcher" "$SUPPORT/appPatchers/zenPatcher.sh" "$color"
-    fi
-    if command -v firefox >/dev/null 2>&1; then
-        timed "firefoxPatcher" "$SUPPORT/appPatchers/firefoxPatcher.sh" "$color"
-    fi
-    #betterbird patcher
-    if command -v betterbird >/dev/null 2>&1 || command -v thunderbird >/dev/null 2>&1; then
-        timed "thunderbirdPatcher" "$SUPPORT/appPatchers/thunderbirdPatcher.sh" "$color"
-    fi
-
-    # 7. Restart apps
-    declare -A APPS
-    APPS[dolphin]="x|dolphin|dolphin|dolphin|dolphin"
-    APPS[ferdium]="f|electron.*ferdium-bin|electron.*ferdium-bin|ferdium|ferdium"
-    APPS[sourcegit]="x|sourcegit|sourcegit|sourcegit|sourcegit"
-    APPS[code]="x|code|code|code|code"
-    APPS[vesktop]="x|vesktop|vesktop|vesktop -m|vesktop"
-    APPS[nativmix]="x|nativmix|nativmix|nativmix --hidden --restart|"
-    APPS[localsend]="x|localsend|localsend|localsend --hidden|"
-    APPS[betterbird]="f|betterbird|betterbird|betterbird|eu.betterbird.Betterbird"
-    APPS[thunderbird]="f|thunderbird|thunderbird|thunderbird|org.mozilla.Thunderbird"
-    APPS[swaync]="x|swaync|swaync|swaync"
-
-    # Sourced directly (not via timed()) because it must set $running in
-    # THIS shell for the wait_for_hypr_class loop below to see it.
-    _t0=$(date +%s%N)
-    source "$SUPPORT/appRestarter.sh"
-    _t1=$(date +%s%N)
-    echo "[timing] appRestarter: $(awk -v a="$_t0" -v b="$_t1" 'BEGIN{printf "%.3f", (b-a)/1000000000}')s" >&2
-
-    # Blocks until a window of the given Hyprland class appears (or times
-    # out). Used so hyprLayoutPreservation.sh restore only runs once every
-    # relaunched window actually exists — otherwise a late-appearing window
-    # (e.g. Spotify) grabs focus after restore already set it.
-    wait_for_hypr_class() {
-        local wclass="$1"
-        local deadline=$(( $(date +%s) + 5 ))
-        while [ $(date +%s) -lt $deadline ]; do
-            hyprctl clients -j | python3 -c "
-import json,sys
-clients=json.load(sys.stdin)
-exit(0 if any('$wclass' in c.get('class','').lower() for c in clients) else 1)
-" 2>/dev/null && return 0
-            sleep 0.1
-        done
-        return 1
-    }
+    # Sourced directly (not via time_step) so $running lands in THIS
+    # shell for the wait_for_hypr_classes call below.
+    appRestarterStart=$(date +%s%N)
+    source "$supportDir/appRestarter.sh"
+    appRestarterEnd=$(date +%s%N)
+    echo "[timing] appRestarter: $(awk -v a="$appRestarterStart" -v b="$appRestarterEnd" 'BEGIN{printf "%.3f", (b-a)/1000000000}')s" >&2
 
     if [ "$XDG_CURRENT_DESKTOP" == "Hyprland" ]; then
-        # Wait for each windowed app individually
+        declare -a hyprPending=()
         for app in "${running[@]}"; do
+            IFS='|' read -r _ _ _ _ windowClass <<< "${apps[$app]}"
+            [ -z "$windowClass" ] && continue
             echo "Waiting for $app to appear..."
-            IFS='|' read -r _ _ _ _ wclass <<< "${APPS[$app]}"
-            [ -z "$wclass" ] && continue
-            timed "wait_for_hypr_class($app)" wait_for_hypr_class "$wclass"
+            hyprPending+=("${app}|${windowClass}")
         done
+        [ ${#hyprPending[@]} -gt 0 ] && wait_for_hypr_classes hyprPending
     fi
 
-    #Desktop Environment specific actions
+    # Desktop-environment-specific actions
     if [ "$XDG_CURRENT_DESKTOP" == "Hyprland" ]; then
         # Restore Hyprland layout state after all restarts (Spotify included)
-        timed "hyprLayoutPreservation restore" "$SUPPORT/hyprLayoutPreservation.sh" restore
-
-        timed "waybar restart" systemctl --user restart waybar.service
-
+        time_step "hyprLayoutPreservation restore" "$supportDir/hyprLayoutPreservation.sh" restore
+        time_step "waybar restart" systemctl --user restart waybar.service
     elif [ "$XDG_CURRENT_DESKTOP" == "KDE" ]; then
         kquitapp6 plasmashell && sleep 1 && kstart plasmashell &
         disown
@@ -150,8 +260,7 @@ exit(0 if any('$wclass' in c.get('class','').lower() for c in clients) else 1)
 }
 
 cmd_rgb() {
-    # 1. Choose accent color from wallpaper
-    color=$("$SUPPORT/colorChooser.sh")
+    color=$("$supportDir/colorChooser.sh")
     if [ $? -ne 0 ] || [ -z "$color" ]; then
         echo "ERROR: colorChooser failed, aborting"
         exit 1
@@ -161,13 +270,11 @@ cmd_rgb() {
     accent="#$color"
     echo "Final color: $accent"
 
-    # 2. Apply to RGB devices (backgrounded — fire and forget)
-    "$SUPPORT/rgbApply.sh" "$color"
+    "$supportDir/rgbApply.sh" "$color"
 }
 
 cmd_softrun() {
-    # 1. Choose accent color from wallpaper
-    color=$(timed "colorChooser" "$SUPPORT/colorChooser.sh")
+    color=$(time_step "colorChooser" "$supportDir/colorChooser.sh")
     if [ $? -ne 0 ] || [ -z "$color" ]; then
         echo "ERROR: colorChooser failed, aborting"
         exit 1
@@ -177,58 +284,20 @@ cmd_softrun() {
     accent="#$color"
     echo "Final color: $accent"
 
-    # Run matugen once with the final chosen color
-    timed "matugen" matugen color hex "$accent" --quiet
-
-    # 2. Apply to RGB devices (backgrounded — fire and forget)
-    timed "rgbApply" "$SUPPORT/rgbApply.sh" "$color"
-
-    # 3. Patch KDE color schemes
-    timed "kdePatcher" "$SUPPORT/kdePatcher.sh" "$color"
-
-    # 4. Patch GTK themes
-    timed "gtkPatcher" "$SUPPORT/gtkPatcher.sh" "$color"
-
-    # 5. Patch icons
-    timed "iconPatcher" "$SUPPORT/iconPatcher.sh" "$color"
-
-    # 6. Patch app-specific themes
-    if command -v code >/dev/null 2>&1; then
-        timed "vscodePatcher" "$SUPPORT/appPatchers/vscodePatcher.sh" "$color"
-    fi
-    if command -v sourcegit >/dev/null 2>&1; then
-        timed "sourceGitPatcher" "$SUPPORT/appPatchers/sourceGitPatcher.sh" "$color"
-    fi
-    if command -v ferdium >/dev/null 2>&1; then
-        timed "ferdiumPatcher" "$SUPPORT/appPatchers/ferdiumPatcher.sh" "$color"
-        timed "ferdiumIconPatcher" "$SUPPORT/appPatchers/ferdiumIconPatcher.sh" "$color"
-    fi
-    if command -v vesktop >/dev/null 2>&1; then
-        timed "discordPatcher" "$SUPPORT/appPatchers/discordPatcher.sh" "$color"
-    fi
-    #browser patchers
-    if command -v zen-browser >/dev/null 2>&1; then
-        timed "zenPatcher" "$SUPPORT/appPatchers/zenPatcher.sh" "$color"
-    fi
-    if command -v firefox >/dev/null 2>&1; then
-        timed "firefoxPatcher" "$SUPPORT/appPatchers/firefoxPatcher.sh" "$color"
-    fi
-    #betterbird patcher
-    if command -v betterbird >/dev/null 2>&1 || command -v thunderbird >/dev/null 2>&1; then
-        timed "thunderbirdPatcher" "$SUPPORT/appPatchers/thunderbirdPatcher.sh" "$color"
-    fi
+    # Wait for every patcher before restarting plasmashell/waybar below —
+    # otherwise the restart could happen before some configs are written.
+    run_patchers "$color"
 
     if [ "$XDG_CURRENT_DESKTOP" == "KDE" ]; then
         kquitapp6 plasmashell && sleep 1 && kstart plasmashell &
         disown
     elif [ "$XDG_CURRENT_DESKTOP" == "Hyprland" ]; then
-        timed "waybar restart" systemctl --user restart waybar.service
+        time_step "waybar restart" systemctl --user restart waybar.service
     fi
 }
 
 cmd_tray() {
-    # 1. Choose accent color from wallpaper
-    color=$(timed "colorChooser" "$SUPPORT/colorChooser.sh")
+    color=$(time_step "colorChooser" "$supportDir/colorChooser.sh")
     if [ $? -ne 0 ] || [ -z "$color" ]; then
         echo "ERROR: colorChooser failed, aborting"
         exit 1
@@ -238,15 +307,13 @@ cmd_tray() {
     accent="#$color"
     echo "Final color: $accent"
 
-    # Run the tray icon updater script
-    timed "trayIconPatcher.sh" "$SUPPORT/trayIconPatcher.sh" "$color"
+    time_step "trayIconPatcher.sh" "$supportDir/trayIconPatcher.sh" "$color"
 
-    # Reload shell/waybar to reflect tray icon changes
     if [ "$XDG_CURRENT_DESKTOP" == "KDE" ]; then
         kquitapp6 plasmashell && sleep 1 && kstart plasmashell &
         disown
     elif [ "$XDG_CURRENT_DESKTOP" == "Hyprland" ]; then
-        timed "waybar restart" systemctl --user restart waybar.service
+        time_step "waybar restart" systemctl --user restart waybar.service
     fi
 }
 

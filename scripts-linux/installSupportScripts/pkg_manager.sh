@@ -107,6 +107,19 @@ _is_cargo_buildable() {
     return 1
 }
 
+# Cross-distro "is this resolved package already installed" check, so
+# install_pkgs can skip repo queries and sudo prompts entirely when
+# there's nothing to do (e.g. re-running the installer).
+_is_pkg_installed() {
+    local resolved="$1"
+    case "$pkgManager" in
+        pacman) pacman -Qi "$resolved" &>/dev/null ;;
+        apt)    dpkg -s "$resolved" &>/dev/null ;;
+        dnf)    rpm -q "$resolved" &>/dev/null ;;
+        zypper) rpm -q "$resolved" &>/dev/null ;;
+    esac
+}
+
 _install_with_cargo() {
     local pkgs=("$@")
 
@@ -159,10 +172,16 @@ install_pkgs() {
     local repoPkgs=()
     local aurPkgs=()
     local cargoPkgs=()
+    local alreadyInstalled=()
 
     for pkg in "${logicalPkgs[@]}"; do
         local resolved
         resolved="$(_resolve_pkg "$pkg")"
+
+        if _is_pkg_installed "$resolved"; then
+            alreadyInstalled+=("$pkg")
+            continue
+        fi
 
         # Check if the package exists in official repos
         local inRepo=false
@@ -186,6 +205,10 @@ install_pkgs() {
             return 1
         fi
     done
+
+    if (( ${#alreadyInstalled[@]} != 0 )); then
+        echo "Already installed: ${alreadyInstalled[*]}"
+    fi
 
     # Install repo packages
     if (( ${#repoPkgs[@]} != 0 )); then

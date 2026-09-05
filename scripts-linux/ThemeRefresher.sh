@@ -65,7 +65,7 @@ time_step_bg() {
 
 usage() {
     cat << EOF
-Usage: ./install-Linux.sh [OPTION]
+Usage: ./ThemeRefresher.sh [OPTION]
 
 Options:
   --full             Run the full theme refresh process (including restarting apps)

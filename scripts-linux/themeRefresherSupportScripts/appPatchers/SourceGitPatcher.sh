@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# sourceGitPatcher.sh
+# SourceGitPatcher.sh
 # Regenerates ForkDark.json (a static theme patched with just the accent
 # color's SystemAccentColor/Badge/GraphColors), and normalizes/validates
 # the matugen-rendered SourceGit theme. Only switches SourceGit's active
 # ThemeOverrides to the matugen theme if it isn't already pointed at
 # either of these two — leaves a manual theme choice untouched.
-# Usage: sourceGitPatcher.sh <hex_color>
+# Usage: SourceGitPatcher.sh <hex_color>
 
 set -euo pipefail
 

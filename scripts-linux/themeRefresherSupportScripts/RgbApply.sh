@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# rgbApply.sh
+# RgbApply.sh
 # Pushes the accent color to OpenRGB and Logitech (ratbagctl) devices.
 # Pastel/low-saturation colors read as washed-out white on cheap LED
 # strips, so this boosts saturation to a floor first when needed (keeping
 # hue/brightness the same) rather than sending the raw color as-is.
-# Usage: rgbApply.sh <hex_color>
+# Usage: RgbApply.sh <hex_color>
 
 color="${1,,}"
 

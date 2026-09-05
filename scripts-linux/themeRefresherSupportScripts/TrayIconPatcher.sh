@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
-# trayIconPatcher.sh
+# TrayIconPatcher.sh
 # Themes system-tray icons for apps that don't pick up breeze-dark-accent's
 # regular app-icon theming — either because they draw their tray icon from
 # their own bundled asset (not looked up by name through the icon theme),
 # or because they expect a literal file path in their own config, the way
-# Vesktop does. Split out from iconPatcher.sh since each app needs a
+# Vesktop does. Split out from IconPatcher.sh since each app needs a
 # different hand-rolled approach rather than the generic .desktop engine.
 #
-# Called automatically from iconPatcher.sh at the end of its run, so the
+# Called automatically from IconPatcher.sh at the end of its run, so the
 # accent-colored app SVGs in $iconThemeDir/apps/scalable/ already exist.
 #
-# Usage: trayIconPatcher.sh <hex_color> [--list]
+# Usage: TrayIconPatcher.sh <hex_color> [--list]
 #   --list   discover/report what would be touched for blueman and
 #            onedrivegui without writing anything. Run this first on a new
 #            machine to confirm the discovered icon names look right.
@@ -25,19 +25,19 @@ if [ -z "$color" ]; then
 fi
 
 accent="#$color"
-supportDir="$HOME/.config/WallpaperChanger/themeRefresherSupportScripts"
+supportDir="$HOME/.config/WallpaperChanger/ThemeRefresherSupportScripts"
 iconsDir="$supportDir/svg"
 gameIconsDir="$iconsDir/games"
 iconThemeDir="$HOME/.local/share/icons/breeze-dark-accent"
 
 # Match waybar's text color exactly, not just "the same seed": $color/
-# $accent here is the raw hex colorChooser.sh sampled from the wallpaper,
+# $accent here is the raw hex ColorChooser.sh sampled from the wallpaper,
 # but waybar's @primary is matugen's *resolved* colors.primary.default —
 # a tonally-adjusted derivative of that seed, not the seed itself. Icons
 # colored with the raw seed and waybar text colored with the resolved
 # primary are two close-but-different colors, which is exactly why the
 # mismatch stands out sitting right next to each other in the tray.
-# matugen already runs before iconPatcher.sh in themeRefresher.sh, so the
+# matugen already runs before IconPatcher.sh in ThemeRefresher.sh, so the
 # rendered file already has the real value — read it back instead of
 # re-deriving it. Only affects tray icons; everything else in the
 # pipeline still uses the raw seed.
@@ -59,7 +59,7 @@ fi
 # Shared helper — always recolors fresh from the base SVG using this
 # script's own (waybar-corrected) $accent. Deliberately does NOT reuse
 # $iconThemeDir/apps/scalable/<name>.svg even when it exists, since that
-# copy was colored by iconPatcher.sh's engine with the raw wallpaper seed
+# copy was colored by IconPatcher.sh's engine with the raw wallpaper seed
 # — reusing it would silently defeat the primary correction above. Costs
 # a redundant recolor, but guarantees tray icons and waybar text agree.
 resolve_themed_svg() {
@@ -365,7 +365,7 @@ patch_blueman_tray() {
     fi
 
     # Full substitution with the same bluetooth icon already used for the
-    # "Bluetooth Manager" app icon elsewhere in iconPatcher.sh, rather than
+    # "Bluetooth Manager" app icon elsewhere in IconPatcher.sh, rather than
     # tinting blueman's own vendor art — vendor blueman-tray icons are a
     # filled badge shape, so a plain -colorize just turns into a flat blob
     # instead of a recognizable glyph.
@@ -899,7 +899,7 @@ patch_cohesion_tray() {
 # time_step_bg <label> <function> — same contract as time_step, but
 # backgrounds the function and prefixes every line it prints (stdout+
 # stderr merged) with "[label] " so concurrent jobs' output stays
-# attributable (same technique themeRefresher.sh's time_step_bg uses).
+# attributable (same technique ThemeRefresher.sh's time_step_bg uses).
 #
 # Output is captured to a temp file, not piped live through sed: if any
 # function here backgrounds+disowns work of its own without redirecting
@@ -908,7 +908,7 @@ patch_cohesion_tray() {
 # live pipe would let that orphaned writer hold the pipe open
 # indefinitely, turning a fast step into a stuck one. A regular file has
 # no such blocking semantics — confirmed by reproducing the failure
-# against rgbApply.sh's disowned ratbagctl loop elsewhere in this pipeline.
+# against RgbApply.sh's disowned ratbagctl loop elsewhere in this pipeline.
 #
 # Every function below writes to a different app's own disjoint asset
 # directory (blueman is the only one touching $iconThemeDir), and the

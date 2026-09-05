@@ -21,14 +21,14 @@ if [ "$copyScripts" = true ]; then
 
     copy_with_bar "Copying support scripts..." \
         "./scripts-linux/AspectRatioChecker.sh" \
-        "./scripts-linux/themeRefresher.sh" \
-        "./scripts-linux/generateWallpaperThumbnails.sh" \
-        "./scripts-linux/themeRefresherSupportScripts" \
+        "./scripts-linux/ThemeRefresher.sh" \
+        "./scripts-linux/GenerateWallpaperThumbnails.sh" \
+        "./scripts-linux/ThemeRefresherSupportScripts" \
         "$HOME/.config/WallpaperChanger/"
 
     chmod +x "$HOME/.config/WallpaperChanger"/*
-    chmod +x "$HOME/.config/WallpaperChanger/themeRefresherSupportScripts"/*
-    chmod +x "$HOME/.config/WallpaperChanger/themeRefresherSupportScripts/appPatchers"/*
+    chmod +x "$HOME/.config/WallpaperChanger/ThemeRefresherSupportScripts"/*
+    chmod +x "$HOME/.config/WallpaperChanger/ThemeRefresherSupportScripts/appPatchers"/*
     echo "Scripts copied successfully."
     echo ""
 fi

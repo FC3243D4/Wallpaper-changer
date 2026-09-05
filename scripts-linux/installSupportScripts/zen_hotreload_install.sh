@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # zen_hotreload_install.sh
 # Installs MrOtherGuy/fx-autoconfig into a zen-browser-bin (AUR) install and
-# drops zenThemeReloader.uc.js into every Zen profile zenPatcher.sh targets,
+# drops zenThemeReloader.uc.js into every Zen profile ZenPatcher.sh targets,
 # so edits to userChrome.css/userContent.css apply live without a restart.
 #
 # Intended to be sourced from install-Linux.sh (expects $supportDir to be
@@ -120,7 +120,7 @@ for zenProfile in "${zenProfiles[@]}"; do
     echo "Setting up profile: $zenProfile"
     mkdir -p "$zenProfile/chrome"
     # Merge fx-autoconfig's JS/resources/utils folders without touching
-    # the userChrome.css / userContent.css / prefs.js zenPatcher.sh manages.
+    # the userChrome.css / userContent.css / prefs.js ZenPatcher.sh manages.
     cp -rn "$fxacSrc/profile/chrome/"* "$zenProfile/chrome/" 2>/dev/null || true
     mkdir -p "$zenProfile/chrome/JS"
     cp "$zenReloadScript" "$zenProfile/chrome/JS/zenThemeReloader.uc.js"
@@ -137,5 +137,5 @@ echo ""
 echo "Zen hot reload installed. Next steps:"
 echo "  1. Fully quit Zen (all windows)."
 echo "  2. Relaunch it, open about:support, and click 'Clear startup cache' (top-right button)."
-echo "  3. Rerun themeRefresher.sh (or zenPatcher.sh directly) and watch the theme apply live."
+echo "  3. Rerun ThemeRefresher.sh (or ZenPatcher.sh directly) and watch the theme apply live."
 echo "  4. If it doesn't seem to work, check the Browser Console (Ctrl+Shift+J) for [ZenThemeReloader] log lines."

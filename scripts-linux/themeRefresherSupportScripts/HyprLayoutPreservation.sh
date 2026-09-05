@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# hyprLayoutPreservation.sh
+# HyprLayoutPreservation.sh
 # Saves and restores Hyprland window layout across all workspaces, so
 # arrangement survives events that scatter windows (e.g. a theme refresh
 # restarting several apps at once).
@@ -22,8 +22,8 @@
 # a last-resort fallback for a workspace that field doesn't report.
 #
 # Usage:
-#   hyprLayoutPreservation.sh save
-#   hyprLayoutPreservation.sh restore
+#   HyprLayoutPreservation.sh save
+#   HyprLayoutPreservation.sh restore
 
 stateFile="/tmp/hyprLayoutState.txt"
 

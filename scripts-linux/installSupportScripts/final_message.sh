@@ -85,7 +85,7 @@ EOF
 fi
 
 cat << EOF
-If the wallpaper menu feels slow to load, it's likely because it's processing a lot of high-resolution images. Try running generateWallpaperThumbnails.sh first to see if that helps — if it does, you can install a watcher that generates thumbnails automatically for any wallpaper you add to the 16-9 folder, by running:
+If the wallpaper menu feels slow to load, it's likely because it's processing a lot of high-resolution images. Try running GenerateWallpaperThumbnails.sh first to see if that helps — if it does, you can install a watcher that generates thumbnails automatically for any wallpaper you add to the 16-9 folder, by running:
 ./install-Linux.sh --thumbnails
 
 To update your scripts or wallpapers from the repo in the future without running the full installation again, you can use:

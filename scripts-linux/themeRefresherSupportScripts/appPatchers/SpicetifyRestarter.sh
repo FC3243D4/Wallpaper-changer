@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# spicetifyRestarter.sh
-# Special-cased instead of going through appRestarter.sh's generic
+# SpicetifyRestarter.sh
+# Special-cased instead of going through AppRestarter.sh's generic
 # mechanism: spicetify refuses to patch a running Spotify, so it must
-# close, apply, then reopen. Called from themeRefresher.sh before
-# hyprLayoutPreservation.sh's restore, so Spotify's window doesn't steal
+# close, apply, then reopen. Called from ThemeRefresher.sh before
+# HyprLayoutPreservation.sh's restore, so Spotify's window doesn't steal
 # focus after restore.
 
-# Standalone copy of themeRefresher.sh's wait_for_hypr_class — kept local
+# Standalone copy of ThemeRefresher.sh's wait_for_hypr_class — kept local
 # so this script has no dependency on the caller's shell functions.
 wait_for_hypr_class() {
     local windowClass="$1"

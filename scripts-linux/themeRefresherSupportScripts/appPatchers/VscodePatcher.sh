@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# vscodePatcher.sh
+# VscodePatcher.sh
 # Patches VS Code color customizations and the activity-bar icon with the
 # accent color.
 #
 # Prefers matugen's resolved primary color (from vscode-colors.json,
-# written by themeRefresher.sh's earlier `matugen color hex` call) over
+# written by ThemeRefresher.sh's earlier `matugen color hex` call) over
 # the raw wallpaper-sampled seed, to match the Matugen Theme VS Code
 # extension's own accent exactly. Falls back to the raw seed if that
 # cache/jq isn't available.
-# Usage: vscodePatcher.sh <hex_color>
+# Usage: VscodePatcher.sh <hex_color>
 
 color="${1,,}"
 
@@ -26,16 +26,16 @@ if [ -f "$vscodeMatugenCacheFile" ] && command -v jq &>/dev/null; then
         accent="$resolvedPrimary"
         color="${accent#\#}"
         color="${color,,}"
-        echo "vscodePatcher: using matugen's resolved primary ($accent) instead of the raw wallpaper seed"
+        echo "VscodePatcher: using matugen's resolved primary ($accent) instead of the raw wallpaper seed"
     else
-        echo "vscodePatcher: special.cursor not found in $vscodeMatugenCacheFile, falling back to raw seed color"
+        echo "VscodePatcher: special.cursor not found in $vscodeMatugenCacheFile, falling back to raw seed color"
     fi
 else
-    echo "vscodePatcher: $vscodeMatugenCacheFile not found (or jq missing), falling back to raw seed color"
+    echo "VscodePatcher: $vscodeMatugenCacheFile not found (or jq missing), falling back to raw seed color"
 fi
 
 vscodeSettingsFile="$HOME/.config/Code/User/settings.json"
-vscodeBaseIconFile="$HOME/.config/WallpaperChanger/themeRefresherSupportScripts/svg/vscode_base_icon.svg"
+vscodeBaseIconFile="$HOME/.config/WallpaperChanger/ThemeRefresherSupportScripts/svg/vscode_base_icon.svg"
 
 if [ ! -f "$vscodeSettingsFile" ]; then
     echo "VS Code settings not found, skipping"

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# gtkPatcher.sh
+# GtkPatcher.sh
 # Recolors GTK3/GTK4 (incl. libadwaita) with the accent color, patches the
 # local Breeze-Dark GTK theme copy, and nudges GTK apps to reload it.
-# Usage: gtkPatcher.sh <hex_color>
+# Usage: GtkPatcher.sh <hex_color>
 
 color="${1,,}"
 

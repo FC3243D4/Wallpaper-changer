@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# ferdiumPatcher.sh
-# NOTE: functionally identical to ferdiumIconPatcher.sh (same recipe-icon
-# patching logic) — kept as a separate entry point since themeRefresher.sh
+# FerdiumPatcher.sh
+# NOTE: functionally identical to FerdiumIconPatcher.sh (same recipe-icon
+# patching logic) — kept as a separate entry point since ThemeRefresher.sh
 # calls both. Only difference is how each recipe's output is line-prefixed
 # below (a live `sed -u` pipe here vs. a temp-file capture there).
 #
@@ -12,7 +12,7 @@
 # window reload isn't enough if it's running in the tray/background. If
 # any icon changed, this prints a reminder to fully restart it.
 #
-# Usage: ferdiumPatcher.sh <hex_color>
+# Usage: FerdiumPatcher.sh <hex_color>
 
 color="${1,,}"
 
@@ -22,7 +22,7 @@ if [ -z "$color" ]; then
 fi
 
 accent="#$color"
-supportDir="$HOME/.config/WallpaperChanger/themeRefresherSupportScripts"
+supportDir="$HOME/.config/WallpaperChanger/ThemeRefresherSupportScripts"
 iconsDir="$supportDir/svg"
 ferdiumRecipesDir="$HOME/.config/Ferdium/recipes"
 ferdiumIconOutDir="$HOME/.config/Ferdium/themed-icons"

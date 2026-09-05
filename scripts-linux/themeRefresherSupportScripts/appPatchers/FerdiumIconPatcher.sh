@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ferdiumIconPatcher.sh
+# FerdiumIconPatcher.sh
 # Patches Ferdium service recipe icons with the accent color by rewriting
 # each recipe's package.json "defaultIcon" field to a local file:// URI.
 #
@@ -7,7 +7,7 @@
 # window reload isn't enough if it's running in the tray/background. If
 # any icon changed, this prints a reminder to fully restart it.
 #
-# Usage: ferdiumIconPatcher.sh <hex_color>
+# Usage: FerdiumIconPatcher.sh <hex_color>
 
 color="${1,,}"
 
@@ -17,7 +17,7 @@ if [ -z "$color" ]; then
 fi
 
 accent="#$color"
-supportDir="$HOME/.config/WallpaperChanger/themeRefresherSupportScripts"
+supportDir="$HOME/.config/WallpaperChanger/ThemeRefresherSupportScripts"
 iconsDir="$supportDir/svg"
 ferdiumRecipesDir="$HOME/.config/Ferdium/recipes"
 ferdiumIconOutDir="$HOME/.config/Ferdium/themed-icons"

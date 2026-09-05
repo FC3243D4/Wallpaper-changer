@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Zen Theme Hot Reload
 // @namespace    userChrome.js
-// @description  Watches userChrome.css and userContent.css (as written by zenPatcher.sh) and live-reloads them without restarting.
+// @description  Watches userChrome.css and userContent.css (as written by ZenPatcher.sh) and live-reloads them without restarting.
 // @version      1.0
 // @include      main
 // @onlyonce

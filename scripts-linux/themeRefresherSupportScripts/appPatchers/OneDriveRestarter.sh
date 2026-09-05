@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# oneDriveRestarter.sh
-# Special-cased instead of going through appRestarter.sh's generic
+# OneDriveRestarter.sh
+# Special-cased instead of going through AppRestarter.sh's generic
 # mechanism: killing only the GUI orphans its `onedrive --monitor` child,
 # which keeps the account's lock file and blocks a plain relaunch.
 

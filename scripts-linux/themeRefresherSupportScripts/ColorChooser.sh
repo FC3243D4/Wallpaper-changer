@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# colorChooser.sh
+# ColorChooser.sh
 # Picks an accent color from the current wallpaper: tries dominantcolor
 # first, falls back to matugen's candidate source colors if that one is
 # too dark to read as an accent. Prints the winning hex (no '#') to stdout.
-# Usage: color=$(colorChooser.sh)
+# Usage: color=$(ColorChooser.sh)
 
 wallpaperPath="$HOME/.config/WallpaperChanger/.current_wallpaper"
 brightnessThreshold=20
 color=""
 
-colorLine="$($HOME/.config/WallpaperChanger/themeRefresherSupportScripts/dominantcolor -m 1 -n 2 -e black -p dominant "$wallpaperPath" | grep -E '#')"
+colorLine="$($HOME/.config/WallpaperChanger/ThemeRefresherSupportScripts/dominantcolor -m 1 -n 2 -e black -p dominant "$wallpaperPath" | grep -E '#')"
 candidate=$(echo "$colorLine" | tr -d '#')
 
 r=$((16#${candidate:0:2}))

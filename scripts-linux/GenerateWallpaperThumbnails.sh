@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# generateWallpaperThumbnails.sh
+# GenerateWallpaperThumbnails.sh
 # Pre-generates thumbnails for all wallpapers to speed up the rofi
 # wallpaper menu. Run once manually; later runs only process new/changed
 # wallpapers.

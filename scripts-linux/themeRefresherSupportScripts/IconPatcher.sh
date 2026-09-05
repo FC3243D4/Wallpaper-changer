@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# iconPatcher.sh
+# IconPatcher.sh
 # Patches icon SVGs in breeze-dark-accent with the accent color.
 #
 # v2 — merged with gamesIconPatcher.sh. Instead of one hand-written function
@@ -18,7 +18,7 @@
 # BEFORE the engine and register their .desktop files so the engine skips
 # them.
 #
-# Usage: iconPatcher.sh <hex_color> [--dry-run]
+# Usage: IconPatcher.sh <hex_color> [--dry-run]
 #   --dry-run  only run the generic engine in report mode: print
 #              NAME -> slug -> icon (reason) for every .desktop file,
 #              write nothing. Use this to find the slug keys to put in
@@ -35,7 +35,7 @@ fi
 
 accent="#$color"
 iconThemeDir="$HOME/.local/share/icons/breeze-dark-accent"
-supportDir="$HOME/.config/WallpaperChanger/themeRefresherSupportScripts"
+supportDir="$HOME/.config/WallpaperChanger/ThemeRefresherSupportScripts"
 iconsDir="$supportDir/svg"
 gameIconsDir="$iconsDir/games"                 # drop per-game custom icons here
 
@@ -1406,7 +1406,7 @@ cleanup_icon_cache() {
 # wall-clock time to stderr afterward. awk instead of bc for the float
 # subtraction so this doesn't need an extra package installed. Works for
 # both function calls and plain external commands (e.g. the
-# trayIconPatcher.sh invocation and update-desktop-database below).
+# TrayIconPatcher.sh invocation and update-desktop-database below).
 time_step() {
     local label="$1"; shift
     local start end
@@ -1420,12 +1420,12 @@ time_step() {
 # Same contract as time_step, but backgrounds the command and prefixes
 # every line it prints (stdout AND stderr, merged) with "[label] ".
 # Output is captured to a temp file rather than piped live through sed —
-# see trayIconPatcher.sh's time_step_bg for why: a live pipe can be held
+# see TrayIconPatcher.sh's time_step_bg for why: a live pipe can be held
 # open by any backgrounded+disowned grandchild that doesn't redirect its
 # own output away first, blocking this whole job from ever finishing even
 # though the wrapped command itself already returned. A regular file has
 # no such blocking semantics. Never wrap this in $(...) to grab the PID —
-# see trayIconPatcher.sh's time_step_bg for why that reparents the job
+# see TrayIconPatcher.sh's time_step_bg for why that reparents the job
 # away from this script's job table.
 time_step_bg() {
     local label="$1"; shift
@@ -1496,8 +1496,8 @@ time_step "patch_discord_vesktop_icons"    patch_discord_vesktop_icons
 # The generic engine — everything else, games included
 time_step "patch_all_desktop_icons" patch_all_desktop_icons
 
-# Tray icons — split into its own file, see trayIconPatcher.sh
-time_step "trayIconPatcher.sh" "$supportDir/trayIconPatcher.sh" "$color"
+# Tray icons — split into its own file, see TrayIconPatcher.sh
+time_step "TrayIconPatcher.sh" "$supportDir/TrayIconPatcher.sh" "$color"
 
 _run_update_desktop_database() {
     update-desktop-database "$HOME/.local/share/applications" 2>/dev/null

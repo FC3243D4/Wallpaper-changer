@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# appRestarter.sh
+# AppRestarter.sh
 # Restarts a set of apps defined in an associative array (named `apps`)
-# supplied by the caller via `source appRestarter.sh`.
+# supplied by the caller via `source AppRestarter.sh`.
 # Format: apps[name]="pgrepFlag|detectPattern|killPattern|launchCmd|hyprlandWindowClass|gracePeriod"
 # Example:
 #   declare -A apps
 #   apps[zen]="f|zen-bin|zen-bin|zen-browser|zen"
 #   apps[dolphin]="x|dolphin|dolphin|dolphin|dolphin"
-#   source appRestarter.sh
+#   source AppRestarter.sh
 
 running=()
 allPids=()
@@ -94,12 +94,12 @@ wait
 # Special-cased: killing only the GUI orphans its `onedrive --monitor`
 # child, which keeps the lock file and blocks a plain relaunch.
 if command -v onedrivegui >/dev/null 2>&1 && pgrep -f "onedrivegui" >/dev/null 2>&1; then
-    "$supportDir/appPatchers/oneDriveRestarter.sh"
+    "$supportDir/appPatchers/OneDriveRestarter.sh"
 fi
 
 # Special-cased: spicetify refuses to patch a running Spotify, so it must
-# close, apply, then reopen. Runs before hyprLayoutPreservation restore
+# close, apply, then reopen. Runs before HyprLayoutPreservation restore
 # (below) so its window doesn't steal focus after restore.
 if command -v spicetify >/dev/null 2>&1; then
-    "$supportDir/appPatchers/spicetifyRestarter.sh"
+    "$supportDir/appPatchers/SpicetifyRestarter.sh"
 fi

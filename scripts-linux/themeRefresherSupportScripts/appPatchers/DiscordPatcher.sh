@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# discordPatcher.sh <hex-color-without-hash>
+# DiscordPatcher.sh <hex-color-without-hash>
 # Recolors Vesktop's Discord brand/control accent via QuickCSS.
 #
 # Skipped (and any previous patch removed) if the Midnight Discord theme
@@ -7,7 +7,7 @@
 # script's blanket overrides would fight with it instead of complementing it.
 set -euo pipefail
 
-color="${1:?ERROR: discordPatcher.sh requires a hex color argument}"
+color="${1:?ERROR: DiscordPatcher.sh requires a hex color argument}"
 color="${color#\#}"
 
 # Locate Vesktop's config dir — native package first, then flatpak
@@ -22,8 +22,8 @@ fi
 quickCssFile="$vesktopConfigDir/settings/quickCss.css"
 vesktopSettingsFile="$vesktopConfigDir/settings.json"
 
-markStart="/* >>> themeRefresher accent (auto-generated, do not edit) >>> */"
-markEnd="/* <<< themeRefresher accent <<< */"
+markStart="/* >>> ThemeRefresher accent (auto-generated, do not edit) >>> */"
+markEnd="/* <<< ThemeRefresher accent <<< */"
 
 remove_patch_block() {
     if [ -f "$quickCssFile" ] && grep -qF "$markStart" "$quickCssFile" 2>/dev/null; then
@@ -33,7 +33,7 @@ remove_patch_block() {
             skip {next}
             {print}
         ' "$quickCssFile" > "$quickCssFile.tmp" && mv "$quickCssFile.tmp" "$quickCssFile"
-        echo "Removed previous discordPatcher accent block from $quickCssFile."
+        echo "Removed previous DiscordPatcher accent block from $quickCssFile."
     fi
 }
 
@@ -44,7 +44,7 @@ remove_patch_block() {
 if [ -f "$vesktopSettingsFile" ] && command -v jq &>/dev/null; then
     if jq -e '(.enabledThemes // []) | index("midnight-discord.css")' "$vesktopSettingsFile" &>/dev/null; then
         echo "Midnight Discord theme is enabled — it already sets its own accent colors."
-        echo "Skipping discordPatcher accent patch to avoid conflicting with it."
+        echo "Skipping DiscordPatcher accent patch to avoid conflicting with it."
         remove_patch_block
         exit 0
     fi
@@ -53,7 +53,7 @@ elif [ -f "$vesktopSettingsFile" ]; then
     # commented-out entry from a real one) but still catches the common case.
     if grep -qF '"midnight-discord.css"' "$vesktopSettingsFile" 2>/dev/null; then
         echo "Midnight Discord theme appears to be enabled (jq not found, used a plain text match)."
-        echo "Skipping discordPatcher accent patch to avoid conflicting with it."
+        echo "Skipping DiscordPatcher accent patch to avoid conflicting with it."
         remove_patch_block
         exit 0
     fi

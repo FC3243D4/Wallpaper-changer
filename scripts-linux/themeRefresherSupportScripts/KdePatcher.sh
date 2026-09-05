@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# kdePatcher.sh
+# KdePatcher.sh
 # Patches KDE color schemes and kdeglobals with the accent color, then
 # tells plasmashell to reload it.
-# Usage: kdePatcher.sh <hex_color>
+# Usage: KdePatcher.sh <hex_color>
 
 color="${1,,}"
 

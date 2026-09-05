@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # install_themes.sh
-# Installs the base Breeze theme packages required by gtkPatcher.sh,
-# kdePatcher.sh, and iconPatcher.sh, via pkg_manager.sh's logical-name
+# Installs the base Breeze theme packages required by GtkPatcher.sh,
+# KdePatcher.sh, and IconPatcher.sh, via pkg_manager.sh's logical-name
 # abstraction — so this works on pacman/apt/dnf/zypper alike, not just Arch.
 # Meant to be SOURCED from install-Linux.sh (expects $supportDir to be set).
 #
@@ -17,7 +17,7 @@ if ! install_pkgs breeze breeze-gtk breeze-icons; then
 fi
 
 # Optional: org.kde.dolphin.svg / org.cachyos.hello.svg only matter if those
-# apps are present — iconPatcher.sh already gates on this with `command -v`,
+# apps are present — IconPatcher.sh already gates on this with `command -v`,
 # so no install step is needed for them here.
 
 return 0

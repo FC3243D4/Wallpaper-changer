@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# install-Linux.sh
+# Install-Linux.sh
 # Entry point for installing/updating WallpaperChanger: dependency checks,
 # wallpaper/script copying, theme package install, optional Zen hot-reload
 # support, and an initial wallpaper application to theme the system
 # immediately. Each numbered step in cmd_install is a module under
 # $supportDir, sourced so its variables and functions land in this shell.
 #
-# Usage: install-Linux.sh --install|--thumbnails|--update-scripts|
+# Usage: Install-Linux.sh --install|--thumbnails|--update-scripts|
 #                          --update-wallpapers|--zen-hotreload|--help
 
 # Kill all child processes (e.g. rsync) if the script is interrupted or killed.
@@ -16,7 +16,7 @@ supportDir="./scripts-linux/installSupportScripts"
 
 usage() {
     cat << EOF
-Usage: ./install-Linux.sh [OPTION]
+Usage: ./Install-Linux.sh [OPTION]
 
 Options:
   --install             Run the full installation process
@@ -76,7 +76,7 @@ cmd_thumbnails() {
 
 cmd_zen_hotreload() {
     echo "Installing Zen Browser live theme reload support..."
-    source "$supportDir/zen_hotreload_install.sh"
+    source "$supportDir/ZenHotReloadInstall.sh"
 }
 
 cmd_update_wallpapers() {
@@ -86,11 +86,11 @@ cmd_update_wallpapers() {
         exit 1
     fi
 
-    # Sourcing wallpaper_install.sh only defines detect_aspect_ratios and
+    # Sourcing WallpaperInstall.sh only defines detect_aspect_ratios and
     # validate_wallpaper_structure here — its copy logic is gated behind
     # $createPicturesDir/$wallpapersDirExists/$copyWallpapers, which are
     # never set to true in this code path, so nothing else in it runs.
-    source "$supportDir/wallpaper_install.sh"
+    source "$supportDir/WallpaperInstall.sh"
 
     wallpapersSource="./wallpapers"
     if ! validate_wallpaper_structure "$wallpapersSource"; then
@@ -149,7 +149,7 @@ cmd_update_wallpapers() {
 }
 
 cmd_update_scripts() {
-    source "$supportDir/utils.sh"
+    source "$supportDir/Utils.sh"
 
     if [ ! -d "$HOME/.config/WallpaperChanger" ]; then
         echo "WallpaperChanger directory not found at $HOME/.config/WallpaperChanger."
@@ -201,7 +201,7 @@ cmd_install() {
     wallpapersRepo=false
 
     # 1 CHECK DEPENDENCIES
-    if ! source "$supportDir/dependency_check.sh"; then
+    if ! source "$supportDir/DependencyCheck.sh"; then
         echo "Dependency check failed. Stopping."
         exit 1
     fi
@@ -209,7 +209,7 @@ cmd_install() {
     # 2 WALLPAPER CLONE AND FALLBACK
     # If no wallpapers are cloned it will use the fallback
     if [ ! -d "./wallpapers" ] && [ -d "./wallpapersDefaultInstall" ]; then
-        source "$supportDir/wallpaperClone.sh"
+        source "$supportDir/WallpaperClone.sh"
         if [ ! -d "./wallpapers" ] && [ -d "./wallpapersDefaultInstall" ]; then
             echo "No ./wallpapers folder found — using bundled wallpapersDefaultInstall instead."
             ln -s "./wallpapersDefaultInstall" "./wallpapers"
@@ -217,19 +217,19 @@ cmd_install() {
     fi
 
     # 3 CHECK FOR EXISTING DIRECTORIES AND FILES
-    source "$supportDir/directory_setup.sh"
+    source "$supportDir/DirectorySetup.sh"
 
     # 4 SCRIPT INSTALLATION
-    source "$supportDir/script_install.sh"
+    source "$supportDir/ScriptsInstall.sh"
 
     # 5 WALLPAPER INSTALLATION
-    source "$supportDir/wallpaper_install.sh"
+    source "$supportDir/WallpaperInstall.sh"
 
     # 6 INSTALL THEMES
-    source "$supportDir/install_themes.sh"
+    source "$supportDir/InstallThemes.sh"
 
     # 7 OFFER ZEN BROWSER HOT RELOAD (only if Zen is detected)
-    source "$supportDir/zen_hotreload_prompt.sh"
+    source "$supportDir/ZenHotReloadPrompt.sh"
 
     # 8 APPLY WALLPAPER/THEME NOW
     # Nearly everything downstream (matugen, icon theming, GTK/KDE colors,
@@ -250,7 +250,7 @@ cmd_install() {
     fi
 
     # 9 FINAL MESSAGE
-    source "$supportDir/final_message.sh"
+    source "$supportDir/FinalMessage.sh"
 }
 
 case "$1" in

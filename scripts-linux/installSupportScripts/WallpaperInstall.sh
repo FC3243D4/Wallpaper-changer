@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# wallpaper_install.sh
+# WallpaperInstall.sh
 # Creates the Pictures/wallpapers directory if needed and copies wallpapers
 # from the repo, including the nsfw prompt.
-# Meant to be SOURCED from install-Linux.sh; relies on $createPicturesDir,
-# $wallpapersDirExists, and $copyWallpapers being set by directory_setup.sh.
-# Sets $copyNsfw for use by final_message.sh.
+# Meant to be SOURCED from Install-Linux.sh; relies on $createPicturesDir,
+# $wallpapersDirExists, and $copyWallpapers being set by DirectorySetup.sh.
+# Sets $copyNsfw for use by FinalMessage.sh.
 
-source "$supportDir/utils.sh"
+source "$supportDir/Utils.sh"
 
 validExtensions=("jpg" "jpeg" "png" "pnm" "tga" "tiff" "webp" "bmp" "farbfeld" "gif")
 defaultWallpapersDir="./wallpapersDefaultInstall"

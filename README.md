@@ -5,8 +5,8 @@ On both OSs if you wish to automatically set the color of your rgb you have to u
 ## Linux
 Make sure that the install.sh file is executable and run it
 ```
-chmod +x install-Linux.sh
-./install-Linux.sh --install
+chmod +x Install-Linux.sh
+./Install-Linux.sh --install
 ```
 Any dependency will be checked by the script and it will inform you if there are missing ones
 
@@ -63,7 +63,7 @@ HyprLayoutPreservation.sh restore   # restore the most recent snapshot
 Rofi's wallpaper menu can get slow to render once you have a lot of wallpapers, since it has to generate a thumbnail on the fly every time. Running:
 
 ```
-./install-Linux.sh --thumbnails
+./Install-Linux.sh --thumbnails
 ```
 
 installs a systemd user watcher that pre-generates thumbnails in the background whenever wallpapers are added or changed, so the menu stays snappy. It automatically detects whichever aspect-ratio folders exist under `~/Pictures/wallpapers` — no manual configuration needed, and it stays in sync automatically if you later add wallpapers via `--update-wallpapers`.

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# directory_setup.sh
+# DirectorySetup.sh
 # Checks for existing config/wallpaper directories and the rofi config,
 # prompting the user for overwrite/copy decisions.
-# Meant to be SOURCED from install-Linux.sh so that configDirExists,
+# Meant to be SOURCED from Install-Linux.sh so that configDirExists,
 # copyScripts, wallpapersDirExists, copyWallpapers, and createPicturesDir
 # are visible to later modules.
 

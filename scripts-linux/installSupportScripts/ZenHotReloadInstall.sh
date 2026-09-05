@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# zen_hotreload_install.sh
+# ZenHotReloadInstall.sh
 # Installs MrOtherGuy/fx-autoconfig into a zen-browser-bin (AUR) install and
 # drops zenThemeReloader.uc.js into every Zen profile ZenPatcher.sh targets,
 # so edits to userChrome.css/userContent.css apply live without a restart.
 #
-# Intended to be sourced from install-Linux.sh (expects $supportDir to be
+# Intended to be sourced from Install-Linux.sh (expects $supportDir to be
 # set). Override the detected install dir with:
-#   ZEN_INSTALL_DIR=/opt/zen-browser-bin ./install-Linux.sh --zen-hotreload
+#   ZEN_INSTALL_DIR=/opt/zen-browser-bin ./Install-Linux.sh --zen-hotreload
 # Override which profiles get patched (colon-separated absolute paths) with:
-#   ZEN_PROFILE_DIRS="/home/you/.zen/xxxx.default:/home/you/.zen/yyyy.work" ./install-Linux.sh --zen-hotreload
+#   ZEN_PROFILE_DIRS="/home/you/.zen/xxxx.default:/home/you/.zen/yyyy.work" ./Install-Linux.sh --zen-hotreload
 
 ZEN_INSTALL_DIR="${ZEN_INSTALL_DIR:-}"
 ZEN_HOME="${ZEN_HOME:-$HOME/.zen}"
@@ -26,7 +26,7 @@ zen_hotreload_detect_install_dir() {
 if [ -z "$ZEN_INSTALL_DIR" ]; then
     ZEN_INSTALL_DIR="$(zen_hotreload_detect_install_dir)" || {
         echo "Could not auto-detect the Zen install directory."
-        echo "Re-run with: ZEN_INSTALL_DIR=/your/path ./install-Linux.sh --zen-hotreload"
+        echo "Re-run with: ZEN_INSTALL_DIR=/your/path ./Install-Linux.sh --zen-hotreload"
         exit 1
     }
 fi
@@ -109,7 +109,7 @@ else
         zenProfiles+=("$profileDir")
     done < <(zen_hotreload_find_profiles) || {
         echo "Could not find $ZEN_HOME/profiles.ini, so no profiles were auto-detected."
-        echo "Re-run with: ZEN_PROFILE_DIRS=\"/path/to/profile1:/path/to/profile2\" ./install-Linux.sh --zen-hotreload"
+        echo "Re-run with: ZEN_PROFILE_DIRS=\"/path/to/profile1:/path/to/profile2\" ./Install-Linux.sh --zen-hotreload"
         exit 1
     }
 fi

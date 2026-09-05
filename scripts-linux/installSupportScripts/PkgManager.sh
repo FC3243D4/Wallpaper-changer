@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# pkg_manager.sh
+# PkgManager.sh
 # Detects the package manager and provides install/sync abstractions.
-# Meant to be SOURCED by dependency_check.sh and install_themes.sh.
+# Meant to be SOURCED by DependencyCheck.sh and InstallThemes.sh.
 #
 # Exports:
 #   pkgManager    — detected package manager (pacman, apt, dnf, zypper)
@@ -20,7 +20,7 @@ else
 fi
 
 # ─── Package name map ────────────────────────────────────────────────────────
-# Maps logical names used in dependency_check.sh / install_themes.sh to the
+# Maps logical names used in DependencyCheck.sh / InstallThemes.sh to the
 # distro-specific package name. Add entries here when names differ.
 
 _resolve_pkg() {

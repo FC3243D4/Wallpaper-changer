@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# final_message.sh
+# FinalMessage.sh
 # Prints the post-install usage instructions.
-# Meant to be SOURCED from install-Linux.sh; relies on $useXrandr,
+# Meant to be SOURCED from Install-Linux.sh; relies on $useXrandr,
 # $copyScripts, $copyNsfw, and $wallpapersRepo being set by earlier modules.
 
 echo "Installation complete!"
@@ -86,11 +86,11 @@ fi
 
 cat << EOF
 If the wallpaper menu feels slow to load, it's likely because it's processing a lot of high-resolution images. Try running GenerateWallpaperThumbnails.sh first to see if that helps — if it does, you can install a watcher that generates thumbnails automatically for any wallpaper you add to the 16-9 folder, by running:
-./install-Linux.sh --thumbnails
+./Install-Linux.sh --thumbnails
 
 To update your scripts or wallpapers from the repo in the future without running the full installation again, you can use:
-./install-Linux.sh --update-scripts
-./install-Linux.sh --update-wallpapers
+./Install-Linux.sh --update-scripts
+./Install-Linux.sh --update-wallpapers
 
 Running into issues, or want to suggest something? Feel free to open an issue on the GitHub repository.
 EOF

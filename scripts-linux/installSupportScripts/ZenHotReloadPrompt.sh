@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# zen_hotreload_prompt.sh
+# ZenHotReloadPrompt.sh
 # Sourced from cmd_install. Detects a Zen Browser install and, if found,
-# offers to set up live theme reload (zen_hotreload_install.sh) — which
+# offers to set up live theme reload (ZenHotReloadInstall.sh) — which
 # needs sudo and a network fetch, so it's opt-in rather than automatic.
 # Silently does nothing if Zen isn't installed.
 #
 # Skip the prompt outright with:
-#   ZEN_HOTRELOAD_AUTO=yes ./install-Linux.sh --install
-#   ZEN_HOTRELOAD_AUTO=no  ./install-Linux.sh --install
+#   ZEN_HOTRELOAD_AUTO=yes ./Install-Linux.sh --install
+#   ZEN_HOTRELOAD_AUTO=no  ./Install-Linux.sh --install
 
 zen_hotreload_prompt_detect() {
     local candidate
@@ -42,10 +42,10 @@ if [ -n "$zenDir" ]; then
     case "$reply" in
         [yY]|[yY][eE][sS])
             export ZEN_INSTALL_DIR="$zenDir"
-            source "$supportDir/zen_hotreload_install.sh"
+            source "$supportDir/ZenHotReloadInstall.sh"
             ;;
         *)
-            echo "Skipping Zen hot reload setup. Run './install-Linux.sh --zen-hotreload' anytime to add it later."
+            echo "Skipping Zen hot reload setup. Run './Install-Linux.sh --zen-hotreload' anytime to add it later."
             ;;
     esac
 fi

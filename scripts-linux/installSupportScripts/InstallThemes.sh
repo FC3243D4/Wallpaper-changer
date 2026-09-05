@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# install_themes.sh
+# InstallThemes.sh
 # Installs the base Breeze theme packages required by GtkPatcher.sh,
-# KdePatcher.sh, and IconPatcher.sh, via pkg_manager.sh's logical-name
+# KdePatcher.sh, and IconPatcher.sh, via PkgManager.sh's logical-name
 # abstraction — so this works on pacman/apt/dnf/zypper alike, not just Arch.
-# Meant to be SOURCED from install-Linux.sh (expects $supportDir to be set).
+# Meant to be SOURCED from Install-Linux.sh (expects $supportDir to be set).
 #
 # Returns 0 on success, 1 on failure (caller should check $? and stop).
 
-source "$supportDir/pkg_manager.sh" || return 1
+source "$supportDir/PkgManager.sh" || return 1
 
 echo "Checking base theme packages..."
 if ! install_pkgs breeze breeze-gtk breeze-icons; then

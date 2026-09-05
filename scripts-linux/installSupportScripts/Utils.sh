@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# utils.sh
+# Utils.sh
 # Shared utility functions for install scripts.
 # Meant to be SOURCED, not executed.
 

@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# dependency_check.sh
+# DependencyCheck.sh
 # Checks for required dependencies and installs any that are missing.
-# Meant to be SOURCED from install-Linux.sh (not executed) so that
+# Meant to be SOURCED from Install-Linux.sh (not executed) so that
 # useXrandr / useWayland are visible to the caller.
 #
 # Returns 0 on success, 1 on failure (caller should check $? and stop).
 
-source "$supportDir/pkg_manager.sh" || return 1
+source "$supportDir/PkgManager.sh" || return 1
 
 packageList=()
 

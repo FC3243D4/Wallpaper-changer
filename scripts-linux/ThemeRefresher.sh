@@ -7,7 +7,7 @@
 #
 # Usage: ThemeRefresher.sh --full|--rgb|--softrun|--tray|--help
 
-supportDir="$HOME/.config/WallpaperChanger/ThemeRefresherSupportScripts"
+supportDir="$HOME/.config/WallpaperChanger/themeRefresherSupportScripts"
 
 # Runs "$@", prints its wall-clock time to stderr as "[timing] label: Ns".
 # Timing goes to stderr so `color=$(time_step ColorChooser ...)` still only

@@ -35,7 +35,7 @@ else
 fi
 
 vscodeSettingsFile="$HOME/.config/Code/User/settings.json"
-vscodeBaseIconFile="$HOME/.config/WallpaperChanger/ThemeRefresherSupportScripts/svg/vscode_base_icon.svg"
+vscodeBaseIconFile="$HOME/.config/WallpaperChanger/themeRefresherSupportScripts/svg/vscode_base_icon.svg"
 
 if [ ! -f "$vscodeSettingsFile" ]; then
     echo "VS Code settings not found, skipping"

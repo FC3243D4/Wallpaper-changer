@@ -23,12 +23,12 @@ if [ "$copyScripts" = true ]; then
         "./scripts-linux/AspectRatioChecker.sh" \
         "./scripts-linux/ThemeRefresher.sh" \
         "./scripts-linux/GenerateWallpaperThumbnails.sh" \
-        "./scripts-linux/ThemeRefresherSupportScripts" \
+        "./scripts-linux/themeRefresherSupportScripts" \
         "$HOME/.config/WallpaperChanger/"
 
     chmod +x "$HOME/.config/WallpaperChanger"/*
-    chmod +x "$HOME/.config/WallpaperChanger/ThemeRefresherSupportScripts"/*
-    chmod +x "$HOME/.config/WallpaperChanger/ThemeRefresherSupportScripts/appPatchers"/*
+    chmod +x "$HOME/.config/WallpaperChanger/themeRefresherSupportScripts"/*
+    chmod +x "$HOME/.config/WallpaperChanger/themeRefresherSupportScripts/appPatchers"/*
     echo "Scripts copied successfully."
     echo ""
 fi

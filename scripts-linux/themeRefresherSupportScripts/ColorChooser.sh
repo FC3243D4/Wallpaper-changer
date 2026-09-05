@@ -9,7 +9,7 @@ wallpaperPath="$HOME/.config/WallpaperChanger/.current_wallpaper"
 brightnessThreshold=20
 color=""
 
-colorLine="$($HOME/.config/WallpaperChanger/ThemeRefresherSupportScripts/dominantcolor -m 1 -n 2 -e black -p dominant "$wallpaperPath" | grep -E '#')"
+colorLine="$($HOME/.config/WallpaperChanger/themeRefresherSupportScripts/dominantcolor -m 1 -n 2 -e black -p dominant "$wallpaperPath" | grep -E '#')"
 candidate=$(echo "$colorLine" | tr -d '#')
 
 r=$((16#${candidate:0:2}))

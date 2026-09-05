@@ -22,7 +22,7 @@ if [ -z "$color" ]; then
 fi
 
 accent="#$color"
-supportDir="$HOME/.config/WallpaperChanger/ThemeRefresherSupportScripts"
+supportDir="$HOME/.config/WallpaperChanger/themeRefresherSupportScripts"
 iconsDir="$supportDir/svg"
 ferdiumRecipesDir="$HOME/.config/Ferdium/recipes"
 ferdiumIconOutDir="$HOME/.config/Ferdium/themed-icons"

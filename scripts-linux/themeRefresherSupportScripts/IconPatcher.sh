@@ -35,7 +35,7 @@ fi
 
 accent="#$color"
 iconThemeDir="$HOME/.local/share/icons/breeze-dark-accent"
-supportDir="$HOME/.config/WallpaperChanger/ThemeRefresherSupportScripts"
+supportDir="$HOME/.config/WallpaperChanger/themeRefresherSupportScripts"
 iconsDir="$supportDir/svg"
 gameIconsDir="$iconsDir/games"                 # drop per-game custom icons here
 

@@ -25,7 +25,7 @@ if [ -z "$color" ]; then
 fi
 
 accent="#$color"
-supportDir="$HOME/.config/WallpaperChanger/ThemeRefresherSupportScripts"
+supportDir="$HOME/.config/WallpaperChanger/themeRefresherSupportScripts"
 iconsDir="$supportDir/svg"
 gameIconsDir="$iconsDir/games"
 iconThemeDir="$HOME/.local/share/icons/breeze-dark-accent"

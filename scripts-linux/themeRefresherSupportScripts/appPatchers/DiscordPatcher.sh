@@ -39,7 +39,7 @@ remove_patch_block() {
 
 # --- Midnight Discord theme detection ---
 # UNVERIFIED: assumes Vencord's settings.json "enabledThemes" schema (same
-# assumption install.sh's "Configure Vesktop" section makes). If detection
+# assumption Install-Linux.sh's "Configure Vesktop" section makes). If detection
 # ever breaks, check that schema first.
 if [ -f "$vesktopSettingsFile" ] && command -v jq &>/dev/null; then
     if jq -e '(.enabledThemes // []) | index("midnight-discord.css")' "$vesktopSettingsFile" &>/dev/null; then

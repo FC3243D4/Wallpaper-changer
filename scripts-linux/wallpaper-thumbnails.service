@@ -3,4 +3,4 @@ Description=Generate wallpaper thumbnails
 
 [Service]
 Type=oneshot
-ExecStart=/home/fc3243d4/.config/WallpaperChanger/generateWallpaperThumbnails.sh
+ExecStart=/home/fc3243d4/.config/WallpaperChanger/GenerateWallpaperThumbnails.sh

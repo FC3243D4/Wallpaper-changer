@@ -130,4 +130,4 @@ if [ "$symlinkSet" = false ]; then
 fi
 
 # 4. Refresh the theme
-$HOME/.config/WallpaperChanger/themeRefresher.sh --full
+$HOME/.config/WallpaperChanger/ThemeRefresher.sh --full

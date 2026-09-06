@@ -120,9 +120,17 @@ cleanup_stale_desktop_overrides() {
         "/var/lib/flatpak/exports/share/applications"
         "$HOME/.local/share/flatpak/exports/share/applications"
     )
-    local removed=0
-    while IFS= read -r -d '' f; do
-        grep -qxF "$desktopOverrideMarker" "$f" 2>/dev/null || continue
+
+    # Each file's check (marker grep + up to 4 systemDirs stats + possible
+    # removal) is fully independent of every other file — genuinely
+    # embarrassingly parallel, one per candidate .desktop file. A
+    # background subshell can't set `removed` in this shell directly, so
+    # each one signals "I removed a file" via exit code 1 (vs 0 for
+    # "nothing to remove") the same way ferdiumIconPatcher.sh's
+    # restarted_needed does; the loop below turns that back into a count.
+    check_one_override() {
+        local f="$1"
+        grep -qxF "$desktopOverrideMarker" "$f" 2>/dev/null || return 0
         local base found=0
         base=$(basename "$f")
         for dir in "${systemDirs[@]}"; do
@@ -131,9 +139,28 @@ cleanup_stale_desktop_overrides() {
         if [ "$found" -eq 0 ]; then
             rm -f "$f"
             echo "  removed stale override: $base (no longer installed)"
-            removed=$((removed + 1))
+            return 1
+        fi
+        return 0
+    }
+
+    local removed=0
+    local maxParallel=16
+    declare -a checkPids=()
+    while IFS= read -r -d '' f; do
+        check_one_override "$f" &
+        checkPids+=("$!")
+        if [ "${#checkPids[@]}" -ge "$maxParallel" ]; then
+            wait "${checkPids[0]}"
+            [ "$?" -eq 1 ] && removed=$((removed + 1))
+            checkPids=("${checkPids[@]:1}")
         fi
     done < <(find "$userDir" -maxdepth 1 -type f -name "*.desktop" -print0 2>/dev/null)
+    for pid in "${checkPids[@]}"; do
+        wait "$pid"
+        [ "$?" -eq 1 ] && removed=$((removed + 1))
+    done
+
     if [ "$removed" -gt 0 ]; then
         echo "Cleaned up $removed stale .desktop override(s)"
         update-desktop-database "$userDir" 2>/dev/null
@@ -717,18 +744,60 @@ PYEOF
         return 0
     fi
 
-    # Actual writes — same functions, same behavior as before. Only runs
-    # for files the Python pass decided actually need something written.
+    # Two phases, deliberately kept apart:
+    #  1. Generate every icon this run actually needs, ONCE each, serially.
+    #     ensure_icon's generatedIcons memoization is what stops the same
+    #     base SVG being recolored once per match sharing it (e.g. every
+    #     one of the "gaming" fallback entries) — a background subshell
+    #     only ever sees its own fork-time copy of that cache, so
+    #     parallelizing this phase would silently multiply duplicate work
+    #     and, worse, have several subshells write the same output SVG
+    #     path at once.
+    #  2. Patch each matched .desktop file — safe to parallelize now:
+    #     every one writes to its OWN uniquely-named override file
+    #     (python's earlier `seen` dedup by basename guarantees no two
+    #     matches share a target), and every icon phase 1 might need
+    #     already exists on disk before this starts — patch_desktop_file
+    #     never calls ensure_icon itself. Capped at maxParallel concurrent
+    #     jobs rather than firing all of them at once, since a few hundred
+    #     matches would otherwise mean a few hundred simultaneous
+    #     grep/sed/cp spawns.
     local desktopFile icon name reason
+    declare -A iconsNeeded=()
     while IFS=$'\t' read -r desktopFile icon name reason; do
         [ -z "$desktopFile" ] && continue
-        if ! ensure_icon "$icon"; then
+        iconsNeeded[$icon]=1
+    done < "$matchesFile"
+    for icon in "${!iconsNeeded[@]}"; do
+        ensure_icon "$icon" || echo "  base SVG for '$icon' vanished mid-run — files needing it will be skipped"
+    done
+
+    local maxParallel=16
+    declare -a patchPids=()
+    while IFS=$'\t' read -r desktopFile icon name reason; do
+        [ -z "$desktopFile" ] && continue
+        if [ -z "${generatedIcons[$icon]:-}" ]; then
             echo "  '$name' -> base SVG for '$icon' vanished mid-run, skipping"
             continue
         fi
-        echo "'$name' -> $icon ($reason)"
-        patch_desktop_file "$icon" "$desktopFile"
+        (
+            outfile=$(mktemp)
+            {
+                echo "'$name' -> $icon ($reason)"
+                patch_desktop_file "$icon" "$desktopFile"
+            } > "$outfile" 2>&1
+            cat "$outfile"
+            rm -f "$outfile"
+        ) &
+        patchPids+=("$!")
+        if [ "${#patchPids[@]}" -ge "$maxParallel" ]; then
+            wait "${patchPids[0]}"
+            patchPids=("${patchPids[@]:1}")
+        fi
     done < "$matchesFile"
+    for pid in "${patchPids[@]}"; do
+        wait "$pid"
+    done
 
     rm -f "$iconOverridesFile" "$categoryFallbacksFile" "$handledFile" "$matchesFile"
 }

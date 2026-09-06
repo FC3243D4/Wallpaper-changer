@@ -860,36 +860,43 @@ patch_cohesion_tray() {
         echo "  cohesion: rsvg-convert not found, cannot rasterize"; return 1
     }
 
-    local patched=0
-    local f
-    for f in "${colorTargets[@]}"; do
-        if [[ "$f" == *-unread.png ]]; then
-            rsvg="$svgUnread"
-        else
-            rsvg="$svg"
-        fi
-        rsvg-convert -w 512 -h 512 "$rsvg" -o "$f" && patched=$((patched + 1))
-    done
-
-    # Greyscale slots are Cohesion's own monochrome tray-style toggle —
-    # desaturate the accent render rather than reusing it verbatim, so the
-    # toggle still does something. ${f/-greyscale/} maps each greyscale
-    # target back to the color file it should be derived from (...
-    # -greyscale.png -> ...png, ...-greyscale-unread.png -> ...-unread.png).
+    # Normal and unread icons never touch each other's files at any stage
+    # (each greyscale target only ever reads its OWN color counterpart, via
+    # ${f/-greyscale/}), so each one's full color->greyscale chain runs as
+    # its own independent background pipeline instead of doing both color
+    # rasterizations, then both greyscale derivations, as one sequential
+    # chain of 4 external tool calls. A background subshell can't add to
+    # `patched` directly, so each pipeline reports how many of its own 2
+    # files it wrote back via its exit code (0, 1, or 2).
+    local greyTool="cp"
     if command -v magick >/dev/null 2>&1; then
-        for f in "${greyTargets[@]}"; do
-            magick "${f/-greyscale/}" -colorspace Gray "$f" && patched=$((patched + 1))
-        done
+        greyTool="magick"
     elif command -v convert >/dev/null 2>&1; then
-        for f in "${greyTargets[@]}"; do
-            convert "${f/-greyscale/}" -colorspace Gray "$f" && patched=$((patched + 1))
-        done
+        greyTool="convert"
     else
         echo "  cohesion: imagemagick not found, copying color icon into greyscale slots unmodified"
-        for f in "${greyTargets[@]}"; do
-            cp "${f/-greyscale/}" "$f" && patched=$((patched + 1))
-        done
     fi
+
+    _cohesion_pipeline() {
+        local colorTarget="$1" greyTarget="$2" rsvg="$3" tool="$4"
+        local n=0
+        rsvg-convert -w 512 -h 512 "$rsvg" -o "$colorTarget" && n=$((n + 1))
+        case "$tool" in
+            magick)  magick "$colorTarget" -colorspace Gray "$greyTarget" && n=$((n + 1)) ;;
+            convert) convert "$colorTarget" -colorspace Gray "$greyTarget" && n=$((n + 1)) ;;
+            *)       cp "$colorTarget" "$greyTarget" && n=$((n + 1)) ;;
+        esac
+        return "$n"
+    }
+
+    _cohesion_pipeline "${colorTargets[0]}" "${greyTargets[0]}" "$svg" "$greyTool" &
+    local pid1=$!
+    _cohesion_pipeline "${colorTargets[1]}" "${greyTargets[1]}" "$svgUnread" "$greyTool" &
+    local pid2=$!
+
+    local patched=0
+    wait "$pid1"; patched=$((patched + $?))
+    wait "$pid2"; patched=$((patched + $?))
 
     echo "Cohesion tray icons patched ($patched/4, $iconDir)"
     echo "  (restart Cohesion for the new icons to take effect)"

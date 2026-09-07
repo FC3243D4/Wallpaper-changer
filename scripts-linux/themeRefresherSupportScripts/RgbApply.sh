@@ -14,7 +14,7 @@ if [ -z "$color" ]; then
 fi
 
 minSaturation=0.80      # 0.0 - 1.0, target floor for boosted colors
-ignoreSaturation=0.22   # 0.0 - 1.0, colors below this are intentional
+ignoreSaturation=0.18  # 0.0 - 1.0, colors below this are intentional
                         # white/near-white and left untouched
 
 r=$((16#${color:0:2}))

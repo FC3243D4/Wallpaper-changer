@@ -212,6 +212,7 @@ declare -A iconOverrides=(
     ["intellij_idea_community_edition"]="intellij-idea"
     ["youtube_music_desktop_app"]="music"
     ["cohesion"]="notion"
+    ["pgadmin_4"]="postgresql"
 
     # -- many-to-one shared icons (formerly one function per group) --
     ["advanced_network_configuration"]="network"

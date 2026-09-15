@@ -5,7 +5,7 @@
 # v2 — merged with gamesIconPatcher.sh. Instead of one hand-written function
 # per app, a generic engine scans every .desktop file and resolves an icon:
 #
-#   1. iconOverrides[slug]              — manual override (games-style)
+#   1. icon-overrides.conf[slug]         — manual override (games-style)
 #   2. ${slug}_base_icon.svg             — custom icon matching the app name
 #      (searched in $gameIconsDir first, then $iconsDir)
 #   3. game detection                    — generic "gaming" icon
@@ -18,11 +18,16 @@
 # BEFORE the engine and register their .desktop files so the engine skips
 # them.
 #
+# Manual slug -> icon overrides live in their own file, icon-overrides.conf,
+# next to this script's support dir (see $iconOverridesConf below) — edit
+# that file to add/remove overrides, not this script. It documents its own
+# format and how to find an app's slug.
+#
 # Usage: IconPatcher.sh <hex_color> [--dry-run]
 #   --dry-run  only run the generic engine in report mode: print
 #              NAME -> slug -> icon (reason) for every .desktop file,
 #              write nothing. Use this to find the slug keys to put in
-#              iconOverrides (replaces game_slug.sh for that job).
+#              icon-overrides.conf.
 
 color="${1,,}"
 dryRun=0
@@ -38,6 +43,13 @@ iconThemeDir="$HOME/.local/share/icons/breeze-dark-accent"
 supportDir="$HOME/.config/WallpaperChanger/themeRefresherSupportScripts"
 iconsDir="$supportDir/svg"
 gameIconsDir="$iconsDir/games"                 # drop per-game custom icons here
+
+# Manual slug -> icon overrides. Kept in its own file (not this script) so
+# adding/removing an override never means editing bash. Format and
+# instructions are documented in the file itself. Read directly by the
+# Python engine in patch_all_desktop_icons — never loaded into a bash
+# associative array, so there's no per-run parse/convert step for it at all.
+iconOverridesConf="$supportDir/icon-overrides.conf"
 
 # Symbolic (ColorScheme-Text) icons use matugen's resolved primary color
 # rather than the raw wallpaper seed, to match tray icons/waybar text they
@@ -175,154 +187,10 @@ declare -A handledDesktops
 declare -A generatedIcons
 
 # ---------------------------------------------------------------------------
-# Manual overrides — the games-style map, now for everything.
-# Key   = slug derived from the .desktop file's Name= (run --dry-run to see
-#         the exact slug for every entry on your system).
-# Value = icon base name: the engine looks for <value>_base_icon.svg in
-#         $gameIconsDir first, then $iconsDir.
-# Use this when the normalized slug doesn't match the icon filename
-# (punctuation, subtitles, vendor prefixes, shared icons, etc).
-# ---------------------------------------------------------------------------
-declare -A iconOverrides=(
-    # -- games (formerly GAME_SLUG_OVERRIDES) --
-    ["forza_horizon_6"]="forza"
-    ["elden_ring"]="elden_ring"
-    ["elden_ring_nightreign"]="elden_ring"
-    ["nierautomata"]="nier_automata"
-    ["clair_obscur_expedition_33"]="expedition_33"
-    ["halo_the_master_chief_collection"]="halo"
-
-    # -- apps whose Name= doesn't slugify to the icon filename --
-    ["visual_studio_code"]="vscode"
-    ["code"]="vscode"
-    ["code_oss"]="vscode"
-    ["brave_web_browser"]="brave"
-    ["google_chrome"]="chrome"
-    ["chromium"]="chrome"
-    ["gnu_image_manipulation_program"]="gimp"
-    ["onlyoffice_desktop_editors"]="onlyoffice"
-    ["obs_studio"]="obs-studio"
-    ["displays_settings"]="nwg-displays"
-    ["arduino_ide_v2"]="arduino"
-    ["ark"]="zip"
-    ["btrfs_assistant"]="btrfs"
-    ["nativmix"]="nativmix-alt"
-    ["orcaslicer"]="orcaslicer-alt"
-    ["raspberry_pi_imager"]="raspberry-pi"
-    ["intellij_idea_community_edition"]="intellij-idea"
-    ["youtube_music_desktop_app"]="music"
-    ["cohesion"]="notion"
-    ["pgadmin_4"]="postgresql"
-
-    # -- many-to-one shared icons (formerly one function per group) --
-    ["advanced_network_configuration"]="network"
-    ["avahi_ssh_server_browser"]="network"
-    ["avahi_vnc_server_browser"]="network"
-    ["avahi_zeroconf_browser"]="network"
-
-    ["mpv_media_player"]="player"
-    ["vlc_media_player"]="player"
-    ["blackmagic_raw_player"]="player"
-
-    ["davinci_control_panels_setup"]="settings"
-    ["grub_customizer"]="settings"
-    ["yad_settings"]="settings"
-    ["icon_browser"]="settings"
-    ["hardware_locality_lstopo"]="settings"
-    ["nvtop"]="settings"
-    ["qv4l2_test_utility"]="settings"
-    ["qvidcap_test_utility"]="settings"
-    ["qt_assistant"]="settings"
-    ["qt_linguist"]="settings"
-    ["qt_d_bus_viewer"]="settings"
-    ["scx_manager"]="settings"
-    ["uuctl"]="settings"
-    ["winetricks"]="settings"
-    ["system_settings"]="settings"
-    ["conky"]="settings"
-
-    ["blackmagic_raw_speed_test"]="speedtest"
-
-    ["bluetooth_manager"]="bluetooth"
-
-    ["gnome_disks"]="disks"
-    ["disks"]="disks"
-    ["gparted"]="disks"
-    ["kde_partition_manager"]="disks"
-    ["filelight"]="disks"
-
-    ["gwenview"]="image_viewer"
-    ["image_viewer"]="image_viewer"
-    ["loupe"]="image_viewer"
-    ["swappy"]="image_viewer"
-
-    ["hp_device_manager"]="hp"
-    ["hplip"]="hp"
-    ["uiscan"]="hp"
-    ["hp_scan"]="hp"
-
-    ["kate"]="text_editor"
-    ["kwrite"]="text_editor"
-    ["micro"]="text_editor"
-    ["text_editor"]="text_editor"
-    ["xdvi"]="text_editor"
-
-    ["kcalc"]="calculator"
-    ["qalculate"]="calculator"
-    ["qalculate_gtk"]="calculator"
-
-    ["kvantum_manager"]="brush"
-    ["gtk_settings"]="brush"
-
-    ["kwalletmanager"]="lock"
-    ["kde_wallet_manager"]="lock"
-
-    ["manage_printing"]="printer"
-
-    ["lycheeslicer"]="lychee"
-    ["lychee_slicer"]="lychee"
-
-    ["nvidia_x_server_settings"]="nvidia"
-
-    ["octopi"]="install"
-    ["shelly"]="install"
-    ["cachyos_package_installer"]="install"
-
-    ["onedrivegui"]="cloud_storage"
-
-    ["openjdk_java_25_console"]="code"
-    ["openjdk_java_25_shell"]="code"
-    ["qt_designer"]="code"
-    ["cmake"]="code"
-
-    ["rofi"]="launcher"
-    ["rofi_theme_selector"]="launcher"
-
-    ["solaar"]="logitech"
-
-    ["spectacle"]="screenshot"
-
-    ["streamcontroller"]="elgato"
-    ["opendeck"]="elgato"
-
-    ["pulseaudio_volume_control"]="volume"
-
-    ["xgps"]="location"
-    ["xgpsspeed"]="location"
-
-    ["openrgb"]="led"
-
-    ["protontricks"]="gaming"
-
-    ["kde_connect_indicator"]="kde_connect"
-    ["kde_connect_sms"]="kde_connect"
-
-    ["sourcegit"]="git"
-
-    ["betterbird"]="mail"
-    ["thunderbird"]="mail"
-)
-
+# Manual slug -> icon overrides (the games-style map, now for everything)
+# live in $iconOverridesConf, not here — see that file for the format, how
+# to find a slug, and the full current list. It's read directly by the
+# Python engine in patch_all_desktop_icons.
 # ---------------------------------------------------------------------------
 # Color-token overrides — how to recolor each base icon.
 # Key   = icon base name (the resolved value above, or the raw slug).
@@ -536,17 +404,12 @@ patch_all_desktop_icons() {
     # difference between 1500+ subprocess spawns and none. Only files the
     # pass decides need something written get the actual bash-side writes
     # (ensure_icon/patch_desktop_file) below.
-    local iconOverridesFile categoryFallbacksFile handledFile matchesFile
-    iconOverridesFile=$(mktemp)
+    local categoryFallbacksFile handledFile matchesFile
     categoryFallbacksFile=$(mktemp)
     handledFile=$(mktemp)
     matchesFile=$(mktemp)
 
     local k
-    for k in "${!iconOverrides[@]}"; do
-        printf '%s\t%s\n' "$k" "${iconOverrides[$k]}"
-    done > "$iconOverridesFile"
-
     local entry
     for entry in "${categoryFallbacks[@]}"; do
         printf '%s\n' "$entry"
@@ -558,23 +421,32 @@ patch_all_desktop_icons() {
 
     [ "$dryRun" -eq 0 ] && echo "Scanning .desktop files..."
 
-    python3 - "$iconOverridesFile" "$categoryFallbacksFile" "$handledFile" \
+    python3 - "$iconOverridesConf" "$categoryFallbacksFile" "$handledFile" \
               "$gameIconsDir" "$iconsDir" "$catchallIcon" "$dryRun" "$matchesFile" \
               "${desktopDirs[@]}" << 'PYEOF'
 import os, re, sys
 
-iconOverridesFile, categoryFallbacksFile, handledFile, game_icons_dir, icons_dir, catchall_icon, dry_run, matchesFile = sys.argv[1:9]
+iconOverridesConf, categoryFallbacksFile, handledFile, game_icons_dir, icons_dir, catchall_icon, dry_run, matchesFile = sys.argv[1:9]
 desktop_dirs = sys.argv[9:]
 dry_run = dry_run == "1"
 
+# Read straight from the user-editable conf file — no bash-side conversion
+# step. Format: "slug = icon_base_name" per line, "#" comments, blank lines
+# ignored (see icon-overrides.conf for the full documentation). One pass,
+# no regex needed for the common case.
 icon_overrides = {}
-with open(iconOverridesFile) as f:
-    for line in f:
-        line = line.rstrip("\n")
-        if not line:
-            continue
-        k, v = line.split("\t", 1)
-        icon_overrides[k] = v
+if os.path.isfile(iconOverridesConf):
+    with open(iconOverridesConf) as f:
+        for line in f:
+            line = line.strip()
+            if not line or line[0] == "#":
+                continue
+            k, sep, v = line.partition("=")
+            if not sep:
+                continue
+            icon_overrides[k.strip()] = v.strip()
+else:
+    print(f"  warning: {iconOverridesConf} not found, no overrides loaded", file=sys.stderr)
 
 category_fallbacks = []
 with open(categoryFallbacksFile) as f:
@@ -741,7 +613,7 @@ else:
 PYEOF
 
     if [ "$dryRun" -eq 1 ]; then
-        rm -f "$iconOverridesFile" "$categoryFallbacksFile" "$handledFile" "$matchesFile"
+        rm -f "$categoryFallbacksFile" "$handledFile" "$matchesFile"
         return 0
     fi
 
@@ -800,7 +672,7 @@ PYEOF
         wait "$pid"
     done
 
-    rm -f "$iconOverridesFile" "$categoryFallbacksFile" "$handledFile" "$matchesFile"
+    rm -f "$categoryFallbacksFile" "$handledFile" "$matchesFile"
 }
 
 # ---------------------------------------------------------------------------
@@ -1110,7 +982,7 @@ patch_trash_icon() {
 # created bookmark (kdeconnectd writes it into user-places.xbel), not a
 # .desktop-driven app icon — and its bookmark:icon name is "kdeconnect"
 # (no underscore), a different name than the "kde_connect" the engine
-# already generates via iconOverrides for the app's own .desktop entries.
+# already generates via icon-overrides.conf for the app's own .desktop entries.
 # Exact-match icon lookup means that one-character difference is enough to
 # miss entirely. Same artwork, just also written under the name Dolphin
 # actually asks for here. Uses symbolicAccent (matugen's primary) rather than the

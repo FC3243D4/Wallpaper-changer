@@ -176,7 +176,17 @@ cmd_update_scripts() {
         "./scripts-linux/AspectRatioChecker.sh" \
         "./scripts-linux/ThemeRefresher.sh" \
         "./scripts-linux/GenerateWallpaperThumbnails.sh" \
-        "./scripts-linux/themeRefresherSupportScripts" \
+        "./scripts-linux/themeRefresherSupportScripts/appPatchers" \
+        "./scripts-linux/themeRefresherSupportScripts/svg" \
+        "./scripts-linux/themeRefresherSupportScripts/AppRestarter.sh" \
+        "./scripts-linux/themeRefresherSupportScripts/ColorChooser.sh" \
+        "./scripts-linux/themeRefresherSupportScripts/dominantcolor" \
+        "./scripts-linux/themeRefresherSupportScripts/GtkPatcher.sh" \
+        "./scripts-linux/themeRefresherSupportScripts/HyprLayoutPreservation.sh" \
+        "./scripts-linux/themeRefresherSupportScripts/IconPatcher.sh" \
+        "./scripts-linux/themeRefresherSupportScripts/KdePatcher.sh" \
+        "./scripts-linux/themeRefresherSupportScripts/RgbApply.sh" \
+        "./scripts-linux/themeRefresherSupportScripts/TrayIconPatcher.sh" \
         "$HOME/.config/WallpaperChanger/"
 
     chmod +x "$HOME/.config/WallpaperChanger"/*

@@ -275,7 +275,18 @@ patch_desktop_file() {
     local base
     base="$(basename "$file")"
     handledDesktops[$base]=1
-    local override="$HOME/.local/share/applications/$base"
+    local userDir="$HOME/.local/share/applications"
+    local override
+    # A file already inside the user dir — including subdirs such as
+    # wine/Programs/... — is edited IN PLACE. Copying it to the top level
+    # would create a second entry: the XDG desktop-file ID of
+    # wine/Programs/Foo/Foo.desktop is "wine-Programs-Foo-Foo.desktop", so a
+    # top-level Foo.desktop does NOT shadow it and the app shows up twice.
+    # Only files from system/flatpak dirs get a user-level override copy.
+    case "$file" in
+        "$userDir"/*) override="$file" ;;
+        *)            override="$userDir/$base" ;;
+    esac
     local current
     # If a user override already exists, that's what the desktop
     # actually reads — compare against it, not the system file,
@@ -287,9 +298,19 @@ patch_desktop_file() {
     fi
     if [ "$current" != "$iconName" ]; then
         mkdir -p "$HOME/.local/share/applications"
+        # Some installers (e.g. Autodesk-Unofficial) create their .desktop
+        # files mode 444. If WE own the file, temporarily add u+w and
+        # restore the original mode afterwards; files owned by someone else
+        # are still skipped.
+        local restoreMode=""
         if [ -f "$override" ] && [ ! -w "$override" ]; then
-            echo "  skipping $base (existing override not writable — likely created by something else with elevated privileges)"
-            return 1
+            if [ -O "$override" ]; then
+                restoreMode=$(stat -c %a "$override")
+                chmod u+w "$override"
+            else
+                echo "  skipping $base (existing override not writable — likely created by something else with elevated privileges)"
+                return 1
+            fi
         fi
         if [ ! -f "$override" ]; then
             cp "$file" "$override"
@@ -301,10 +322,25 @@ patch_desktop_file() {
             echo "$desktopOverrideMarker" >> "$override"
         fi
         if grep -q "^Icon=" "$override"; then
-            sed -i "s|^Icon=.*|Icon=$iconName|" "$override"
+            if [ "$override" = "$file" ] \
+               && ! grep -qxF "$desktopOverrideMarker" "$override" \
+               && ! grep -q "^#Icon=" "$override"; then
+                # Edited in place and NOT one of our copies (e.g. a Wine
+                # entry under applications/wine/): the Icon= line is the
+                # only record of the original icon, so keep it as a comment
+                # and add the patched one after it. Done once per file —
+                # later runs (and icon changes) only rewrite the active
+                # Icon= line, so the commented original is never clobbered.
+                # If Wine regenerates the file, the fresh Icon= is
+                # commented again on the next run.
+                sed -i "s|^Icon=\(.*\)|#Icon=\1\nIcon=$iconName|" "$override"
+            else
+                sed -i "s|^Icon=.*|Icon=$iconName|" "$override"
+            fi
         else
             echo "Icon=$iconName" >> "$override"
         fi
+        [ -n "$restoreMode" ] && chmod "$restoreMode" "$override"
         echo "  .desktop updated: $base (Icon: ${current:-<none>} -> $iconName)"
     fi
 }

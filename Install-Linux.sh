@@ -172,10 +172,13 @@ cmd_update_scripts() {
             "./scripts-linux/wayland/" "$HOME/.config/WallpaperChanger/"
     fi
 
-    copy_with_bar "Updating support scripts..." \
+    copy_with_bar "Updating wallpaper applicator and menu support scripts..." \
         "./scripts-linux/AspectRatioChecker.sh" \
         "./scripts-linux/ThemeRefresher.sh" \
         "./scripts-linux/GenerateWallpaperThumbnails.sh" \
+        "$HOME/.config/WallpaperChanger/"
+
+    copy_with_bar "Updating theme refresher support scripts..." \
         "./scripts-linux/themeRefresherSupportScripts/appPatchers" \
         "./scripts-linux/themeRefresherSupportScripts/svg" \
         "./scripts-linux/themeRefresherSupportScripts/AppRestarter.sh" \
@@ -187,7 +190,7 @@ cmd_update_scripts() {
         "./scripts-linux/themeRefresherSupportScripts/KdePatcher.sh" \
         "./scripts-linux/themeRefresherSupportScripts/RgbApply.sh" \
         "./scripts-linux/themeRefresherSupportScripts/TrayIconPatcher.sh" \
-        "$HOME/.config/WallpaperChanger/"
+        "$HOME/.config/WallpaperChanger/themeRefresherSupportScripts/"
 
     chmod +x "$HOME/.config/WallpaperChanger"/*
     chmod +x "$HOME/.config/WallpaperChanger/themeRefresherSupportScripts"/*

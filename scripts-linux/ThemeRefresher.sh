@@ -170,6 +170,10 @@ run_patchers() {
 
     time_step_bg "IconPatcher" "$supportDir/IconPatcher.sh" "$color"
     patcherPids+=("$!")
+    if command -v sonora >/dev/null 2>&1; then
+        time_step_bg "SonoraPatcher" "$supportDir/appPatchers/SonoraPatcher.sh"
+        patcherPids+=("$!")
+    fi
     if command -v code >/dev/null 2>&1; then
         time_step_bg "VscodePatcher" "$supportDir/appPatchers/VscodePatcher.sh" "$color"
         patcherPids+=("$!")
@@ -225,6 +229,19 @@ cmd_full() {
     apps[betterbird]="f|betterbird|betterbird|betterbird|eu.betterbird.Betterbird"
     apps[thunderbird]="f|thunderbird|thunderbird|thunderbird|org.mozilla.Thunderbird"
     apps[swaync]="x|swaync|swaync|swaync"
+
+    if command -v sonora >/dev/null 2>&1 \
+        && "$supportDir/appPatchers/SonoraPatcher.sh" --pending; then
+        sonoraPatcher="$supportDir/appPatchers/SonoraPatcher.sh"
+        # Must be read now: AppRestarter is about to kill the window.
+        export SONORA_WINDOW_STATE
+        SONORA_WINDOW_STATE=$("$sonoraPatcher" --window-state)
+        # A tray-only Sonora gets its window closed again right after launch,
+        # so don't make wait_for_hypr_classes wait for it.
+        sonoraClass="sonora"
+        [ "$SONORA_WINDOW_STATE" = "hidden" ] && sonoraClass=""
+        apps[sonora]="x|sonora|sonora|$sonoraPatcher --launch|$sonoraClass"
+    fi
 
     # HyprLayoutPreservation save (backgrounded above) must finish before
     # AppRestarter starts killing/relaunching windows.

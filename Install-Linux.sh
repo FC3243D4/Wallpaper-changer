@@ -199,6 +199,10 @@ cmd_update_scripts() {
         "./scripts-linux/themeRefresherSupportScripts/trayIconPatcherSupportScripts"/* \
         "$HOME/.config/WallpaperChanger/themeRefresherSupportScripts/trayIconPatcherSupportScripts/"
 
+    copy_with_bar "Updating hypr layout preservation support scripts..." \
+        "./scripts-linux/themeRefresherSupportScripts/hyprLayoutPreservationSupportScripts"/* \
+        "$HOME/.config/WallpaperChanger/themeRefresherSupportScripts/hyprLayoutPreservationSupportScripts"
+
     copy_with_bar "Updating base icons..." \
         "./scripts-linux/themeRefresherSupportScripts/svg/" \
         "$HOME/.config/WallpaperChanger/themeRefresherSupportScripts/svg/"

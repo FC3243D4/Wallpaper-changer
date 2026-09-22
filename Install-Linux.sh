@@ -191,6 +191,14 @@ cmd_update_scripts() {
         "./scripts-linux/themeRefresherSupportScripts/TrayIconPatcher.sh" \
         "$HOME/.config/WallpaperChanger/themeRefresherSupportScripts/"
 
+    copy_with_bar "Updating icon patcher support scripts..." \
+        "./scripts-linux/themeRefresherSupportScripts/iconPatcherSupportScripts"/* \
+        "$HOME/.config/WallpaperChanger/themeRefresherSupportScripts/iconPatcherSupportScripts/"
+
+    copy_with_bar "Updating tray icon patcher support scripts..." \
+        "./scripts-linux/themeRefresherSupportScripts/trayIconPatcherSupportScripts"/* \
+        "$HOME/.config/WallpaperChanger/themeRefresherSupportScripts/trayIconPatcherSupportScripts/"
+
     copy_with_bar "Updating base icons..." \
         "./scripts-linux/themeRefresherSupportScripts/svg/" \
         "$HOME/.config/WallpaperChanger/themeRefresherSupportScripts/svg/"

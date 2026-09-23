@@ -186,15 +186,17 @@ fi
 # anything else in this script. Launched here so they run for the whole
 # rest of the script instead of waiting their turn at the end; waited on
 # right before the final "Icons patched" line.
-time_step_bg "patch_wlogout_icons" patch_wlogout_icons
+time_step_bg "WlogoutIconPatchers.sh" patch_wlogout_icons
 wlogoutPid=$!
-time_step_bg "patch_osd_icons" patch_osd_icons
+time_step_bg "SwayIconsPatcher.sh" patch_osd_icons
 osdPid=$!
 
 # Prune stale overrides before anything else scans desktopDirs, so a
 # removed entry doesn't shadow a nonexistent original for the rest of
 # this run either.
 time_step "cleanup_stale_desktop_overrides" cleanup_stale_desktop_overrides
+
+#----------------------------- BreezeIconsPatcher.sh -----------------------------
 
 # Full breeze-dark theme pass first — recolors every accent/highlight icon
 # across the whole upstream theme. Dedicated + engine passes below write
@@ -209,15 +211,21 @@ time_step "patch_inode_directory_icon"     patch_inode_directory_icon
 time_step "patch_system_file_manager_icon" patch_system_file_manager_icon
 time_step "patch_preferences_system_icon"  patch_preferences_system_icon
 time_step "patch_dolphin_icon"             patch_dolphin_icon
-time_step "patch_cachyos_hello_icon"       patch_cachyos_hello_icon
-#patch_cachyos_kernel_manager_icon
-time_step "patch_discord_vesktop_icons"    patch_discord_vesktop_icons
-#patch_nativmix_icon
-#time_step "patch_orcaslicer_icon"          patch_orcaslicer_icon
-#patch_conky_icon
+
+#----------------------------- CachyOsIconsPatcher.sh ----------------------------
+
+time_step "patch_cachyos_hello_icon"            patch_cachyos_hello_icon
+#time_step "patch_cachyos_kernel_manager_icon"   patch_cachyos_kernel_manager_icon
+
+#---------------------------------------------------------------------------------
+
+time_step "DiscordVesktopIconPatcher.sh"    patch_discord_vesktop_icons
+#time_step "NativmixIconPatcher.sh"          patch_nativmix_icon
+#time_step "patch_orcaslicer_icon"           patch_orcaslicer_icon
+#time_step "ConkyIconPatcher.sh"             patch_conky_icon
 
 # The generic engine — everything else, games included
-time_step "patch_all_desktop_icons" patch_all_desktop_icons
+time_step "DesktopEntriesPatcher.sh" patch_all_desktop_icons
 
 # Tray icons — split into its own file, see TrayIconPatcher.sh
 time_step "TrayIconPatcher.sh" "$supportDir/TrayIconPatcher.sh" "$color"

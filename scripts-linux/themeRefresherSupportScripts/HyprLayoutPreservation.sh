@@ -32,9 +32,69 @@ supportScriptsDir="$HOME/.config/WallpaperChanger/themeRefresherSupportScripts/h
 # their internal position is forgotten before being reinserted in order.
 dwindleScratchWorkspace="special:layoutscratch"
 
+#----------------------------------------------------- Utilities -----------------------------------------------------
+
 get_layout_mode() {
     hyprctl getoption general:layout -j | jq -r '.str'
 }
+
+# Extracts the class field from an "address:class[:extra:fields...]" entry.
+# Safe for plain "address:class" pairs too (no-op if there's no further colon).
+extract_class() {
+    local entry="$1"
+    local rest="${entry#*:}"
+    echo "${rest%%:*}"
+}
+
+# Resolves a saved (address, class) pair against a SNAPSHOT of
+# `hyprctl clients -j` output passed in by the caller (never fetched
+# here), using one strategy throughout this script:
+#   - 0 current matches -> nothing found, caller should skip
+#   - 1 current match    -> unambiguous; selector "class:$class"
+#   - 2+ current matches -> only usable if the exact saved (address+class)
+#                           pair is still among them -> "address:0x...";
+#                           otherwise ambiguous, nothing found
+# Class matching is the default and is safe by construction (no risk of a
+# killed app's freed address being recycled for an entirely different
+# app's new window). Address is only used to disambiguate when multiple
+# windows currently share the saved class.
+#
+# Prints 3 lines on success (empty output on failure):
+#   1. selector        ("class:X" or "address:0x...")
+#   2. current address  (may differ from the saved one if stale)
+#   3. current workspace id
+# Callers pick whichever lines they need with `sed -n 'Np'` — pure
+# in-memory JSON filtering, so calling this repeatedly against the same
+# cached snapshot costs nothing extra.
+#   $1 - saved address
+#   $2 - saved class
+#   $3 - clients JSON snapshot (output of `hyprctl clients -j`)
+resolve_client() {
+    local addr="$1" class="$2" clientsJson="$3"
+    printf '%s' "$clientsJson" | python3 -c "
+import json, sys
+clients = json.load(sys.stdin)
+addr = '$addr'
+cls = '$class'.lower()
+matches = [c for c in clients if cls in c.get('class', '').lower()]
+target = None
+if len(matches) == 1:
+    target = matches[0]
+elif len(matches) > 1:
+    for c in matches:
+        if c['address'] == addr:
+            target = c
+            break
+if target is None:
+    sys.exit(0)
+sel = 'class:' + '$class' if len(matches) == 1 else 'address:' + target['address']
+print(sel)
+print(target['address'])
+print(target['workspace']['id'])
+" 2>/dev/null
+}
+
+#---------------------------------------------------------------------------------------------------------------------
 
 save_layout() {
     local currentWorkspace
@@ -236,62 +296,6 @@ for c in clients:
         echo "No layouts found to save"
         rm -f "$stateFile"
     fi
-}
-
-# Extracts the class field from an "address:class[:extra:fields...]" entry.
-# Safe for plain "address:class" pairs too (no-op if there's no further colon).
-extract_class() {
-    local entry="$1"
-    local rest="${entry#*:}"
-    echo "${rest%%:*}"
-}
-
-# Resolves a saved (address, class) pair against a SNAPSHOT of
-# `hyprctl clients -j` output passed in by the caller (never fetched
-# here), using one strategy throughout this script:
-#   - 0 current matches -> nothing found, caller should skip
-#   - 1 current match    -> unambiguous; selector "class:$class"
-#   - 2+ current matches -> only usable if the exact saved (address+class)
-#                           pair is still among them -> "address:0x...";
-#                           otherwise ambiguous, nothing found
-# Class matching is the default and is safe by construction (no risk of a
-# killed app's freed address being recycled for an entirely different
-# app's new window). Address is only used to disambiguate when multiple
-# windows currently share the saved class.
-#
-# Prints 3 lines on success (empty output on failure):
-#   1. selector        ("class:X" or "address:0x...")
-#   2. current address  (may differ from the saved one if stale)
-#   3. current workspace id
-# Callers pick whichever lines they need with `sed -n 'Np'` — pure
-# in-memory JSON filtering, so calling this repeatedly against the same
-# cached snapshot costs nothing extra.
-#   $1 - saved address
-#   $2 - saved class
-#   $3 - clients JSON snapshot (output of `hyprctl clients -j`)
-resolve_client() {
-    local addr="$1" class="$2" clientsJson="$3"
-    printf '%s' "$clientsJson" | python3 -c "
-import json, sys
-clients = json.load(sys.stdin)
-addr = '$addr'
-cls = '$class'.lower()
-matches = [c for c in clients if cls in c.get('class', '').lower()]
-target = None
-if len(matches) == 1:
-    target = matches[0]
-elif len(matches) > 1:
-    for c in matches:
-        if c['address'] == addr:
-            target = c
-            break
-if target is None:
-    sys.exit(0)
-sel = 'class:' + '$class' if len(matches) == 1 else 'address:' + target['address']
-print(sel)
-print(target['address'])
-print(target['workspace']['id'])
-" 2>/dev/null
 }
 
 source "$supportScriptsDir/DwindleLayoutWorkspaceRestorer.sh"

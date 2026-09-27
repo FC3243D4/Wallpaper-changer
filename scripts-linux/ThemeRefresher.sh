@@ -222,7 +222,7 @@ cmd_full() {
     apps[dolphin]="x|dolphin|dolphin|dolphin|dolphin"
     apps[ferdium]="f|electron.*ferdium-bin|electron.*ferdium-bin|ferdium|ferdium"
     apps[sourcegit]="x|sourcegit|sourcegit|sourcegit|sourcegit"
-    apps[code]="x|code|code|code|code"
+    apps[code]="x|code|code|code|com.microsoft.VSCode"
     apps[vesktop]="x|vesktop|vesktop|vesktop -m|"
     apps[nativmix]="x|nativmix|nativmix|nativmix --hidden --restart|"
     apps[localsend]="x|localsend|localsend|localsend --hidden|"

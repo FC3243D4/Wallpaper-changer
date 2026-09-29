@@ -172,12 +172,40 @@ cmd_update_scripts() {
             "./scripts-linux/wayland/" "$HOME/.config/WallpaperChanger/"
     fi
 
-    copy_with_bar "Updating support scripts..." \
+    copy_with_bar "Updating applicator support scripts..." \
         "./scripts-linux/AspectRatioChecker.sh" \
         "./scripts-linux/ThemeRefresher.sh" \
         "./scripts-linux/GenerateWallpaperThumbnails.sh" \
-        "./scripts-linux/themeRefresherSupportScripts" \
         "$HOME/.config/WallpaperChanger/"
+
+    copy_with_bar "Updating theme refresher support scripts..." \
+        "./scripts-linux/themeRefresherSupportScripts/appPatchers" \
+        "./scripts-linux/themeRefresherSupportScripts/AppRestarter.sh" \
+        "./scripts-linux/themeRefresherSupportScripts/ColorChooser.sh" \
+        "./scripts-linux/themeRefresherSupportScripts/dominantcolor" \
+        "./scripts-linux/themeRefresherSupportScripts/GtkPatcher.sh" \
+        "./scripts-linux/themeRefresherSupportScripts/HyprLayoutPreservation.sh" \
+        "./scripts-linux/themeRefresherSupportScripts/IconPatcher.sh" \
+        "./scripts-linux/themeRefresherSupportScripts/KdePatcher.sh" \
+        "./scripts-linux/themeRefresherSupportScripts/RgbApply.sh" \
+        "./scripts-linux/themeRefresherSupportScripts/TrayIconPatcher.sh" \
+        "$HOME/.config/WallpaperChanger/themeRefresherSupportScripts/"
+
+    copy_with_bar "Updating icon patcher support scripts..." \
+        "./scripts-linux/themeRefresherSupportScripts/iconPatcherSupportScripts"/* \
+        "$HOME/.config/WallpaperChanger/themeRefresherSupportScripts/iconPatcherSupportScripts/"
+
+    copy_with_bar "Updating tray icon patcher support scripts..." \
+        "./scripts-linux/themeRefresherSupportScripts/trayIconPatcherSupportScripts"/* \
+        "$HOME/.config/WallpaperChanger/themeRefresherSupportScripts/trayIconPatcherSupportScripts/"
+
+    copy_with_bar "Updating hypr layout preservation support scripts..." \
+        "./scripts-linux/themeRefresherSupportScripts/hyprLayoutPreservationSupportScripts"/* \
+        "$HOME/.config/WallpaperChanger/themeRefresherSupportScripts/hyprLayoutPreservationSupportScripts"
+
+    copy_with_bar "Updating base icons..." \
+        "./scripts-linux/themeRefresherSupportScripts/svg/" \
+        "$HOME/.config/WallpaperChanger/themeRefresherSupportScripts/svg/"
 
     chmod +x "$HOME/.config/WallpaperChanger"/*
     chmod +x "$HOME/.config/WallpaperChanger/themeRefresherSupportScripts"/*

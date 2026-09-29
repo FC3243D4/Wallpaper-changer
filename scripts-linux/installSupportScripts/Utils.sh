@@ -18,15 +18,15 @@ copy_with_bar() {
         [ -z "$pct" ] && continue
         xfr=$(echo "$line" | grep -oE 'xfr#[0-9]+' | grep -oE '[0-9]+')
         total=$(echo "$line" | grep -oE 'to-chk=[0-9]+/[0-9]+' | grep -oE '/[0-9]+' | tr -d '/')
-        local filled=$(( pct * 40 / 100 ))
-        local empty=$(( 40 - filled ))
+        local filled=$(( pct * 60 / 100 ))
+        local empty=$(( 60 - filled ))
         local bar=""
         for ((i=0; i<filled; i++)); do bar+="█"; done
         for ((i=0; i<empty; i++)); do bar+="░"; done
         if [ -n "$xfr" ] && [ -n "$total" ]; then
-            printf "\r  [%s] %3d%%  (%s/%s files)" "$bar" "$pct" "$xfr" "$total"
+            printf "\r  %s %3d%%  %s/%s files" "$bar" "$pct" "$xfr" "$total"
         else
-            printf "\r  [%s] %3d%%" "$bar" "$pct"
+            printf "\r  %s %3d%%" "$bar" "$pct"
         fi
     done
     printf "\n"

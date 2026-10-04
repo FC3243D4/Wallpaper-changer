@@ -224,7 +224,6 @@ cmd_full() {
     apps[sourcegit]="x|sourcegit|sourcegit|sourcegit|sourcegit"
     apps[code]="x|code|code|code|com.microsoft.VSCode"
     apps[vesktop]="x|vesktop|vesktop|vesktop -m|"
-    apps[nativmix]="x|nativmix|nativmix|nativmix --hidden --restart|"
     apps[localsend]="x|localsend|localsend|localsend --hidden|"
     apps[betterbird]="f|betterbird|betterbird|betterbird|eu.betterbird.Betterbird"
     apps[thunderbird]="f|thunderbird|thunderbird|thunderbird|org.mozilla.Thunderbird"
@@ -241,6 +240,12 @@ cmd_full() {
         sonoraClass="sonora"
         [ "$SONORA_WINDOW_STATE" = "hidden" ] && sonoraClass=""
         apps[sonora]="x|sonora|sonora|$sonoraPatcher --launch|$sonoraClass"
+    fi
+
+    #Nativmix restart using built-in restart flag
+    if command -v nativmix >/dev/null 2>&1 && pgrep -f "nativmix" >/dev/null 2>&1; then
+        echo "nativmix running"
+        nativmix --restart --hidden &
     fi
 
     # HyprLayoutPreservation save (backgrounded above) must finish before

@@ -7,6 +7,8 @@
 #
 # Usage: ThemeRefresher.sh --full|--rgb|--softrun|--tray|--help
 
+LC_NUMERIC=C
+
 supportDir="$HOME/.config/WallpaperChanger/themeRefresherSupportScripts"
 
 # Runs "$@", prints its wall-clock time to stderr as "[timing] label: Ns".

@@ -86,37 +86,29 @@ EOF
 #   $1 (nameref) - array of "app|class" entries to wait for
 wait_for_hypr_classes() {
     local -n pending="$1"
-    local deadline=$(( $(date +%s) + 5 ))
-    local startTime=$(date +%s%N)
+    local deadline=$(( SECONDS + 5 ))
+    local startTime=$EPOCHREALTIME
 
-    while [ ${#pending[@]} -gt 0 ] && [ "$(date +%s)" -lt "$deadline" ]; do
-        local clientsJson
-        clientsJson=$(hyprctl clients -j)
+    while [ ${#pending[@]} -gt 0 ] && [ "$SECONDS" -lt "$deadline" ]; do
+        local openClasses
+        openClasses=$(hyprctl clients -j | jq -r --arg old "$preRestartAddrs" '($old | split("\n")) as $o | .[] | select(.address as $a | ($o | index($a)) == null) | .class | ascii_downcase')
         local -a stillPending=()
         for entry in "${pending[@]}"; do
             local app="${entry%%|*}"
             local windowClass="${entry#*|}"
-            if printf '%s' "$clientsJson" | python3 -c "
-import json, sys
-clients = json.load(sys.stdin)
-sys.exit(0 if any('$windowClass'.lower() in c.get('class', '').lower() for c in clients) else 1)
-" 2>/dev/null; then
-                local endTime=$(date +%s%N)
-                local elapsed=$(awk -v a="$startTime" -v b="$endTime" 'BEGIN{printf "%.3f", (b-a)/1000000000}')
-                echo "[timing] wait_for_hypr_class(${app}): ${elapsed}s" >&2
+            if [[ "$openClasses" == *"${windowClass,,}"* ]]; then
+                echo "[timing] wait_for_hypr_class(${app}): $(awk -v a="$startTime" -v b="$EPOCHREALTIME" 'BEGIN{printf "%.3f", b-a}')s" >&2
             else
                 stillPending+=("$entry")
             fi
         done
         pending=("${stillPending[@]}")
-        [ ${#pending[@]} -gt 0 ] && sleep 0.1
+        [ ${#pending[@]} -gt 0 ] && sleep 0.03
     done
 
-    # Anything left never appeared within the shared deadline — still emit
-    # a timing line for it.
     if [ ${#pending[@]} -gt 0 ]; then
-        local endTime=$(date +%s%N)
-        local elapsed=$(awk -v a="$startTime" -v b="$endTime" 'BEGIN{printf "%.3f", (b-a)/1000000000}')
+        local elapsed
+        elapsed=$(awk -v a="$startTime" -v b="$EPOCHREALTIME" 'BEGIN{printf "%.3f", b-a}')
         for entry in "${pending[@]}"; do
             echo "[timing] wait_for_hypr_class(${entry%%|*}): ${elapsed}s" >&2
         done
@@ -222,8 +214,8 @@ cmd_full() {
     apps[dolphin]="x|dolphin|dolphin|dolphin|dolphin"
     apps[ferdium]="f|electron.*ferdium-bin|electron.*ferdium-bin|ferdium|ferdium"
     apps[sourcegit]="x|sourcegit|sourcegit|sourcegit|sourcegit"
-    apps[code]="x|code|code|code|com.microsoft.VSCode"
-    apps[vesktop]="x|vesktop|vesktop|vesktop -m|"
+    apps[code]="x|code|code|code|com.microsoft.VSCode|0"
+    apps[vesktop]="x|vesktop|vesktop|vesktop -m||0"
     apps[localsend]="x|localsend|localsend|localsend --hidden|"
     apps[betterbird]="f|betterbird|betterbird|betterbird|eu.betterbird.Betterbird"
     apps[thunderbird]="f|thunderbird|thunderbird|thunderbird|org.mozilla.Thunderbird"
@@ -262,7 +254,7 @@ cmd_full() {
     if [ "$XDG_CURRENT_DESKTOP" == "Hyprland" ]; then
         declare -a hyprPending=()
         for app in "${running[@]}"; do
-            IFS='|' read -r _ _ _ _ windowClass <<< "${apps[$app]}"
+            IFS='|' read -r _ _ _ _ windowClass _ <<< "${apps[$app]}"
             [ -z "$windowClass" ] && continue
             echo "Waiting for $app to appear..."
             hyprPending+=("${app}|${windowClass}")

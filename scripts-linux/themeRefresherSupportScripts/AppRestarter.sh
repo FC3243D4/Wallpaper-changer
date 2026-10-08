@@ -42,9 +42,10 @@ defaultGrace=1
 restart_app() {
     local app="$1"
     local flag detectPattern launchCmd grace pids pid i maxIters allDead
+    local forced=0 t0=$EPOCHREALTIME                                   # NEW
     IFS='|' read -r flag detectPattern _ launchCmd _ grace <<< "${apps[$app]}"
     grace=${grace:-$defaultGrace}
-    maxIters=$(( grace * 20 ))  # polled every 0.05s
+    maxIters=$(( grace * 20 ))
 
     if [ "$flag" = "f" ]; then
         mapfile -t pids < <(pgrep -f "$detectPattern" 2>/dev/null)
@@ -67,8 +68,9 @@ restart_app() {
     done
 
     for pid in "${pids[@]}"; do
-        kill -0 "$pid" 2>/dev/null && kill -9 "$pid" 2>/dev/null
+        kill -0 "$pid" 2>/dev/null && { kill -9 "$pid" 2>/dev/null; forced=1; }   # NEW (was one line)
     done
+    echo "[timing] stop($app): $(awk -v a="$t0" -v b="$EPOCHREALTIME" 'BEGIN{printf "%.3f", b-a}')s$([ $forced -eq 1 ] && echo ' (hit grace, SIGKILL)')" >&2   # NEW
 
     $launchCmd >/dev/null 2>&1 &
     disown

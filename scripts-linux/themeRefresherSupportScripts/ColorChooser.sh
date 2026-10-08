@@ -1,31 +1,42 @@
 #!/usr/bin/env bash
 # ColorChooser.sh
-# Picks an accent color from the current wallpaper: tries dominantcolor
-# first, falls back to matugen's candidate source colors if that one is
-# too dark to read as an accent. Prints the winning hex (no '#') to stdout.
-# Usage: color=$(ColorChooser.sh)
+# Checks cache for wallpaper accent color. Falls back to dynamic calculation if missing.
 
 wallpaperPath="$HOME/.config/WallpaperChanger/.current_wallpaper"
+resolvedWallpaper=$(realpath "$wallpaperPath" 2>/dev/null || echo "$wallpaperPath")
+wallpaperName=$(basename "$resolvedWallpaper")
+cacheDir="$HOME/.cache/wallpaper-thumbnails"
+colorCacheFile="$cacheDir/${wallpaperName}.color"
 brightnessThreshold=20
 color=""
 
+# 1. Check cache first
+if [ -f "$colorCacheFile" ]; then
+    cachedColor=$(cat "$colorCacheFile" | tr -d '[:space:]')
+    if [[ "$cachedColor" =~ ^[0-9a-fA-F]{6}$ ]]; then
+        echo "Cache hit for $wallpaperName: #$cachedColor" >&2
+        echo "${cachedColor,,}"
+        exit 0
+    fi
+fi
+
+echo "Cache miss for $wallpaperName, generating color..." >&2
+
+# 2. Dynamic generation fallback
 colorLine="$($HOME/.config/WallpaperChanger/themeRefresherSupportScripts/dominantcolor -m 1 -n 2 -e black -p dominant "$wallpaperPath" | grep -E '#')"
 candidate=$(echo "$colorLine" | tr -d '#')
 
-r=$((16#${candidate:0:2}))
-g=$((16#${candidate:2:2}))
-b=$((16#${candidate:4:2}))
-brightness=$(( (r * 299 + g * 587 + b * 114) / 1000 ))
-echo "Candidate: #$candidate (brightness: $brightness)" >&2
-
-if [ "$brightness" -ge "$brightnessThreshold" ]; then
-    color="$candidate"
-    echo "Using dominantcolor candidate: #$color" >&2
+if [ -n "$candidate" ]; then
+    r=$((16#${candidate:0:2}))
+    g=$((16#${candidate:2:2}))
+    b=$((16#${candidate:4:2}))
+    brightness=$(( (r * 299 + g * 587 + b * 114) / 1000 ))
+    if [ "$brightness" -ge "$brightnessThreshold" ]; then
+        color="$candidate"
+    fi
 fi
 
 if [ -z "$color" ]; then
-    echo "dominantcolor candidate too dark, falling back to matugen" >&2
-
     for i in 0 1 2 3 4; do
         candidate=$(matugen image "$wallpaperPath" --source-color-index $i --dry-run 2>/dev/null \
             | grep -oP '#\K[0-9a-fA-F]{6}' | head -1)
@@ -41,23 +52,23 @@ if [ -z "$color" ]; then
         g=$((16#${candidate:2:2}))
         b=$((16#${candidate:4:2}))
         brightness=$(( (r * 299 + g * 587 + b * 114) / 1000 ))
-        echo "Candidate $i: #$candidate (brightness: $brightness)" >&2
 
         if [ "$brightness" -ge "$brightnessThreshold" ]; then
             color="$candidate"
-            echo "Using candidate $i: #$color" >&2
             break
         fi
     done
 fi
 
-# Defensive: keep only a trailing 6-hex-digit token, in case stray stdout
-# from a matugen hook got mixed into $color above.
 color=$(echo "$color" | grep -oP '[0-9a-fA-F]{6}' | tail -1)
 
 if [ ${#color} -ne 6 ] || ! echo "$color" | grep -qE '^[0-9a-fA-F]{6}$'; then
     echo "ERROR: Invalid color '$color'" >&2
     exit 1
 fi
+
+# 3. Save to cache for next time
+mkdir -p "$cacheDir"
+echo "${color,,}" > "$colorCacheFile"
 
 echo "${color,,}"

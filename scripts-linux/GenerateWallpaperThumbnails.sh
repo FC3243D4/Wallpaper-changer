@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 # GenerateWallpaperThumbnails.sh
-# Pre-generates thumbnails for all wallpapers to speed up the rofi
-# wallpaper menu. Run once manually; later runs only process new/changed
-# wallpapers.
+# Pre-generates thumbnails and color caches for all wallpapers.
 
 wallBaseDir="$HOME/Pictures/wallpapers"
 if [ -d "$wallBaseDir/16-9" ]; then
@@ -25,57 +23,98 @@ mapfile -d '' walls < <(find -L "$wallDir" -type f \( \
     -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" \) -print0)
 
 total=${#walls[@]}
-echo "Found $total wallpapers. Generating thumbnails with $jobs parallel jobs..."
+echo "Found $total wallpapers. Generating thumbnails and color cache with $jobs parallel jobs..."
 
 if [ "$total" -eq 0 ]; then
     echo "No wallpapers found, nothing to do."
     exit 0
 fi
 
-# Determine target aspect ratio: prefer the folder name (e.g. "16-9", "32-9"),
-# fall back to reading the actual dimensions of the first wallpaper.
 folderName=$(basename "$wallDir")
 if [[ "$folderName" =~ ^([0-9]+)-([0-9]+)$ ]]; then
     ratioW=${BASH_REMATCH[1]}
     ratioH=${BASH_REMATCH[2]}
-    echo "Using aspect ratio from folder name: ${ratioW}:${ratioH}"
 else
     dims=$(magick identify -format "%w %h" "${walls[0]}" 2>/dev/null)
     read -r ratioW ratioH <<< "$dims"
     if [ -z "$ratioW" ] || [ -z "$ratioH" ]; then
-        echo "Could not determine aspect ratio, defaulting to 16:9"
         ratioW=16
         ratioH=9
-    else
-        echo "Using aspect ratio from first image (${walls[0]##*/}): ${ratioW}:${ratioH}"
     fi
 fi
 
 thumbHeight=$(( thumbWidth * ratioH / ratioW ))
 thumbSize="${thumbWidth}x${thumbHeight}"
-echo "Thumbnail size: $thumbSize"
 
 generate_thumb() {
     local src="$1"
     local dst="$cacheDir/${src##*/}.jpg"
+    local colorDst="$cacheDir/${src##*/}.color"
+    local brightnessThreshold=20
 
-    if [ -f "$dst" ] && [ "$dst" -nt "$src" ]; then
+    # Skip if thumbnail and color cache both exist and are newer than source
+    if [ -f "$dst" ] && [ -f "$colorDst" ] && [ "$dst" -nt "$src" ]; then
         echo "SKIP"
         return
     fi
 
+    # 1. Generate thumbnail
     magick "$src" -thumbnail "$thumbSize^" -gravity center \
-        -extent "$thumbSize" -quality 80 "$dst" 2>/dev/null \
-        && echo "OK" || echo "FAIL"
+        -extent "$thumbSize" -quality 80 "$dst" 2>/dev/null || { echo "FAIL"; return; }
+
+    # 2. Extract color
+    local color=""
+    local colorLine
+    colorLine=$("$HOME/.config/WallpaperChanger/themeRefresherSupportScripts/dominantcolor" -m 1 -n 2 -e black -p dominant "$src" 2>/dev/null | grep -E '#')
+    local candidate=$(echo "$colorLine" | tr -d '#')
+
+    if [ -n "$candidate" ]; then
+        local r=$((16#${candidate:0:2}))
+        local g=$((16#${candidate:2:2}))
+        local b=$((16#${candidate:4:2}))
+        local brightness=$(( (r * 299 + g * 587 + b * 114) / 1000 ))
+        if [ "$brightness" -ge "$brightnessThreshold" ]; then
+            color="$candidate"
+        fi
+    fi
+
+    if [ -z "$color" ]; then
+        for i in 0 1 2 3 4; do
+            candidate=$(matugen image "$src" --source-color-index $i --dry-run 2>/dev/null \
+                | grep -oP '#\K[0-9a-fA-F]{6}' | head -1)
+
+            if [ -z "$candidate" ]; then
+                matugen image "$src" --source-color-index $i --quiet >/dev/null 2>&1
+                candidate=$(cat ~/.cache/matugen/source-color 2>/dev/null | tr -d '[:space:]')
+            fi
+
+            [ -z "$candidate" ] && continue
+
+            local r=$((16#${candidate:0:2}))
+            local g=$((16#${candidate:2:2}))
+            local b=$((16#${candidate:4:2}))
+            local brightness=$(( (r * 299 + g * 587 + b * 114) / 1000 ))
+
+            if [ "$brightness" -ge "$brightnessThreshold" ]; then
+                color="$candidate"
+                break
+            fi
+        done
+    fi
+
+    color=$(echo "$color" | grep -oP '[0-9a-fA-F]{6}' | tail -1)
+
+    if [ ${#color} -eq 6 ]; then
+        echo "${color,,}" > "$colorDst"
+        echo "OK"
+    else
+        echo "FAIL"
+    fi
 }
 
 export -f generate_thumb
 export cacheDir thumbSize
 
-# Precomputed once: slicing these is far cheaper than spawning `seq` on
-# every redraw, and emitting the whole bar via one printf means the
-# terminal gets a single atomic write instead of several partial ones
-# (the latter is what was causing the visible flicker).
 barWidth=40
 barHashes=$(printf '%*s' "$barWidth" '' | tr ' ' '#')
 barSpaces=$(printf '%*s' "$barWidth" '')
@@ -95,7 +134,7 @@ generated=0
 skipped=0
 failed=0
 lastDrawUs=0
-minIntervalUs=80000   # 80ms between redraws — smooth but not flickery
+minIntervalUs=80000
 
 while IFS= read -r line; do
     count=$((count + 1))
@@ -105,12 +144,6 @@ while IFS= read -r line; do
         FAIL) failed=$((failed + 1)) ;;
     esac
 
-    # Throttle by wall-clock time rather than by item count, so the bar
-    # updates at a smooth, constant rate whether you have 10 files or
-    # 10,000, instead of jumping in big infrequent chunks. EPOCHREALTIME
-    # is "seconds<sep>microseconds", where <sep> is the locale's decimal
-    # point (e.g. ',' under it_IT, not '.') — strip any non-digit rather
-    # than assuming '.', then diff as a plain integer without date/bc.
     nowUs="${EPOCHREALTIME//[^0-9]/}"
     if (( nowUs - lastDrawUs >= minIntervalUs )) || [ "$count" -eq "$total" ]; then
         draw_progress "$count" "$total"
@@ -120,6 +153,5 @@ done < <(printf '%s\0' "${walls[@]}" | \
     xargs -0 -P "$jobs" -I{} bash -c 'generate_thumb "$@"' _ {})
 
 echo
-
 echo "Done: $generated generated, $skipped skipped, $failed failed"
-echo "Thumbnails stored in: $cacheDir"
+echo "Thumbnails & color cache stored in: $cacheDir"

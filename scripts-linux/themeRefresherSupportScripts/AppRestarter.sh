@@ -76,18 +76,10 @@ restart_app() {
     disown
 }
 
-for app in "${!apps[@]}"; do
-    IFS='|' read -r flag detectPattern _ _ _ <<< "${apps[$app]}"
-    if [ "$flag" = "f" ]; then
-        found=$(pgrep -f "$detectPattern" 2>/dev/null)
-    else
-        found=$(pgrep -x "$detectPattern" 2>/dev/null)
-    fi
-    if [ -n "$found" ]; then
-        echo "$app running"
-        restart_app "$app" &
-    fi
+for app in "${running[@]}"; do
+    restart_app "$app" &
 done
+wait
 
 # Wait for every app's kill/relaunch job to finish before the special
 # cases below, which assume the main restart pass is done.

@@ -41,7 +41,7 @@ class WallpaperApp(QMainWindow):
         self.populate_tree()
 
     def scan_and_cache_wallpapers(self):
-        """Scans the directory structure once on startup to avoid disk lag."""
+        """Scans the directory structure once and registers wallpapers under non-numeric characters."""
         self.wallpaper_cache = {}
         if not os.path.exists(self.wall_dir):
             return
@@ -57,15 +57,26 @@ class WallpaperApp(QMainWindow):
                         continue
                     
                     full_path = os.path.join(root, f)
-                    char_name = f.split('-')[0] if '-' in f else "General"
+                    
+                    # Extract characters, ignoring pure numbers (e.g., hahari-1.png -> ["hahari"])
+                    name_without_ext = os.path.splitext(f)[0]
+                    clean_name = name_without_ext[5:] if name_without_ext.lower().startswith("nsfw-") else name_without_ext
+                    parts = [c.strip() for c in clean_name.split('-') if c.strip()]
+                    
+                    # Filter out pure numbers from being treated as characters
+                    characters = [c for c in parts if not c.isdigit()]
+                    if not characters:
+                        characters = ["General"]
 
-                    # Populate cache entries
-                    self.wallpaper_cache.setdefault((None, None), []).append(full_path)
-                    self.wallpaper_cache.setdefault((series, None), []).append(full_path)
-                    self.wallpaper_cache.setdefault((series, char_name), []).append(full_path)
+                    # Populate cache entries for all associated characters
+                    for char_name in characters:
+                        self.wallpaper_cache.setdefault((None, None), []).append(full_path)
+                        self.wallpaper_cache.setdefault((series, None), []).append(full_path)
+                        self.wallpaper_cache.setdefault((series, char_name), []).append(full_path)
 
+        # Deduplicate and sort lists
         for key in self.wallpaper_cache:
-            self.wallpaper_cache[key].sort()
+            self.wallpaper_cache[key] = sorted(list(set(self.wallpaper_cache[key])))
 
     def init_ui(self):
         central_widget = QWidget()

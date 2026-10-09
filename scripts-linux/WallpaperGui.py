@@ -1,12 +1,12 @@
 import os
 import random
 import sys
-from PyQt6.QtCore import Qt, QSize, QLoggingCategory
+from PyQt6.QtCore import Qt, QSize, QLoggingCategory, QTimer
 from PyQt6.QtGui import QPixmap, QIcon, QImageReader
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QHBoxLayout, QVBoxLayout,
     QTreeWidget, QTreeWidgetItem, QLabel, QListWidget, QListWidgetItem,
-    QPushButton, QCheckBox, QSplitter, QMessageBox, QWidget
+    QPushButton, QCheckBox, QSplitter, QMessageBox, QWidget, QLineEdit
 )
 
 # Suppress harmless Wayland text-input warnings
@@ -36,6 +36,12 @@ class WallpaperApp(QMainWindow):
         # Fast lookup cache for 11k+ wallpapers: maps (series, character) -> list of file paths
         self.wallpaper_cache = {}
 
+        # Debounce timer for smooth typing with 11k+ items
+        self.search_timer = QTimer()
+        self.search_timer.setSingleShot(True)
+        self.search_timer.setInterval(300)  # Wait 300ms after user stops typing
+        self.search_timer.timeout.connect(self.execute_search)
+
         self.scan_and_cache_wallpapers()
         self.init_ui()
         self.populate_tree()
@@ -58,23 +64,20 @@ class WallpaperApp(QMainWindow):
                     
                     full_path = os.path.join(root, f)
                     
-                    # Extract characters, ignoring pure numbers (e.g., hahari-1.png -> ["hahari"])
+                    # Extract characters, ignoring pure numbers
                     name_without_ext = os.path.splitext(f)[0]
                     clean_name = name_without_ext[5:] if name_without_ext.lower().startswith("nsfw-") else name_without_ext
                     parts = [c.strip() for c in clean_name.split('-') if c.strip()]
                     
-                    # Filter out pure numbers from being treated as characters
                     characters = [c for c in parts if not c.isdigit()]
                     if not characters:
                         characters = ["General"]
 
-                    # Populate cache entries for all associated characters
                     for char_name in characters:
                         self.wallpaper_cache.setdefault((None, None), []).append(full_path)
                         self.wallpaper_cache.setdefault((series, None), []).append(full_path)
                         self.wallpaper_cache.setdefault((series, char_name), []).append(full_path)
 
-        # Deduplicate and sort lists
         for key in self.wallpaper_cache:
             self.wallpaper_cache[key] = sorted(list(set(self.wallpaper_cache[key])))
 
@@ -90,13 +93,19 @@ class WallpaperApp(QMainWindow):
         main_splitter.setHandleWidth(1)
         main_layout.addWidget(main_splitter)
 
-        # --- LEFT SIDEBAR (Series & Characters Tree View) ---
+        # --- LEFT SIDEBAR (Search, Toggles & Tree View) ---
         sidebar_widget = QWidget()
         sidebar_layout = QVBoxLayout(sidebar_widget)
         sidebar_layout.setContentsMargins(6, 6, 6, 6)
         sidebar_layout.setSpacing(6)
 
-        # Dual SFW & NSFW Checkboxes (Top-Left) with mutual enforcement
+        # Search Bar (Top above toggles)
+        self.search_bar = QLineEdit()
+        self.search_bar.setPlaceholderText("🔍 Search show or character...")
+        self.search_bar.textChanged.connect(self.on_search_text_changed)
+        sidebar_layout.addWidget(self.search_bar)
+
+        # Dual SFW & NSFW Checkboxes with mutual enforcement
         toggles_layout = QHBoxLayout()
         self.sfw_checkbox = QCheckBox("SFW")
         self.nsfw_checkbox = QCheckBox("NSFW")
@@ -228,6 +237,57 @@ class WallpaperApp(QMainWindow):
         all_items_root.setSelected(True)
         self.populate_grid()
 
+    def on_search_text_changed(self, text):
+        self.search_timer.start()
+
+    def execute_search(self):
+        query = self.search_bar.text().strip().lower()
+        
+        if not query:
+            for i in range(self.tree.topLevelItemCount()):
+                top_item = self.tree.topLevelItem(i)
+                top_item.setHidden(False)
+                for j in range(top_item.childCount()):
+                    top_item.child(j).setHidden(False)
+                if i == 0:
+                    top_item.setExpanded(True)
+                else:
+                    self.tree.collapseItem(top_item)
+            self.populate_grid()
+            return
+
+        # Iterate through all top-level items in the tree (skipping index 0 which is "All Wallpapers")
+        for i in range(self.tree.topLevelItemCount()):
+            top_item = self.tree.topLevelItem(i)
+            if i == 0:
+                top_item.setHidden(False)
+                continue
+
+            series_name = top_item.text(0).lower()
+            series_matches = query in series_name
+
+            any_char_matched = False
+            for j in range(top_item.childCount()):
+                char_item = top_item.child(j)
+                char_name = char_item.text(0).lower()
+                char_matches = query in char_name
+                
+                if series_matches or char_matches:
+                    char_item.setHidden(False)
+                    any_char_matched = True
+                else:
+                    char_item.setHidden(True)
+
+            if series_matches or any_char_matched:
+                top_item.setHidden(False)
+                top_item.setExpanded(True)
+                self.tree.expandItem(top_item)
+            else:
+                top_item.setHidden(True)
+                self.tree.collapseItem(top_item)
+
+        self.populate_grid()
+
     def on_sfw_toggled(self, state):
         if self._updating_checkboxes:
             return
@@ -247,6 +307,7 @@ class WallpaperApp(QMainWindow):
         self.populate_grid()
 
     def get_filtered_pictures(self):
+        search_query = self.search_bar.text().strip().lower()
         selected_items = self.tree.selectedItems()
         target_series = None
         target_char = None
@@ -264,15 +325,22 @@ class WallpaperApp(QMainWindow):
                 target_series = parent.parent().text(0)
                 target_char = parent.text(0)
 
-        cache_key = (target_series, target_char)
-        candidates = self.wallpaper_cache.get(cache_key, [])
-
-        if target_series and target_char is None:
-            candidates = []
+        candidates = []
+        if search_query and (not selected_items or selected_items[0].text(0) == "All Wallpapers"):
             for (s, c), plist in self.wallpaper_cache.items():
-                if s == target_series:
+                if s is not None and (search_query in s.lower() or (c is not None and search_query in c.lower())):
                     candidates.extend(plist)
             candidates = sorted(list(set(candidates)))
+        else:
+            cache_key = (target_series, target_char)
+            candidates = self.wallpaper_cache.get(cache_key, [])
+
+            if target_series and target_char is None:
+                candidates = []
+                for (s, c), plist in self.wallpaper_cache.items():
+                    if s == target_series:
+                        candidates.extend(plist)
+                candidates = sorted(list(set(candidates)))
 
         scope_has_sfw = any(not os.path.basename(p).lower().startswith("nsfw-") for p in candidates)
         scope_has_nsfw = any(os.path.basename(p).lower().startswith("nsfw-") for p in candidates)
@@ -296,6 +364,18 @@ class WallpaperApp(QMainWindow):
                 continue
             if not is_nsfw and not show_sfw:
                 continue
+            
+            if search_query:
+                path_parts = p.split(os.sep)
+                series_name_from_path = path_parts[-2].lower() if len(path_parts) >= 2 else ""
+                filename_tokens = [t.lower() for t in filename.split('-')]
+                
+                matches_series = search_query in series_name_from_path
+                matches_token = any(search_query in token for token in filename_tokens)
+                
+                if not (matches_series or matches_token):
+                    continue
+
             pics.append(p)
 
         self.all_pictures = pics
@@ -333,7 +413,11 @@ class WallpaperApp(QMainWindow):
 
         for pic in pics:
             filename = os.path.basename(pic)
-            thumb_path = os.path.join(self.cache_dir, filename + ".jpg")
+            rel_path = os.path.relpath(pic, self.wall_dir)
+            target_cache_sub = os.path.join(self.cache_dir, os.path.dirname(rel_path))
+            os.makedirs(target_cache_sub, exist_ok=True)
+            
+            thumb_path = os.path.join(target_cache_sub, filename + ".jpg")
             
             if not os.path.exists(thumb_path):
                 try:

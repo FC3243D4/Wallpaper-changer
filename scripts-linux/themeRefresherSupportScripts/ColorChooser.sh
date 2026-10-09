@@ -1,16 +1,26 @@
 #!/usr/bin/env bash
 # ColorChooser.sh
-# Checks cache for wallpaper accent color. Falls back to dynamic calculation if missing.
+# Checks structured cache for wallpaper accent color. Falls back to dynamic calculation if missing.
+
+wallBaseDir="$HOME/Pictures/wallpapers"
+if [ -d "$wallBaseDir/16-9" ]; then
+    wallDir="$wallBaseDir/16-9"
+else
+    wallDir=$(find "$wallBaseDir" -mindepth 1 -maxdepth 1 -type d | sort | head -n 1)
+fi
 
 wallpaperPath="$HOME/.config/WallpaperChanger/.current_wallpaper"
 resolvedWallpaper=$(realpath "$wallpaperPath" 2>/dev/null || echo "$wallpaperPath")
-wallpaperName=$(basename "$resolvedWallpaper")
+
 cacheDir="$HOME/.cache/wallpaper-thumbnails"
-colorCacheFile="$cacheDir/${wallpaperName}.color"
+relPath="${resolvedWallpaper#$wallDir/}"
+targetCacheDir="$cacheDir/$(dirname "$relPath")"
+wallpaperName=$(basename "$resolvedWallpaper")
+colorCacheFile="$targetCacheDir/${wallpaperName}.color"
 brightnessThreshold=20
 color=""
 
-# 1. Check cache first
+# 1. Check structured cache first
 if [ -f "$colorCacheFile" ]; then
     cachedColor=$(cat "$colorCacheFile" | tr -d '[:space:]')
     if [[ "$cachedColor" =~ ^[0-9a-fA-F]{6}$ ]]; then
@@ -67,8 +77,8 @@ if [ ${#color} -ne 6 ] || ! echo "$color" | grep -qE '^[0-9a-fA-F]{6}$'; then
     exit 1
 fi
 
-# 3. Save to cache for next time
-mkdir -p "$cacheDir"
+# 3. Save to structured cache for next time
+mkdir -p "$targetCacheDir"
 echo "${color,,}" > "$colorCacheFile"
 
 echo "${color,,}"

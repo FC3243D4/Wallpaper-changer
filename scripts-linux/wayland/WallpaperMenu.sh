@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # /* ---- 💫 https://github.com/JaKooLit 💫 ---- */
 # WallpaperMenu.sh (Wayland)
-# Rofi menu for picking a wallpaper (or "random"), showing cached
+# Rofi menu for picking a wallpaper (or "random"), showing structured cached
 # thumbnails where available and generating them on the fly otherwise.
 
 get_monitor_info() {
@@ -11,8 +11,8 @@ get_monitor_info() {
         monitorHeight=$(hyprctl monitors -j | jq -r --arg mon "$focusedMonitor" '.[] | select(.name == $mon) | .height')
     elif command -v swaymsg &>/dev/null; then
         focusedMonitor=$(swaymsg -t get_outputs | jq -r '.[] | select(.focused) | .name')
-        scaleFactor=$(swaymsg -t get_outputs | jq -r '.[] | select(.focused) | .scale')
-        monitorHeight=$(swaymsg -t get_outputs | jq -r '.[] | select(.focused) | .current_mode.height')
+        scaleFactor=$(swaymsg -t get_outputs | jq -r --arg mon "$focusedMonitor" '.[] | select(.focused) | .scale')
+        monitorHeight=$(swaymsg -t get_outputs | jq -r --arg mon "$focusedMonitor" '.[] | select(.focused) | .current_mode.height')
     elif command -v wlr-randr &>/dev/null; then
         focusedMonitor=$(wlr-randr --json | jq -r '.[0].name')
         scaleFactor=$(wlr-randr --json | jq -r '.[0].scale')
@@ -35,7 +35,6 @@ else
         echo "No '16-9' folder found and no subfolders exist under $wallBaseDir, exiting..."
         exit 1
     fi
-    echo "'16-9' folder not found, falling back to: $wallDir"
 fi
 cacheDir="$HOME/.cache/wallpaper-thumbnails"
 
@@ -66,33 +65,37 @@ randomPicName=". random"
 # Rofi command
 rofiCommand="rofi -i -show -dmenu -config $rofiTheme -theme-str $rofiOverride"
 
-# Pre-load all existing thumbnail names into an associative array (one
-# readdir vs 11k stat calls)
-declare -A thumbExists
-while IFS= read -r f; do
-    thumbExists["$f"]=1
-done < <(find "$cacheDir" -maxdepth 1 -name "*.jpg" -printf "%f\n" 2>/dev/null)
-
-# Build sorted menu using pure bash string ops (no subshells in the loop)
 menu() {
+    # Sort options
     IFS=$'\n' sortedOptions=($(sort <<<"${pics[*]}"))
 
+    # Helper function to get structured cache path for a given picture
+    get_thumb_path() {
+        local pic="$1"
+        local relPath="${pic#$wallDir/}"
+        local targetDir="$cacheDir/$(dirname "$relPath")"
+        echo "$targetDir/$(basename "$pic").jpg"
+    }
+
     # Random entry
-    local randomKey="${randomPic##*/}.jpg"
-    if [ -n "${thumbExists[$randomKey]+x}" ]; then
-        printf "%s\x00icon\x1f%s\n" "$randomPicName" "$cacheDir/$randomKey"
+    local randomThumb
+    randomThumb=$(get_thumb_path "$randomPic")
+    if [ -f "$randomThumb" ]; then
+        printf "%s\x00icon\x1f%s\n" "$randomPicName" "$randomThumb"
     else
         printf "%s\x00icon\x1f%s\n" "$randomPicName" "$randomPic"
     fi
 
     for pic in "${sortedOptions[@]}"; do
-        local key="${pic##*/}.jpg"
-        if [ -n "${thumbExists[$key]+x}" ]; then
-            printf "%s\x00icon\x1f%s\n" "${pic##*/}" "$cacheDir/$key"
+        local thumbPath
+        thumbPath=$(get_thumb_path "$pic")
+        
+        if [ -f "$thumbPath" ]; then
+            printf "%s\x00icon\x1f%s\n" "${pic##*/}" "$thumbPath"
         else
-            # Generate thumbnail async for next time
+            mkdir -p "$(dirname "$thumbPath")"
             magick "$pic" -thumbnail "300x169^" -gravity center \
-                -extent "300x169" -quality 80 "$cacheDir/$key" 2>/dev/null &
+                -extent "300x169" -quality 80 "$thumbPath" 2>/dev/null &
             disown
             printf "%s\x00icon\x1f%s\n" "${pic##*/}" "$pic"
         fi
@@ -130,7 +133,7 @@ main() {
     selectedFile="/$selectedFile"
     echo "Selected file path: $selectedFile"
 
-    $HOME/.config/WallpaperChanger/WallpaperApplicator.sh $selectedFile
+    $HOME/.config/WallpaperChanger/WallpaperApplicator.sh "$selectedFile"
 }
 
 # Check if rofi is already running

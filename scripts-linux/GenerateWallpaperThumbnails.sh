@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # GenerateWallpaperThumbnails.sh
-# Pre-generates thumbnails and color caches for all wallpapers.
+# Pre-generates thumbnails and color caches for all wallpapers preserving folder structure.
 
 wallBaseDir="$HOME/Pictures/wallpapers"
 if [ -d "$wallBaseDir/16-9" ]; then
@@ -48,8 +48,14 @@ thumbSize="${thumbWidth}x${thumbHeight}"
 
 generate_thumb() {
     local src="$1"
-    local dst="$cacheDir/${src##*/}.jpg"
-    local colorDst="$cacheDir/${src##*/}.color"
+    
+    # Compute relative path from wallDir to maintain folder structure in cache
+    local relPath="${src#$wallDir/}"
+    local targetDir="$cacheDir/$(dirname "$relPath")"
+    mkdir -p "$targetDir"
+
+    local dst="$targetDir/$(basename "$src").jpg"
+    local colorDst="$targetDir/$(basename "$src").color"
     local brightnessThreshold=20
 
     # Skip if thumbnail and color cache both exist and are newer than source
@@ -113,7 +119,7 @@ generate_thumb() {
 }
 
 export -f generate_thumb
-export cacheDir thumbSize
+export cacheDir thumbSize wallDir
 
 barWidth=40
 barHashes=$(printf '%*s' "$barWidth" '' | tr ' ' '#')

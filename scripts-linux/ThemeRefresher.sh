@@ -235,6 +235,7 @@ cmd_full() {
     apps[dolphin]="x|dolphin|dolphin|dolphin|dolphin"
     apps[ferdium]="f|electron.*ferdium-bin|electron.*ferdium-bin|ferdium|ferdium"
     apps[sourcegit]="x|sourcegit|sourcegit|sourcegit|sourcegit"
+    apps[gitcomet]="x|gitcomet|gitcomet|gitcomet|gitcomet"
     apps[code]="x|code|code|code|com.microsoft.VSCode|0"
     apps[vesktop]="x|vesktop|vesktop|vesktop -m||0"
     apps[localsend]="x|localsend|localsend|localsend --hidden|"

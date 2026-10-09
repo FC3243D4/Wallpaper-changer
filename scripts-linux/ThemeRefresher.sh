@@ -258,7 +258,7 @@ cmd_full() {
     # STEP 4: Handle nativmix restart *after* patches and kills are completely settled
     if command -v nativmix >/dev/null 2>&1; then
         echo "Restarting nativmix with updated theme"
-        sleep 1 && nativmix --restart --hidden &
+        sleep 2 && nativmix --restart --hidden &
         disown
     fi
 

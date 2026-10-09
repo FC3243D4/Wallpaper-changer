@@ -183,18 +183,12 @@ run_patchers() {
 }
 
 cmd_full() {
-    # Save Hyprland layout state before any restarts. Backgrounded: it
-    # touches neither color nor any theme file, so ColorChooser doesn't
-    # need to wait on it — it only needs to finish before AppRestarter
-    # runs, much further down, so it gets this whole pipeline's worth of
-    # headroom for free. Waited on right before AppRestarter below.
     hyprSavePid=""
     if [ "$XDG_CURRENT_DESKTOP" == "Hyprland" ]; then
         time_step_bg "HyprLayoutPreservation save" "$supportDir/HyprLayoutPreservation.sh" save
         hyprSavePid=$!
     fi
 
-    # Choosing the color is genuinely serial — every patcher below needs it.
     color=$(time_step "ColorChooser" "$supportDir/ColorChooser.sh")
     if [ $? -ne 0 ] || [ -z "$color" ]; then
         echo "ERROR: ColorChooser failed, aborting"
@@ -204,13 +198,6 @@ cmd_full() {
     color="${color,,}"
     accent="#$color"
     echo "Final color: $accent"
-
-    # Every patcher must be fully finished before AppRestarter (below)
-    # relaunches the apps they theme — a relaunch racing an in-flight
-    # patcher could load a half-written or stale config. Concurrent jobs'
-    # own stdout/stderr interleave line-by-line above; accepted tradeoff
-    # of running them in parallel.
-    run_patchers "$color"
 
     declare -A apps
     apps[dolphin]="x|dolphin|dolphin|dolphin|dolphin"
@@ -227,47 +214,65 @@ cmd_full() {
     if command -v sonora >/dev/null 2>&1 \
         && "$supportDir/appPatchers/SonoraPatcher.sh" --pending; then
         sonoraPatcher="$supportDir/appPatchers/SonoraPatcher.sh"
-        # Must be read now: AppRestarter is about to kill the window.
         export SONORA_WINDOW_STATE
         SONORA_WINDOW_STATE=$("$sonoraPatcher" --window-state)
-        # A tray-only Sonora gets its window closed again right after launch,
-        # so don't make wait_for_hypr_classes wait for it.
         sonoraClass="sonora"
         [ "$SONORA_WINDOW_STATE" = "hidden" ] && sonoraClass=""
         apps[sonora]="x|sonora|sonora|$sonoraPatcher --launch|$sonoraClass"
     fi
 
-    #Nativmix restart using built-in restart flag
-    if command -v nativmix >/dev/null 2>&1 && pgrep -f "nativmix" >/dev/null 2>&1; then
-        echo "nativmix running"
-        nativmix --restart --hidden &
-    fi
-
-    # HyprLayoutPreservation save (backgrounded above) must finish before
-    # AppRestarter starts killing/relaunching windows.
     [ -n "$hyprSavePid" ] && wait "$hyprSavePid"
 
-    # Sourced directly (not via time_step) so $running lands in THIS
-    # shell for the wait_for_hypr_classes call below.
-    appRestarterStart=$(date +%s%N)
+    # STEP 1: Kill apps immediately in the background
+    echo "Killing apps in background..."
+    export APPRESTARTER_MODE="kill"
     source "$supportDir/AppRestarter.sh"
-    appRestarterEnd=$(date +%s%N)
-    echo "[timing] AppRestarter: $(awk -v a="$appRestarterStart" -v b="$appRestarterEnd" 'BEGIN{printf "%.3f", (b-a)/1000000000}')s" >&2
+
+    if command -v onedrivegui >/dev/null 2>&1 && pgrep -f "onedrivegui" >/dev/null 2>&1; then
+        pkill -f "onedrivegui" &
+        pkill -f "onedrive .*--monitor" &
+    fi
+
+    if command -v spicetify >/dev/null 2>&1 && pgrep -x spotify >/dev/null 2>&1; then
+        pkill -x spotify &
+    fi
+
+    # STEP 2: Run patchers (includes IconPatcher and TrayIconPatcher if needed)
+    run_patchers "$color"
+    
+    # Ensure tray icons are explicitly patched with the new color before relaunching apps/panels
+    if [ -f "$supportDir/TrayIconPatcher.sh" ]; then
+        time_step "TrayIconPatcher.sh" "$supportDir/TrayIconPatcher.sh" "$color"
+    fi
+
+    # Ensure background kills are fully finished before launching anything new
+    wait
+
+    # STEP 3: Relaunch apps
+    appRestarterLaunchStart=$(date +%s%N)
+    export APPRESTARTER_MODE="relaunch"
+    source "$supportDir/AppRestarter.sh"
+    appRestarterLaunchEnd=$(date +%s%N)
+    echo "[timing] AppRestarter (launch): $(awk -v a="$appRestarterLaunchStart" -v b="$appRestarterLaunchEnd" 'BEGIN{printf "%.3f", (b-a)/1000000000}')s" >&2
+
+    # STEP 4: Handle nativmix restart *after* patches and kills are completely settled
+    if command -v nativmix >/dev/null 2>&1; then
+        echo "Restarting nativmix with updated theme"
+        sleep 1 && nativmix --restart --hidden &
+        disown
+    fi
 
     if [ "$XDG_CURRENT_DESKTOP" == "Hyprland" ]; then
         declare -a hyprPending=()
         for app in "${running[@]}"; do
             IFS='|' read -r _ _ _ _ windowClass _ <<< "${apps[$app]}"
             [ -z "$windowClass" ] && continue
-            echo "Waiting for $app to appear..."
             hyprPending+=("${app}|${windowClass}")
         done
         [ ${#hyprPending[@]} -gt 0 ] && wait_for_hypr_classes hyprPending
     fi
 
-    # Desktop-environment-specific actions
     if [ "$XDG_CURRENT_DESKTOP" == "Hyprland" ]; then
-        # Restore Hyprland layout state after all restarts (Spotify included)
         time_step "HyprLayoutPreservation restore" "$supportDir/HyprLayoutPreservation.sh" restore
         time_step "waybar restart" systemctl --user restart waybar.service
     elif [ "$XDG_CURRENT_DESKTOP" == "KDE" ]; then

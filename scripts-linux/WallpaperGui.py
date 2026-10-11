@@ -1,6 +1,7 @@
 import os
 import random
 import sys
+import re
 from PyQt6.QtCore import Qt, QSize, QLoggingCategory, QTimer, QThread, pyqtSignal
 from PyQt6.QtGui import QPixmap, QIcon, QImageReader
 from PyQt6.QtWidgets import (
@@ -8,6 +9,9 @@ from PyQt6.QtWidgets import (
     QTreeWidget, QTreeWidgetItem, QLabel, QListWidget, QListWidgetItem,
     QPushButton, QCheckBox, QSplitter, QMessageBox, QWidget, QLineEdit
 )
+
+def natural_sort_key(s):
+    return [int(text) if text.isdigit() else text.lower() for text in re.split(r'(\d+)', s)]
 
 # Suppress harmless Wayland text-input warnings
 QLoggingCategory.setFilterRules("qt.qpa.wayland.textinput.warning=false")
@@ -50,7 +54,7 @@ class WallpaperScannerWorker(QThread):
                         wallpaper_cache.setdefault((series, char_name), []).append(full_path)
 
         for key in wallpaper_cache:
-            wallpaper_cache[key] = sorted(list(set(wallpaper_cache[key])))
+            wallpaper_cache[key] = sorted(list(set(wallpaper_cache[key])), key=natural_sort_key)
 
         self.finished.emit(wallpaper_cache)
 
@@ -346,7 +350,7 @@ class WallpaperApp(QMainWindow):
             for (s, c), plist in self.wallpaper_cache.items():
                 if s is not None and (search_query in s.lower() or (c is not None and search_query in c.lower())):
                     candidates.extend(plist)
-            candidates = sorted(list(set(candidates)))
+            candidates = sorted(list(set(candidates)), key=natural_sort_key)
         else:
             cache_key = (target_series, target_char)
             candidates = self.wallpaper_cache.get(cache_key, [])
@@ -356,7 +360,7 @@ class WallpaperApp(QMainWindow):
                 for (s, c), plist in self.wallpaper_cache.items():
                     if s == target_series:
                         candidates.extend(plist)
-                candidates = sorted(list(set(candidates)))
+                candidates = sorted(list(set(candidates)), key=natural_sort_key)
 
         scope_has_sfw = any(not os.path.basename(p).lower().startswith("nsfw-") for p in candidates)
         scope_has_nsfw = any(os.path.basename(p).lower().startswith("nsfw-") for p in candidates)

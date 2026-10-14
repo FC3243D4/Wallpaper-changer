@@ -4,19 +4,43 @@ import re
 import sys
 import sqlite3
 import subprocess
-from PyQt6.QtCore import Qt, QSize, QLoggingCategory, QTimer, QThread, pyqtSignal
-from PyQt6.QtGui import QPixmap, QIcon, QImageReader, QKeySequence, QShortcut
+import threading
+from collections import OrderedDict
+from contextlib import closing
+from functools import lru_cache
+from itertools import groupby
+
+from PyQt6.QtCore import (
+    Qt, QSize, QLoggingCategory, QTimer, QThread, QThreadPool, QRunnable,
+    QObject, QAbstractListModel, QModelIndex, pyqtSignal, pyqtSlot
+)
+from PyQt6.QtGui import (
+    QPixmap, QIcon, QImage, QImageReader, QKeySequence, QShortcut, QPixmapCache
+)
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QHBoxLayout, QVBoxLayout,
-    QTreeWidget, QTreeWidgetItem, QLabel, QListWidget, QListWidgetItem,
-    QPushButton, QCheckBox, QSplitter, QMessageBox, QWidget, QLineEdit
+    QTreeWidget, QTreeWidgetItem, QLabel, QListView, QAbstractItemView,
+    QPushButton, QCheckBox, QSplitter, QMessageBox, QWidget, QLineEdit,
+    QSizePolicy
 )
 
 # Suppress harmless Wayland text-input warnings
 QLoggingCategory.setFilterRules("qt.qpa.wayland.textinput.warning=false")
 
+THUMB_MAX = 600                       # longest side of a cached thumbnail
+PREVIEW_MAX = 2560                    # longest side the preview is decoded at
+THUMB_MEMORY_BUDGET = 192 * 1024**2   # decoded thumbnails kept in RAM (bytes)
+IMAGE_EXTS = ('png', 'jpg', 'jpeg')
+
+
+# --------------------------------------------------------------------------
+# Helpers
+# --------------------------------------------------------------------------
+@lru_cache(maxsize=None)
 def natural_sort_key(s):
-    return [int(text) if text.isdigit() else text.lower() for text in re.split(r'(\d+)', s)]
+    # Memoised: the same ~11k paths get re-sorted on every filter change.
+    return tuple(int(text) if text.isdigit() else text.lower() for text in re.split(r'(\d+)', s))
+
 
 def format_character_name(name):
     if '-' in name:
@@ -26,6 +50,7 @@ def format_character_name(name):
     else:
         return format_single_camel(name)
 
+
 def format_single_camel(s):
     if not s:
         return s
@@ -33,101 +58,345 @@ def format_single_camel(s):
     return spaced.lower()
 
 
+def ensure_schema(conn):
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS wallpapers (
+            path TEXT PRIMARY KEY,
+            series TEXT,
+            characters TEXT,
+            is_nsfw INTEGER,
+            is_group INTEGER,
+            mtime REAL
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_series ON wallpapers(series)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_nsfw ON wallpapers(is_nsfw)")
+    conn.commit()
+
+
+def read_scaled(path, max_dim):
+    """Decode an image no larger than max_dim on its longest side.
+
+    Uses QImageReader.setScaledSize so the decoder can downscale while reading
+    (JPEG does it in the DCT domain) instead of decoding the full 4K bitmap and
+    scaling afterwards. Works on QImage, so it is safe to call off the GUI thread.
+    """
+    reader = QImageReader(path)
+    size = reader.size()
+    if size.isValid() and (size.width() > max_dim or size.height() > max_dim):
+        size.scale(max_dim, max_dim, Qt.AspectRatioMode.KeepAspectRatio)
+        reader.setScaledSize(size)
+    return reader.read()
+
+
+def load_or_make_thumbnail(src, thumb_path):
+    """Return the thumbnail as a QImage, generating + caching it if needed."""
+    try:
+        if os.path.getmtime(thumb_path) >= os.path.getmtime(src):
+            img = QImage(thumb_path)
+            if not img.isNull():
+                return img
+    except OSError:
+        pass  # missing or unreadable -> regenerate
+
+    img = read_scaled(src, THUMB_MAX)
+    if img.isNull():
+        return img
+
+    try:
+        os.makedirs(os.path.dirname(thumb_path), exist_ok=True)
+        tmp = f"{thumb_path}.{os.getpid()}.{threading.get_ident()}.tmp"
+        if img.save(tmp, "JPG", 85):
+            os.replace(tmp, thumb_path)   # atomic: never leaves half-written thumbs
+    except OSError:
+        pass
+    return img
+
+
+# --------------------------------------------------------------------------
+# Background workers
+# --------------------------------------------------------------------------
 class WallpaperScannerWorker(QThread):
-    finished = pyqtSignal()
+    # (named scan_done, not "finished", so it no longer shadows QThread.finished)
+    scan_done = pyqtSignal(bool)   # True if the index changed
 
     def __init__(self, wall_dir, db_path):
         super().__init__()
         self.wall_dir = wall_dir
         self.db_path = db_path
+        self._abort = False
+
+    def abort(self):
+        self._abort = True
+
+    def _iter_images(self):
+        """Yield (series, filename, full_path, mtime) using os.scandir."""
+        try:
+            top_level = list(os.scandir(self.wall_dir))
+        except OSError:
+            return
+
+        for series_entry in top_level:
+            try:
+                if not series_entry.is_dir():
+                    continue
+            except OSError:
+                continue
+
+            stack = [series_entry.path]
+            while stack:
+                if self._abort:
+                    return
+                try:
+                    with os.scandir(stack.pop()) as it:
+                        for entry in it:
+                            try:
+                                if entry.is_dir(follow_symlinks=False):
+                                    stack.append(entry.path)
+                                elif entry.name.lower().endswith(IMAGE_EXTS) and entry.is_file():
+                                    yield (series_entry.name, entry.name, entry.path,
+                                           entry.stat().st_mtime)
+                            except OSError:
+                                continue
+                except OSError:
+                    continue
 
     def run(self):
         if not os.path.exists(self.wall_dir):
-            self.finished.emit()
+            self.scan_done.emit(False)
             return
 
         conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
+        try:
+            ensure_schema(conn)
 
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS wallpapers (
-                path TEXT PRIMARY KEY,
-                series TEXT,
-                characters TEXT,
-                is_nsfw INTEGER,
-                is_group INTEGER,
-                mtime REAL
-            )
-        """)
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_series ON wallpapers(series)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_nsfw ON wallpapers(is_nsfw)")
-        conn.commit()
+            # Existing paths + mtimes for fast incremental checks
+            db_records = dict(conn.execute("SELECT path, mtime FROM wallpapers"))
 
-        # Get existing paths and mtimes from DB for fast incremental checks
-        cursor.execute("SELECT path, mtime FROM wallpapers")
-        db_records = {row[0]: row[1] for row in cursor.fetchall()}
+            disk_paths = set()
+            batch_data = []
 
-        disk_paths = set()
-        batch_data = []
+            for series, f, full_path, mtime in self._iter_images():
+                disk_paths.add(full_path)
 
-        for series in os.listdir(self.wall_dir):
-            series_path = os.path.join(self.wall_dir, series)
-            if not os.path.isdir(series_path):
-                continue
+                # Already indexed and unchanged -> skip parsing
+                if db_records.get(full_path) == mtime:
+                    continue
 
-            for root, dirs, files in os.walk(series_path):
-                for f in files:
-                    if not f.lower().endswith(('png', 'jpg', 'jpeg')):
-                        continue
-                    
-                    full_path = os.path.join(root, f)
-                    try:
-                        mtime = os.path.getmtime(full_path)
-                    except OSError:
-                        continue
+                name_without_ext = os.path.splitext(f)[0]
+                is_nsfw = 1 if name_without_ext.lower().startswith("nsfw-") else 0
+                clean_name = name_without_ext[5:] if is_nsfw else name_without_ext
+                parts = [c.strip() for c in clean_name.split('-') if c.strip()]
 
-                    disk_paths.add(full_path)
+                characters = [c for c in parts if not c.isdigit()]
+                if not characters:
+                    characters = ["General"]
 
-                    # If file is already indexed and hasn't changed, skip parsing
-                    if full_path in db_records and db_records[full_path] == mtime:
-                        continue
+                char_key = "-".join(characters)
+                is_group = 1 if len(characters) > 1 else 0
 
-                    name_without_ext = os.path.splitext(f)[0]
-                    is_nsfw = 1 if name_without_ext.lower().startswith("nsfw-") else 0
-                    clean_name = name_without_ext[5:] if is_nsfw else name_without_ext
-                    parts = [c.strip() for c in clean_name.split('-') if c.strip()]
-                    
-                    characters = [c for c in parts if not c.isdigit()]
-                    if not characters:
-                        characters = ["General"]
+                batch_data.append((full_path, series, char_key, is_nsfw, is_group, mtime))
 
-                    char_key = "-".join(characters)
-                    is_group = 1 if len(characters) > 1 else 0
+            if self._abort:
+                return  # partial scan: don't touch the DB (would "delete" unseen files)
 
-                    batch_data.append((full_path, series, char_key, is_nsfw, is_group, mtime))
+            deleted_paths = set(db_records) - disk_paths
 
-        # Perform incremental batch update
-        if batch_data:
-            cursor.executemany("""
-                INSERT OR REPLACE INTO wallpapers (path, series, characters, is_nsfw, is_group, mtime)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, batch_data)
-
-        # Remove deleted files from DB
-        deleted_paths = set(db_records.keys()) - disk_paths
-        if deleted_paths:
-            cursor.executemany("DELETE FROM wallpapers WHERE path = ?", [(p,) for p in deleted_paths])
-
-        conn.commit()
-        conn.close()
-        self.finished.emit()
+            if batch_data:
+                conn.executemany("""
+                    INSERT OR REPLACE INTO wallpapers (path, series, characters, is_nsfw, is_group, mtime)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                """, batch_data)
+            if deleted_paths:
+                conn.executemany("DELETE FROM wallpapers WHERE path = ?",
+                                 [(p,) for p in deleted_paths])
+            conn.commit()
+            self.scan_done.emit(bool(batch_data or deleted_paths))
+        finally:
+            conn.close()
 
 
+class ThumbSignals(QObject):
+    ready = pyqtSignal(str, QImage)
+
+
+class ThumbJob(QRunnable):
+    def __init__(self, src, thumb_path, signals):
+        super().__init__()
+        self.src = src
+        self.thumb_path = thumb_path
+        self.signals = signals
+
+    def run(self):
+        img = QImage()
+        try:
+            img = load_or_make_thumbnail(self.src, self.thumb_path)
+        except Exception:
+            pass
+        self.signals.ready.emit(self.src, img)
+
+
+class PreviewSignals(QObject):
+    ready = pyqtSignal(int, QImage)
+
+
+class PreviewJob(QRunnable):
+    def __init__(self, path, seq, signals):
+        super().__init__()
+        self.path = path
+        self.seq = seq
+        self.signals = signals
+
+    def run(self):
+        img = QImage()
+        try:
+            img = read_scaled(self.path, PREVIEW_MAX)
+        except Exception:
+            pass
+        self.signals.ready.emit(self.seq, img)
+
+
+# --------------------------------------------------------------------------
+# Model: holds only the list of paths; thumbnails are loaded lazily for the
+# rows that are actually painted.
+# --------------------------------------------------------------------------
+class ThumbCache:
+    """Byte-budgeted LRU of decoded thumbnails (GUI thread only)."""
+
+    def __init__(self, max_bytes):
+        self._items = OrderedDict()   # path -> (pixmap, icon, nbytes)
+        self._bytes = 0
+        self._max = max_bytes
+
+    def get(self, key):
+        item = self._items.get(key)
+        if item is not None:
+            self._items.move_to_end(key)
+        return item
+
+    def put(self, key, pixmap):
+        nbytes = pixmap.width() * pixmap.height() * 4
+        old = self._items.pop(key, None)
+        if old:
+            self._bytes -= old[2]
+        self._items[key] = (pixmap, QIcon(pixmap), nbytes)
+        self._bytes += nbytes
+        while self._bytes > self._max and len(self._items) > 1:
+            _, (_, _, n) = self._items.popitem(last=False)
+            self._bytes -= n
+
+
+class WallpaperModel(QAbstractListModel):
+    def __init__(self, wall_dir, cache_dir, parent=None):
+        super().__init__(parent)
+        self.wall_dir = wall_dir
+        self.cache_dir = cache_dir
+
+        self.paths = []
+        self._rows = {}
+        self._cache = ThumbCache(THUMB_MEMORY_BUDGET)
+        self._inflight = set()
+        self._failed = set()
+        self._placeholder = QIcon()
+        self._priority = 0
+
+        self._signals = ThumbSignals(self)
+        self._signals.ready.connect(self._on_thumb_ready)
+
+        self._pool = QThreadPool(self)
+        self._pool.setMaxThreadCount(max(2, min(6, (os.cpu_count() or 4) - 1)))
+
+    # --- public API ---
+    def set_paths(self, paths):
+        self.beginResetModel()
+        self._pool.clear()            # drop queued, not-yet-started thumbnail jobs
+        self._inflight.clear()
+        self.paths = paths
+        self._rows = {p: i for i, p in enumerate(paths)}
+        self.endResetModel()
+
+    def row_of(self, path):
+        return self._rows.get(path)
+
+    def set_placeholder(self, icon):
+        self._placeholder = icon
+
+    def cached_pixmap(self, path):
+        item = self._cache.get(path)
+        return item[0] if item else None
+
+    def shutdown(self):
+        self._pool.clear()
+        self._pool.waitForDone(2000)
+
+    # --- Qt model interface ---
+    def rowCount(self, parent=QModelIndex()):
+        return 0 if parent.isValid() else len(self.paths)
+
+    def data(self, index, role=Qt.ItemDataRole.DisplayRole):
+        if not index.isValid():
+            return None
+        path = self.paths[index.row()]
+
+        if role == Qt.ItemDataRole.DisplayRole:
+            return os.path.basename(path)
+        if role == Qt.ItemDataRole.UserRole:
+            return path
+        if role == Qt.ItemDataRole.DecorationRole:
+            item = self._cache.get(path)
+            if item is not None:
+                return item[1]
+            self._request(path)
+            return self._placeholder
+        return None
+
+    # --- lazy thumbnail loading ---
+    def _thumb_path(self, pic):
+        rel_path = os.path.relpath(pic, self.wall_dir)
+        return os.path.join(self.cache_dir, rel_path + ".jpg")
+
+    def _request(self, path):
+        if path in self._inflight or path in self._failed:
+            return
+        self._inflight.add(path)
+        # Newest request gets the highest priority: whatever is on screen *now*
+        # is loaded first, not whatever was scrolled past a moment ago.
+        self._priority += 1
+        self._pool.start(ThumbJob(path, self._thumb_path(path), self._signals), self._priority)
+
+    @pyqtSlot(str, QImage)
+    def _on_thumb_ready(self, path, image):
+        self._inflight.discard(path)
+        if image.isNull():
+            self._failed.add(path)
+            return
+        self._cache.put(path, QPixmap.fromImage(image))
+        row = self._rows.get(path)
+        if row is not None:
+            idx = self.index(row)
+            self.dataChanged.emit(idx, idx, [Qt.ItemDataRole.DecorationRole])
+
+
+class PreviewLabel(QLabel):
+    resized = pyqtSignal()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self.resized.emit()
+
+
+# --------------------------------------------------------------------------
+# Main window
+# --------------------------------------------------------------------------
 class WallpaperApp(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Wallpaper Selector")
         self.resize(1300, 850)
+
+        # Scaled icons are cached by Qt in QPixmapCache (default ~10 MB), which is
+        # smaller than one screenful of thumbnails -> constant re-scaling on paint.
+        QPixmapCache.setCacheLimit(128 * 1024)
 
         self.wall_base_dir = os.path.expanduser("~/Pictures/wallpapers")
         if os.path.isdir(os.path.join(self.wall_base_dir, "16-9")):
@@ -141,15 +410,33 @@ class WallpaperApp(QMainWindow):
         os.makedirs(self.cache_dir, exist_ok=True)
 
         self.selected_wallpaper_path = None
-        self.all_pictures = []
         self._updating_checkboxes = False
-        self.display_to_raw_key = {}
+        self._populated = False
+        self._applied_state = None
+        self._aspect_ratio = None
+        self._layout_key = None
 
         # Debounce timer for smooth typing
         self.search_timer = QTimer()
         self.search_timer.setSingleShot(True)
         self.search_timer.setInterval(300)
         self.search_timer.timeout.connect(self.execute_search)
+
+        # Preview: debounce selection (arrow-key scrolling) and resizing
+        self._preview_seq = 0
+        self._preview_src = None
+        self.preview_timer = QTimer(self)
+        self.preview_timer.setSingleShot(True)
+        self.preview_timer.setInterval(60)
+        self.preview_timer.timeout.connect(self._start_preview_job)
+        self.preview_resize_timer = QTimer(self)
+        self.preview_resize_timer.setSingleShot(True)
+        self.preview_resize_timer.setInterval(40)
+        self.preview_resize_timer.timeout.connect(self._render_preview)
+        self.preview_pool = QThreadPool(self)
+        self.preview_pool.setMaxThreadCount(1)
+        self.preview_signals = PreviewSignals(self)
+        self.preview_signals.ready.connect(self._on_preview_decoded)
 
         # Keyboard shortcuts for Enter / Return to apply wallpaper instantly
         self.enter_shortcut_1 = QShortcut(QKeySequence(Qt.Key.Key_Return), self)
@@ -160,13 +447,27 @@ class WallpaperApp(QMainWindow):
         # 1. Build UI instantly
         self.init_ui()
 
-        # 2. Run incremental scanner worker in background thread
+        # 2. Show whatever the index already knows *right now*; the scan below
+        #    only refreshes it if something actually changed on disk.
+        with closing(sqlite3.connect(self.db_path)) as conn:
+            ensure_schema(conn)
+            has_rows = conn.execute("SELECT 1 FROM wallpapers LIMIT 1").fetchone() is not None
+        if has_rows:
+            self.populate_tree()
+
+        # 3. Run incremental scanner worker in background thread
         self.scanner_thread = WallpaperScannerWorker(self.wall_dir, self.db_path)
-        self.scanner_thread.finished.connect(self.on_scanning_finished)
+        self.scanner_thread.scan_done.connect(self.on_scanning_finished)
         self.scanner_thread.start()
 
-    def on_scanning_finished(self):
-        self.populate_tree()
+    # ---- convenience ----
+    @property
+    def all_pictures(self):
+        return self.model.paths
+
+    def on_scanning_finished(self, changed):
+        if changed or not self._populated:
+            self.populate_tree(restore_key=self._selected_tree_key(), preserve_grid=True)
 
     def init_ui(self):
         central_widget = QWidget()
@@ -192,19 +493,19 @@ class WallpaperApp(QMainWindow):
 
         toggles_layout = QHBoxLayout()
         toggles_layout.setSpacing(4)
-        
+
         self.sfw_checkbox = QCheckBox("SFW")
         self.nsfw_checkbox = QCheckBox("NSFW")
         self.group_categories_checkbox = QCheckBox("Group Categories")
-        
+
         self.sfw_checkbox.setChecked(True)
         self.nsfw_checkbox.setChecked(True)
         self.group_categories_checkbox.setChecked(False)
-        
+
         self.sfw_checkbox.stateChanged.connect(self.on_sfw_toggled)
         self.nsfw_checkbox.stateChanged.connect(self.on_nsfw_toggled)
         self.group_categories_checkbox.stateChanged.connect(self.on_group_categories_toggled)
-        
+
         toggles_layout.addWidget(self.sfw_checkbox)
         toggles_layout.addWidget(self.nsfw_checkbox)
         sidebar_layout.addLayout(toggles_layout)
@@ -232,14 +533,14 @@ class WallpaperApp(QMainWindow):
         self.random_btn.setStyleSheet("font-weight: bold;")
         self.random_btn.clicked.connect(self.select_random_wallpaper)
         top_bar_layout.addWidget(self.random_btn)
-        
+
         top_bar_layout.addStretch()
 
         self.apply_btn = QPushButton("Apply")
         self.apply_btn.clicked.connect(self.apply_wallpaper)
         self.cancel_btn = QPushButton("Cancel")
         self.cancel_btn.clicked.connect(self.close)
-        
+
         top_bar_layout.addWidget(self.apply_btn)
         top_bar_layout.addWidget(self.cancel_btn)
         right_layout.addLayout(top_bar_layout)
@@ -253,19 +554,27 @@ class WallpaperApp(QMainWindow):
         grid_layout = QVBoxLayout(grid_container)
         grid_layout.setContentsMargins(0, 0, 0, 0)
 
-        self.grid_widget = QListWidget()
-        self.grid_widget.setViewMode(QListWidget.ViewMode.IconMode)
-        self.grid_widget.setResizeMode(QListWidget.ResizeMode.Adjust)
-        self.grid_widget.setMovement(QListWidget.Movement.Static)
+        # Model/view instead of 11k QListWidgetItems: filter changes just swap a
+        # list of paths and only visible rows ever request a thumbnail.
+        self.model = WallpaperModel(self.wall_dir, self.cache_dir, self)
+
+        self.grid_widget = QListView()
+        self.grid_widget.setModel(self.model)
+        self.grid_widget.setViewMode(QListView.ViewMode.IconMode)
+        self.grid_widget.setResizeMode(QListView.ResizeMode.Adjust)
+        self.grid_widget.setMovement(QListView.Movement.Static)
         self.grid_widget.setSpacing(10)
-        
+        self.grid_widget.setUniformItemSizes(True)
+        self.grid_widget.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.grid_widget.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+
         self.grid_widget.setStyleSheet("""
-            QListWidget {
+            QListView {
                 border-radius: 8px;
                 border: 1px solid palette(mid);
                 background-color: palette(base);
             }
-            QListWidget::item {
+            QListView::item {
                 margin: 6px;
                 padding-top: 10px;
                 padding-bottom: 6px;
@@ -273,18 +582,18 @@ class WallpaperApp(QMainWindow):
                 padding-right: 6px;
                 border-radius: 6px;
             }
-            QListWidget::item:selected {
+            QListView::item:selected {
                 background-color: palette(highlight);
                 color: #ffffff;
                 border: 1px solid palette(highlight);
             }
-            QListWidget::item:hover {
+            QListView::item:hover {
                 background-color: palette(alternate-base);
                 border-radius: 6px;
             }
         """)
-        
-        self.grid_widget.itemSelectionChanged.connect(self.on_thumbnail_selected)
+
+        self.grid_widget.selectionModel().selectionChanged.connect(self.on_thumbnail_selected)
         grid_layout.addWidget(self.grid_widget)
         content_splitter.addWidget(grid_container)
 
@@ -292,9 +601,12 @@ class WallpaperApp(QMainWindow):
         preview_layout = QVBoxLayout(preview_container)
         preview_layout.setContentsMargins(0, 0, 0, 0)
 
-        self.preview_label = QLabel("Loading wallpapers...")
+        self.preview_label = PreviewLabel("Loading wallpapers...")
         self.preview_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.preview_label.setMinimumHeight(150)
+        # Ignore the pixmap's size hint so a big preview can't fight the splitter
+        self.preview_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Ignored)
+        self.preview_label.resized.connect(self.preview_resize_timer.start)
         preview_layout.addWidget(self.preview_label)
 
         content_splitter.addWidget(preview_container)
@@ -303,97 +615,115 @@ class WallpaperApp(QMainWindow):
         main_splitter.addWidget(right_widget)
         main_splitter.setSizes([280, 970])
 
-    def populate_tree(self):
+    # ------------------------------------------------------------------
+    # Tree
+    # ------------------------------------------------------------------
+    def _selected_tree_key(self):
+        items = self.tree.selectedItems()
+        return items[0].data(0, Qt.ItemDataRole.UserRole) if items else None
+
+    def populate_tree(self, restore_key=None, preserve_grid=False):
         if not os.path.exists(self.db_path):
             return
 
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-
-        self.tree.clear()
-        all_items_root = QTreeWidgetItem(self.tree, ["All Wallpapers"])
-        self.tree.addTopLevelItem(all_items_root)
-
-        cursor.execute("SELECT DISTINCT series FROM wallpapers WHERE series IS NOT NULL ORDER BY series")
-        series_rows = cursor.fetchall()
-
         separate_groups = self.group_categories_checkbox.isChecked()
-        self.display_to_raw_key.clear()
 
-        for (series,) in series_rows:
-            formatted_series = format_single_camel(series)
-            series_item = QTreeWidgetItem(self.tree, [formatted_series])
+        # One query instead of one per series
+        with closing(sqlite3.connect(self.db_path)) as conn:
+            rows = conn.execute(
+                "SELECT DISTINCT series, characters, is_group FROM wallpapers "
+                "WHERE series IS NOT NULL ORDER BY series, characters"
+            ).fetchall()
 
-            if separate_groups:
-                cursor.execute("SELECT DISTINCT characters FROM wallpapers WHERE series = ? ORDER BY characters", (series,))
-            else:
-                cursor.execute("SELECT DISTINCT characters FROM wallpapers WHERE series = ? AND is_group = 0 ORDER BY characters", (series,))
-            
-            char_rows = cursor.fetchall()
-            for (char_group_str,) in char_rows:
-                for char in char_group_str.split('-'):
-                    if not separate_groups:
-                        formatted_char = format_character_name(char)
-                        char_item = QTreeWidgetItem(series_item, [formatted_char])
-                        self.display_to_raw_key[(series, formatted_char)] = char
-                if separate_groups:
-                    formatted_char = format_character_name(char_group_str)
-                    char_item = QTreeWidgetItem(series_item, [formatted_char])
-                    self.display_to_raw_key[(series, formatted_char)] = char_group_str
+        items_by_key = {}
+        self.tree.setUpdatesEnabled(False)
+        try:
+            self.tree.clear()
+            all_items_root = QTreeWidgetItem(self.tree, ["All Wallpapers"])
+            all_items_root.setData(0, Qt.ItemDataRole.UserRole, ("all",))
+            items_by_key[("all",)] = all_items_root
 
-        conn.close()
-        self.tree.collapseAll()
-        all_items_root.setExpanded(True)
-        all_items_root.setSelected(True)
-        self.populate_grid()
+            for series, group_rows in groupby(rows, key=lambda r: r[0]):
+                series_item = QTreeWidgetItem(self.tree, [format_single_camel(series)])
+                series_key = ("series", series)
+                series_item.setData(0, Qt.ItemDataRole.UserRole, series_key)
+                items_by_key[series_key] = series_item
 
+                for _, char_group_str, is_group in group_rows:
+                    if separate_groups:
+                        entries = [(char_group_str, format_character_name(char_group_str))]
+                    elif is_group:
+                        continue
+                    else:
+                        entries = [(c, format_character_name(c)) for c in char_group_str.split('-')]
+
+                    for raw, display in entries:
+                        char_item = QTreeWidgetItem(series_item, [display])
+                        char_key = ("char", series, raw)
+                        char_item.setData(0, Qt.ItemDataRole.UserRole, char_key)
+                        items_by_key.setdefault(char_key, char_item)
+
+            self.tree.collapseAll()
+            all_items_root.setExpanded(True)
+
+            target = items_by_key.get(restore_key) if restore_key else None
+            (target or all_items_root).setSelected(True)
+            if target is not None and target.parent() is not None:
+                target.parent().setExpanded(True)
+                self.tree.scrollToItem(target)
+        finally:
+            self.tree.setUpdatesEnabled(True)
+
+        self._populated = True
+        self.populate_grid(preserve=preserve_grid)
+
+    # ------------------------------------------------------------------
+    # Search / filters
+    # ------------------------------------------------------------------
     def on_search_text_changed(self, text):
         self.search_timer.start()
 
     def execute_search(self):
         query = self.search_bar.text().strip().lower()
-        
-        if not query:
-            for i in range(self.tree.topLevelItemCount()):
-                top_item = self.tree.topLevelItem(i)
-                top_item.setHidden(False)
-                for j in range(top_item.childCount()):
-                    top_item.child(j).setHidden(False)
-                if i == 0:
-                    top_item.setExpanded(True)
-                else:
-                    self.tree.collapseItem(top_item)
-            self.populate_grid()
-            return
 
-        for i in range(self.tree.topLevelItemCount()):
-            top_item = self.tree.topLevelItem(i)
-            if i == 0:
-                top_item.setHidden(False)
-                continue
-
-            series_name = top_item.text(0).lower()
-            series_matches = query in series_name
-
-            any_char_matched = False
-            for j in range(top_item.childCount()):
-                char_item = top_item.child(j)
-                char_name = char_item.text(0).lower()
-                char_matches = query in char_name
-                
-                if series_matches or char_matches:
-                    char_item.setHidden(False)
-                    any_char_matched = True
-                else:
-                    char_item.setHidden(True)
-
-            if series_matches or any_char_matched:
-                top_item.setHidden(False)
-                top_item.setExpanded(True)
-                self.tree.expandItem(top_item)
+        self.tree.setUpdatesEnabled(False)
+        try:
+            if not query:
+                for i in range(self.tree.topLevelItemCount()):
+                    top_item = self.tree.topLevelItem(i)
+                    top_item.setHidden(False)
+                    for j in range(top_item.childCount()):
+                        top_item.child(j).setHidden(False)
+                    if i == 0:
+                        top_item.setExpanded(True)
+                    else:
+                        self.tree.collapseItem(top_item)
             else:
-                top_item.setHidden(True)
-                self.tree.collapseItem(top_item)
+                for i in range(self.tree.topLevelItemCount()):
+                    top_item = self.tree.topLevelItem(i)
+                    if i == 0:
+                        top_item.setHidden(False)
+                        continue
+
+                    series_matches = query in top_item.text(0).lower()
+
+                    any_char_matched = False
+                    for j in range(top_item.childCount()):
+                        char_item = top_item.child(j)
+                        if series_matches or query in char_item.text(0).lower():
+                            char_item.setHidden(False)
+                            any_char_matched = True
+                        else:
+                            char_item.setHidden(True)
+
+                    if series_matches or any_char_matched:
+                        top_item.setHidden(False)
+                        top_item.setExpanded(True)
+                    else:
+                        top_item.setHidden(True)
+                        self.tree.collapseItem(top_item)
+        finally:
+            self.tree.setUpdatesEnabled(True)
 
         self.populate_grid()
 
@@ -418,44 +748,31 @@ class WallpaperApp(QMainWindow):
     def on_group_categories_toggled(self, state):
         self.populate_tree()
 
+    def _filter_state(self):
+        return (
+            self._selected_tree_key(),
+            self.sfw_checkbox.isChecked(),
+            self.nsfw_checkbox.isChecked(),
+            self.group_categories_checkbox.isChecked(),
+            self.search_bar.text().strip().lower(),
+        )
+
     def get_filtered_pictures(self):
         if not os.path.exists(self.db_path):
             return []
 
         search_query = self.search_bar.text().strip().lower()
-        selected_items = self.tree.selectedItems()
+        key = self._selected_tree_key()
         target_series = None
         target_char = None
 
-        if selected_items:
-            item = selected_items[0]
-            parent = item.parent()
-            if parent is None:
-                if item.text(0) != "All Wallpapers":
-                    displayed_text = item.text(0)
-                    conn_temp = sqlite3.connect(self.db_path)
-                    cur_temp = conn_temp.cursor()
-                    cur_temp.execute("SELECT DISTINCT series FROM wallpapers")
-                    for (s,) in cur_temp.fetchall():
-                        if format_single_camel(s) == displayed_text:
-                            target_series = s
-                            break
-                    conn_temp.close()
-            elif parent.parent() is None:
-                displayed_series = parent.text(0)
-                displayed_char = item.text(0)
-                conn_temp = sqlite3.connect(self.db_path)
-                cur_temp = conn_temp.cursor()
-                cur_temp.execute("SELECT DISTINCT series FROM wallpapers")
-                for (s,) in cur_temp.fetchall():
-                    if format_single_camel(s) == displayed_series:
-                        target_series = s
-                        break
-                conn_temp.close()
-                target_char = self.display_to_raw_key.get((target_series, displayed_char), displayed_char)
-
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
+        # Raw series/character values live on the tree items, so no DB lookups
+        # or display-name reverse matching are needed here anymore.
+        if key:
+            if key[0] == "series":
+                target_series = key[1]
+            elif key[0] == "char":
+                target_series, target_char = key[1], key[2]
 
         query_conditions = []
         query_params = []
@@ -468,7 +785,7 @@ class WallpaperApp(QMainWindow):
         elif show_nsfw and not show_sfw:
             query_conditions.append("is_nsfw = 1")
         elif not show_sfw and not show_nsfw:
-            query_conditions.append("1 = 0") # return nothing
+            query_conditions.append("1 = 0")  # return nothing
 
         separate_groups = self.group_categories_checkbox.isChecked()
 
@@ -493,29 +810,45 @@ class WallpaperApp(QMainWindow):
         if query_conditions:
             sql += " WHERE " + " AND ".join(query_conditions)
 
-        cursor.execute(sql, query_params)
-        candidates = [row[0] for row in cursor.fetchall()]
-        conn.close()
+        with closing(sqlite3.connect(self.db_path)) as conn:
+            candidates = [row[0] for row in conn.execute(sql, query_params)]
 
-        candidates = sorted(list(set(candidates)), key=natural_sort_key)
-        self.all_pictures = candidates
+        candidates.sort(key=natural_sort_key)   # path is the primary key: already unique
         return candidates
 
+    # ------------------------------------------------------------------
+    # Grid
+    # ------------------------------------------------------------------
+    def _get_aspect_ratio(self):
+        """Cell aspect ratio, computed once.
+
+        The collection is organised in folders named after their aspect ratio
+        ("16-9", "21-9", ...), so the ratio comes from the folder name and no image
+        header has to be read (the old code opened the first picture on every
+        resize/populate).
+        """
+        if self._aspect_ratio:
+            return self._aspect_ratio
+
+        m = re.fullmatch(r"(\d+)\s*[-x:]\s*(\d+)", os.path.basename(self.wall_dir))
+        if m and int(m.group(2)) > 0 and int(m.group(1)) > 0:
+            self._aspect_ratio = int(m.group(1)) / int(m.group(2))
+            return self._aspect_ratio
+
+        # Folder isn't named like a ratio: fall back to the first picture, once.
+        if self.model.paths:
+            size = QImageReader(self.model.paths[0]).size()
+            if size.isValid() and size.height() > 0:
+                self._aspect_ratio = size.width() / size.height()
+                return self._aspect_ratio
+        return 16 / 9   # not cached: retry once pictures exist
+
     def update_grid_layout(self):
-        if not self.all_pictures:
-            return
-
-        aspect_ratio = 16 / 9
-        first_pic = self.all_pictures[0]
-        reader = QImageReader(first_pic)
-        img_size = reader.size()
-        if img_size.isValid() and img_size.height() > 0:
-            aspect_ratio = img_size.width() / img_size.height()
-
         viewport_width = self.grid_widget.viewport().width()
         if viewport_width <= 0:
             return
 
+        aspect_ratio = self._get_aspect_ratio()
         min_thumb_width = 280
         spacing = 12
 
@@ -523,105 +856,127 @@ class WallpaperApp(QMainWindow):
         item_width = max(min_thumb_width, (viewport_width - (cols * spacing)) // cols)
         item_height = int(item_width / aspect_ratio)
 
-        self.grid_widget.setIconSize(QSize(item_width - 16, item_height - 16))
+        # setIconSize/setGridSize force a relayout: skip when nothing changed
+        layout_key = (item_width, item_height)
+        if layout_key == self._layout_key:
+            return
+        self._layout_key = layout_key
+
+        icon_size = QSize(item_width - 16, item_height - 16)
+        self.grid_widget.setIconSize(icon_size)
         self.grid_widget.setGridSize(QSize(item_width, item_height + 40))
 
-    def populate_grid(self):
-        self.grid_widget.clear()
+        # Cheap neutral tile shown until a thumbnail arrives (keeps cells stable)
+        placeholder = QPixmap(icon_size)
+        placeholder.fill(self.palette().alternateBase().color())
+        self.model.set_placeholder(QIcon(placeholder))
+
+    def populate_grid(self, preserve=False):
         pics = self.get_filtered_pictures()
+
+        if preserve and pics == self.model.paths:
+            self._applied_state = self._filter_state()
+            return      # background rescan changed nothing visible: leave the view alone
+
+        self.model.set_paths(pics)
         self.update_grid_layout()
+        self.grid_widget.scrollToTop()
+        self._applied_state = self._filter_state()
 
-        self._pending_pics = list(pics)
-        self._load_next_chunk(is_first_chunk=True)
-
-    def _load_next_chunk(self, is_first_chunk=False):
-        if not hasattr(self, '_pending_pics') or not self._pending_pics:
-            if is_first_chunk:
-                self.preview_label.setText("Select a wallpaper to preview")
-            return
-
-        chunk = self._pending_pics[:200]
-        self._pending_pics = self._pending_pics[200:]
-
-        for pic in chunk:
-            filename = os.path.basename(pic)
-            rel_path = os.path.relpath(pic, self.wall_dir)
-            target_cache_sub = os.path.join(self.cache_dir, os.path.dirname(rel_path))
-            os.makedirs(target_cache_sub, exist_ok=True)
-            
-            thumb_path = os.path.join(target_cache_sub, filename + ".jpg")
-            
-            if not os.path.exists(thumb_path):
-                try:
-                    pixmap = QPixmap(pic)
-                    thumb_pixmap = pixmap.scaled(600, 600, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
-                    thumb_pixmap.save(thumb_path, "JPG", 85)
-                except Exception:
-                    thumb_path = pic
-
-            item = QListWidgetItem(filename)
-            item.setIcon(QIcon(thumb_path))
-            item.setData(Qt.ItemDataRole.UserRole, pic)
-            self.grid_widget.addItem(item)
-
-        if is_first_chunk:
-            self.preview_label.setText("Select a wallpaper to preview")
-
-        if self._pending_pics:
-            QTimer.singleShot(1, lambda: self._load_next_chunk(is_first_chunk=False))
+        # New list -> previous preview no longer matches anything on screen
+        self.preview_timer.stop()
+        self._preview_seq += 1
+        self._preview_src = None
+        self.preview_label.setPixmap(QPixmap())
+        self.preview_label.setText("Select a wallpaper to preview")
 
     def select_random_wallpaper(self):
-        if not self.all_pictures:
-            pics = self.get_filtered_pictures()
-        else:
-            pics = self.all_pictures
-
+        pics = self.model.paths
         if not pics:
             QMessageBox.warning(self, "Warning", "No wallpapers available in the current selection!")
             return
 
-        rand_pic = random.choice(pics)
-        for i in range(self.grid_widget.count()):
-            item = self.grid_widget.item(i)
-            if item.data(Qt.ItemDataRole.UserRole) == rand_pic:
-                self.grid_widget.setCurrentItem(item)
-                self.grid_widget.scrollToItem(item)
-                break
+        row = self.model.row_of(random.choice(pics))
+        index = self.model.index(row)
+        self.grid_widget.setCurrentIndex(index)
+        self.grid_widget.scrollTo(index)
 
     def on_tree_item_clicked(self, item, column):
+        if self._filter_state() == self._applied_state:
+            return      # same node clicked again: don't rebuild the grid
         self.populate_grid()
 
-    def on_thumbnail_selected(self):
-        selected_items = self.grid_widget.selectedItems()
-        if not selected_items:
+    # ------------------------------------------------------------------
+    # Preview
+    # ------------------------------------------------------------------
+    def on_thumbnail_selected(self, *args):
+        indexes = self.grid_widget.selectionModel().selectedIndexes()
+        if not indexes:
             return
-        
-        pic_path = selected_items[0].data(Qt.ItemDataRole.UserRole)
+
+        pic_path = indexes[0].data(Qt.ItemDataRole.UserRole)
         self.selected_wallpaper_path = pic_path
+        self._preview_seq += 1      # invalidates any decode still in flight
 
-        pixmap = QPixmap(pic_path)
-        self.preview_label.setPixmap(pixmap.scaled(
-            self.preview_label.size(),
-            Qt.AspectRatioMode.KeepAspectRatio,
-            Qt.TransformationMode.SmoothTransformation
-        ))
+        # Instant feedback: show the (already decoded) thumbnail, then swap in the
+        # sharper version once the background decode finishes.
+        cached = self.model.cached_pixmap(pic_path)
+        if cached is not None:
+            self._preview_src = cached.toImage()
+            self._render_preview()
 
+        self.preview_timer.start()   # debounced: skips files passed over with arrow keys
+
+    def _start_preview_job(self):
+        path = self.selected_wallpaper_path
+        if not path:
+            return
+        self.preview_pool.clear()
+        self.preview_pool.start(PreviewJob(path, self._preview_seq, self.preview_signals))
+
+    @pyqtSlot(int, QImage)
+    def _on_preview_decoded(self, seq, image):
+        if seq != self._preview_seq or image.isNull():
+            return
+        self._preview_src = image
+        self._render_preview()
+
+    def _render_preview(self):
+        """Scale the already-decoded preview image to the label (no disk access)."""
+        if self._preview_src is None or self._preview_src.isNull():
+            return
+        dpr = self.devicePixelRatioF()
+        target = self.preview_label.size() * dpr
+        if target.width() <= 0 or target.height() <= 0:
+            return
+        scaled = self._preview_src.scaled(
+            target, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation
+        )
+        pixmap = QPixmap.fromImage(scaled)
+        pixmap.setDevicePixelRatio(dpr)
+        self.preview_label.setPixmap(pixmap)
+
+    # ------------------------------------------------------------------
+    # Window events
+    # ------------------------------------------------------------------
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self.update_grid_layout()
-        if self.selected_wallpaper_path:
-            pixmap = QPixmap(self.selected_wallpaper_path)
-            self.preview_label.setPixmap(pixmap.scaled(
-                self.preview_label.size(),
-                Qt.AspectRatioMode.KeepAspectRatio,
-                Qt.TransformationMode.SmoothTransformation
-            ))
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_Escape:
             self.close()
         else:
             super().keyPressEvent(event)
+
+    def closeEvent(self, event):
+        # Stop background work cleanly (avoids "QThread destroyed while running")
+        self.scanner_thread.abort()
+        self.model.shutdown()
+        self.preview_pool.clear()
+        self.preview_pool.waitForDone(2000)
+        self.scanner_thread.wait(3000)
+        super().closeEvent(event)
 
     def apply_wallpaper(self):
         if not self.selected_wallpaper_path:
@@ -639,7 +994,7 @@ class WallpaperApp(QMainWindow):
 
         applicator_wayland = os.path.expanduser("~/.config/WallpaperChanger/WallpaperApplicator.sh")
         applicator_xrandr = os.path.expanduser("~/.config/WallpaperChanger/WallpaperApplicatorXrandr.sh")
-        
+
         applicator_script = None
         if os.path.exists(applicator_wayland):
             applicator_script = applicator_wayland
@@ -656,6 +1011,7 @@ class WallpaperApp(QMainWindow):
 
         subprocess.Popen([applicator_script, rel_path])
         sys.exit(0)
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

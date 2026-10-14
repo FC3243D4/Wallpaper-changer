@@ -1,32 +1,34 @@
 import os
 import random
-import sys
 import re
+import sys
+import subprocess
 from PyQt6.QtCore import Qt, QSize, QLoggingCategory, QTimer, QThread, pyqtSignal
-from PyQt6.QtGui import QPixmap, QIcon, QImageReader
+from PyQt6.QtGui import QPixmap, QIcon, QImageReader, QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QHBoxLayout, QVBoxLayout,
     QTreeWidget, QTreeWidgetItem, QLabel, QListWidget, QListWidgetItem,
     QPushButton, QCheckBox, QSplitter, QMessageBox, QWidget, QLineEdit
 )
 
-def natural_sort_key(s):
-    return [int(text) if text.isdigit() else text.lower() for text in re.split(r'(\d+)', s)]
-
 # Suppress harmless Wayland text-input warnings
 QLoggingCategory.setFilterRules("qt.qpa.wayland.textinput.warning=false")
 
+def natural_sort_key(s):
+    return [int(text) if text.isdigit() else text.lower() for text in re.split(r'(\d+)', s)]
+
+
 class WallpaperScannerWorker(QThread):
-    finished = pyqtSignal(dict)
+    finished = pyqtSignal(list)
 
     def __init__(self, wall_dir):
         super().__init__()
         self.wall_dir = wall_dir
 
     def run(self):
-        wallpaper_cache = {}
+        raw_records = []
         if not os.path.exists(self.wall_dir):
-            self.finished.emit(wallpaper_cache)
+            self.finished.emit(raw_records)
             return
 
         for series in os.listdir(self.wall_dir):
@@ -48,15 +50,13 @@ class WallpaperScannerWorker(QThread):
                     if not characters:
                         characters = ["General"]
 
-                    for char_name in characters:
-                        wallpaper_cache.setdefault((None, None), []).append(full_path)
-                        wallpaper_cache.setdefault((series, None), []).append(full_path)
-                        wallpaper_cache.setdefault((series, char_name), []).append(full_path)
+                    raw_records.append({
+                        'path': full_path,
+                        'series': series,
+                        'characters': characters
+                    })
 
-        for key in wallpaper_cache:
-            wallpaper_cache[key] = sorted(list(set(wallpaper_cache[key])), key=natural_sort_key)
-
-        self.finished.emit(wallpaper_cache)
+        self.finished.emit(raw_records)
 
 
 class WallpaperApp(QMainWindow):
@@ -78,6 +78,7 @@ class WallpaperApp(QMainWindow):
         self.selected_wallpaper_path = None
         self.all_pictures = []
         self._updating_checkboxes = False
+        self.raw_records = []
         self.wallpaper_cache = {}
 
         # Debounce timer for smooth typing
@@ -87,7 +88,6 @@ class WallpaperApp(QMainWindow):
         self.search_timer.timeout.connect(self.execute_search)
 
         # Keyboard shortcuts for Enter / Return to apply wallpaper instantly
-        from PyQt6.QtGui import QKeySequence, QShortcut
         self.enter_shortcut_1 = QShortcut(QKeySequence(Qt.Key.Key_Return), self)
         self.enter_shortcut_1.activated.connect(self.apply_wallpaper)
         self.enter_shortcut_2 = QShortcut(QKeySequence(Qt.Key.Key_Enter), self)
@@ -101,12 +101,35 @@ class WallpaperApp(QMainWindow):
         self.scanner_thread.finished.connect(self.on_scanning_finished)
         self.scanner_thread.start()
 
-    def on_scanning_finished(self, cache):
-        self.wallpaper_cache = cache
-        self.preview_label.setText("Loading wallpapers...")
+    def on_scanning_finished(self, records):
+        self.raw_records = records
+        self.rebuild_cache()
         self.populate_tree()
-        # Defer grid population so the UI renders the tree and loading state instantly first
-        QTimer.singleShot(50, self.populate_grid)
+
+    def rebuild_cache(self):
+        separate_groups = self.group_categories_checkbox.isChecked()
+        wallpaper_cache = {}
+
+        for item in self.raw_records:
+            full_path = item['path']
+            series = item['series']
+            characters = item['characters']
+            is_group = len(characters) > 1
+
+            wallpaper_cache.setdefault((None, None), []).append(full_path)
+            wallpaper_cache.setdefault((series, None), []).append(full_path)
+
+            if separate_groups and is_group:
+                group_name = "-".join(characters)
+                wallpaper_cache.setdefault((series, group_name), []).append(full_path)
+            else:
+                for char_name in characters:
+                    wallpaper_cache.setdefault((series, char_name), []).append(full_path)
+
+        for key in wallpaper_cache:
+            wallpaper_cache[key] = sorted(list(set(wallpaper_cache[key])), key=natural_sort_key)
+
+        self.wallpaper_cache = wallpaper_cache
 
     def init_ui(self):
         central_widget = QWidget()
@@ -131,17 +154,24 @@ class WallpaperApp(QMainWindow):
         sidebar_layout.addWidget(self.search_bar)
 
         toggles_layout = QHBoxLayout()
+        toggles_layout.setSpacing(4)
+        
         self.sfw_checkbox = QCheckBox("SFW")
         self.nsfw_checkbox = QCheckBox("NSFW")
+        self.group_categories_checkbox = QCheckBox("Group Categories")
+        
         self.sfw_checkbox.setChecked(True)
         self.nsfw_checkbox.setChecked(True)
+        self.group_categories_checkbox.setChecked(False)  # Default: group wallpapers appear under individual characters
         
         self.sfw_checkbox.stateChanged.connect(self.on_sfw_toggled)
         self.nsfw_checkbox.stateChanged.connect(self.on_nsfw_toggled)
+        self.group_categories_checkbox.stateChanged.connect(self.on_group_categories_toggled)
         
         toggles_layout.addWidget(self.sfw_checkbox)
         toggles_layout.addWidget(self.nsfw_checkbox)
         sidebar_layout.addLayout(toggles_layout)
+        sidebar_layout.addWidget(self.group_categories_checkbox)
 
         self.tree = QTreeWidget()
         self.tree.setHeaderHidden(True)
@@ -248,14 +278,7 @@ class WallpaperApp(QMainWindow):
 
         self.tree.collapseAll()
         all_items_root.setExpanded(True)
-        
-        # Blazing fast startup: Select the first series folder by default instead of all 11k items
-        if all_items_root.childCount() > 0:
-            first_series = all_items_root.child(0)
-            first_series.setSelected(True)
-        else:
-            all_items_root.setSelected(True)
-
+        all_items_root.setSelected(True)
         self.populate_grid()
 
     def on_search_text_changed(self, text):
@@ -326,6 +349,10 @@ class WallpaperApp(QMainWindow):
             self._updating_checkboxes = False
         self.populate_grid()
 
+    def on_group_categories_toggled(self, state):
+        self.rebuild_cache()
+        self.populate_tree()
+
     def get_filtered_pictures(self):
         search_query = self.search_bar.text().strip().lower()
         selected_items = self.tree.selectedItems()
@@ -362,19 +389,8 @@ class WallpaperApp(QMainWindow):
                         candidates.extend(plist)
                 candidates = sorted(list(set(candidates)), key=natural_sort_key)
 
-        scope_has_sfw = any(not os.path.basename(p).lower().startswith("nsfw-") for p in candidates)
-        scope_has_nsfw = any(os.path.basename(p).lower().startswith("nsfw-") for p in candidates)
-
-        if scope_has_sfw and scope_has_nsfw:
-            self.sfw_checkbox.show()
-            self.nsfw_checkbox.show()
-            show_sfw = self.sfw_checkbox.isChecked()
-            show_nsfw = self.nsfw_checkbox.isChecked()
-        else:
-            self.sfw_checkbox.hide()
-            self.nsfw_checkbox.hide()
-            show_sfw = True
-            show_nsfw = True
+        show_sfw = self.sfw_checkbox.isChecked()
+        show_nsfw = self.nsfw_checkbox.isChecked()
 
         pics = []
         for p in candidates:
@@ -464,7 +480,6 @@ class WallpaperApp(QMainWindow):
             item.setData(Qt.ItemDataRole.UserRole, pic)
             self.grid_widget.addItem(item)
 
-        # Clear the loading text instantly as soon as the first thumbnails appear
         if is_first_chunk:
             self.preview_label.setText("Select a wallpaper to preview")
 
@@ -518,6 +533,12 @@ class WallpaperApp(QMainWindow):
                 Qt.TransformationMode.SmoothTransformation
             ))
 
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key.Key_Escape:
+            self.close()
+        else:
+            super().keyPressEvent(event)
+
     def apply_wallpaper(self):
         if not self.selected_wallpaper_path:
             QMessageBox.warning(self, "Warning", "Please select a wallpaper first!")
@@ -545,24 +566,12 @@ class WallpaperApp(QMainWindow):
             QMessageBox.critical(self, "Error", "No WallpaperApplicator script found on the system!")
             return
 
-        # 1. Close and hide the GUI window instantly before running external scripts
         self.hide()
         self.close()
         QApplication.processEvents()
 
-        # 2. Launch applicator detached so it doesn't block the exit pipeline
-        import subprocess
         subprocess.Popen([applicator_script, rel_path])
-        
-        # 3. Terminate python process cleanly
         sys.exit(0)
-
-    def keyPressEvent(self, event):
-        """Allows closing/canceling the application immediately by pressing the ESC key."""
-        if event.key() == Qt.Key.Key_Escape:
-            self.close()
-        else:
-            super().keyPressEvent(event)
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

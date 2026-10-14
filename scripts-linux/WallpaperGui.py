@@ -2,13 +2,14 @@ import os
 import random
 import re
 import sys
+import sqlite3
 import subprocess
 from PyQt6.QtCore import Qt, QSize, QLoggingCategory, QTimer, QThread, pyqtSignal
 from PyQt6.QtGui import QPixmap, QIcon, QImageReader, QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QHBoxLayout, QVBoxLayout,
     QTreeWidget, QTreeWidgetItem, QLabel, QListWidget, QListWidgetItem,
-    QPushButton, QCheckBox, QSplitter, QMessageBox, QWidget, QLineEdit, QStyledItemDelegate
+    QPushButton, QCheckBox, QSplitter, QMessageBox, QWidget, QLineEdit
 )
 
 # Suppress harmless Wayland text-input warnings
@@ -32,32 +33,42 @@ def format_single_camel(s):
     return spaced.lower()
 
 
-class WrappingDelegate(QStyledItemDelegate):
-    """Custom delegate to compute dynamic row heights for text wrapping in the tree view."""
-    def sizeHint(self, option, index):
-        text = index.data(Qt.ItemDataRole.DisplayRole)
-        if not text:
-            return super().sizeHint(option, index)
-        
-        # Calculate height based on available width in the tree column
-        width = option.rect.width() if option.rect.width() > 200 else 220
-        metrics = option.fontMetrics
-        bounding_rect = metrics.boundingRect(0, 0, width - 15, 1000, Qt.TextFlag.TextWordWrap, text)
-        return QSize(width, max(bounding_rect.height() + 10, 26))
-
-
 class WallpaperScannerWorker(QThread):
-    finished = pyqtSignal(list)
+    finished = pyqtSignal()
 
-    def __init__(self, wall_dir):
+    def __init__(self, wall_dir, db_path):
         super().__init__()
         self.wall_dir = wall_dir
+        self.db_path = db_path
 
     def run(self):
-        raw_records = []
         if not os.path.exists(self.wall_dir):
-            self.finished.emit(raw_records)
+            self.finished.emit()
             return
+
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS wallpapers (
+                path TEXT PRIMARY KEY,
+                series TEXT,
+                characters TEXT,
+                is_nsfw INTEGER,
+                is_group INTEGER,
+                mtime REAL
+            )
+        """)
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_series ON wallpapers(series)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_nsfw ON wallpapers(is_nsfw)")
+        conn.commit()
+
+        # Get existing paths and mtimes from DB for fast incremental checks
+        cursor.execute("SELECT path, mtime FROM wallpapers")
+        db_records = {row[0]: row[1] for row in cursor.fetchall()}
+
+        disk_paths = set()
+        batch_data = []
 
         for series in os.listdir(self.wall_dir):
             series_path = os.path.join(self.wall_dir, series)
@@ -70,21 +81,46 @@ class WallpaperScannerWorker(QThread):
                         continue
                     
                     full_path = os.path.join(root, f)
+                    try:
+                        mtime = os.path.getmtime(full_path)
+                    except OSError:
+                        continue
+
+                    disk_paths.add(full_path)
+
+                    # If file is already indexed and hasn't changed, skip parsing
+                    if full_path in db_records and db_records[full_path] == mtime:
+                        continue
+
                     name_without_ext = os.path.splitext(f)[0]
-                    clean_name = name_without_ext[5:] if name_without_ext.lower().startswith("nsfw-") else name_without_ext
+                    is_nsfw = 1 if name_without_ext.lower().startswith("nsfw-") else 0
+                    clean_name = name_without_ext[5:] if is_nsfw else name_without_ext
                     parts = [c.strip() for c in clean_name.split('-') if c.strip()]
                     
                     characters = [c for c in parts if not c.isdigit()]
                     if not characters:
                         characters = ["General"]
 
-                    raw_records.append({
-                        'path': full_path,
-                        'series': series,
-                        'characters': characters
-                    })
+                    char_key = "-".join(characters)
+                    is_group = 1 if len(characters) > 1 else 0
 
-        self.finished.emit(raw_records)
+                    batch_data.append((full_path, series, char_key, is_nsfw, is_group, mtime))
+
+        # Perform incremental batch update
+        if batch_data:
+            cursor.executemany("""
+                INSERT OR REPLACE INTO wallpapers (path, series, characters, is_nsfw, is_group, mtime)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, batch_data)
+
+        # Remove deleted files from DB
+        deleted_paths = set(db_records.keys()) - disk_paths
+        if deleted_paths:
+            cursor.executemany("DELETE FROM wallpapers WHERE path = ?", [(p,) for p in deleted_paths])
+
+        conn.commit()
+        conn.close()
+        self.finished.emit()
 
 
 class WallpaperApp(QMainWindow):
@@ -101,13 +137,12 @@ class WallpaperApp(QMainWindow):
             self.wall_dir = subdirs[0] if subdirs else self.wall_base_dir
 
         self.cache_dir = os.path.expanduser("~/.cache/wallpaper-thumbnails")
+        self.db_path = os.path.expanduser("~/.cache/wallpaper-changer.db")
         os.makedirs(self.cache_dir, exist_ok=True)
 
         self.selected_wallpaper_path = None
         self.all_pictures = []
         self._updating_checkboxes = False
-        self.raw_records = []
-        self.wallpaper_cache = {}
         self.display_to_raw_key = {}
 
         # Debounce timer for smooth typing
@@ -125,41 +160,13 @@ class WallpaperApp(QMainWindow):
         # 1. Build UI instantly
         self.init_ui()
 
-        # 2. Run directory scanner in background thread so window opens immediately
-        self.scanner_thread = WallpaperScannerWorker(self.wall_dir)
+        # 2. Run incremental scanner worker in background thread
+        self.scanner_thread = WallpaperScannerWorker(self.wall_dir, self.db_path)
         self.scanner_thread.finished.connect(self.on_scanning_finished)
         self.scanner_thread.start()
 
-    def on_scanning_finished(self, records):
-        self.raw_records = records
-        self.rebuild_cache()
+    def on_scanning_finished(self):
         self.populate_tree()
-
-    def rebuild_cache(self):
-        separate_groups = self.group_categories_checkbox.isChecked()
-        wallpaper_cache = {}
-        self.display_to_raw_key.clear()
-
-        for item in self.raw_records:
-            full_path = item['path']
-            series = item['series']
-            characters = item['characters']
-            is_group = len(characters) > 1
-
-            wallpaper_cache.setdefault((None, None), []).append(full_path)
-            wallpaper_cache.setdefault((series, None), []).append(full_path)
-
-            if separate_groups and is_group:
-                raw_key = "-".join(characters)
-                wallpaper_cache.setdefault((series, raw_key), []).append(full_path)
-            else:
-                for char_name in characters:
-                    wallpaper_cache.setdefault((series, char_name), []).append(full_path)
-
-        for key in wallpaper_cache:
-            wallpaper_cache[key] = sorted(list(set(wallpaper_cache[key])), key=natural_sort_key)
-
-        self.wallpaper_cache = wallpaper_cache
 
     def init_ui(self):
         central_widget = QWidget()
@@ -208,7 +215,7 @@ class WallpaperApp(QMainWindow):
         self.tree.setAnimated(True)
         self.tree.setRootIsDecorated(True)
         self.tree.setWordWrap(True)
-        self.tree.setItemDelegate(WrappingDelegate(self.tree))
+        self.tree.setStyleSheet("QTreeView::item { padding: 4px; }")
         self.tree.itemClicked.connect(self.on_tree_item_clicked)
         sidebar_layout.addWidget(self.tree)
 
@@ -297,21 +304,44 @@ class WallpaperApp(QMainWindow):
         main_splitter.setSizes([280, 970])
 
     def populate_tree(self):
+        if not os.path.exists(self.db_path):
+            return
+
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
         self.tree.clear()
         all_items_root = QTreeWidgetItem(self.tree, ["All Wallpapers"])
         self.tree.addTopLevelItem(all_items_root)
 
-        series_set = set(key[0] for key in self.wallpaper_cache.keys() if key[0] is not None)
-        for series in sorted(series_set):
+        cursor.execute("SELECT DISTINCT series FROM wallpapers WHERE series IS NOT NULL ORDER BY series")
+        series_rows = cursor.fetchall()
+
+        separate_groups = self.group_categories_checkbox.isChecked()
+        self.display_to_raw_key.clear()
+
+        for (series,) in series_rows:
             formatted_series = format_single_camel(series)
             series_item = QTreeWidgetItem(self.tree, [formatted_series])
 
-            chars = set(key[1] for key in self.wallpaper_cache.keys() if key[0] == series and key[1] is not None)
-            for char in sorted(chars):
-                formatted_char = format_character_name(char)
-                char_item = QTreeWidgetItem(series_item, [formatted_char])
-                self.display_to_raw_key[(series, formatted_char)] = char
+            if separate_groups:
+                cursor.execute("SELECT DISTINCT characters FROM wallpapers WHERE series = ? ORDER BY characters", (series,))
+            else:
+                cursor.execute("SELECT DISTINCT characters FROM wallpapers WHERE series = ? AND is_group = 0 ORDER BY characters", (series,))
+            
+            char_rows = cursor.fetchall()
+            for (char_group_str,) in char_rows:
+                for char in char_group_str.split('-'):
+                    if not separate_groups:
+                        formatted_char = format_character_name(char)
+                        char_item = QTreeWidgetItem(series_item, [formatted_char])
+                        self.display_to_raw_key[(series, formatted_char)] = char
+                if separate_groups:
+                    formatted_char = format_character_name(char_group_str)
+                    char_item = QTreeWidgetItem(series_item, [formatted_char])
+                    self.display_to_raw_key[(series, formatted_char)] = char_group_str
 
+        conn.close()
         self.tree.collapseAll()
         all_items_root.setExpanded(True)
         all_items_root.setSelected(True)
@@ -386,10 +416,12 @@ class WallpaperApp(QMainWindow):
         self.populate_grid()
 
     def on_group_categories_toggled(self, state):
-        self.rebuild_cache()
         self.populate_tree()
 
     def get_filtered_pictures(self):
+        if not os.path.exists(self.db_path):
+            return []
+
         search_query = self.search_bar.text().strip().lower()
         selected_items = self.tree.selectedItems()
         target_series = None
@@ -401,63 +433,73 @@ class WallpaperApp(QMainWindow):
             if parent is None:
                 if item.text(0) != "All Wallpapers":
                     displayed_text = item.text(0)
-                    for s in set(k[0] for k in self.wallpaper_cache.keys() if k[0] is not None):
+                    conn_temp = sqlite3.connect(self.db_path)
+                    cur_temp = conn_temp.cursor()
+                    cur_temp.execute("SELECT DISTINCT series FROM wallpapers")
+                    for (s,) in cur_temp.fetchall():
                         if format_single_camel(s) == displayed_text:
                             target_series = s
                             break
+                    conn_temp.close()
             elif parent.parent() is None:
                 displayed_series = parent.text(0)
                 displayed_char = item.text(0)
-                for s in set(k[0] for k in self.wallpaper_cache.keys() if k[0] is not None):
+                conn_temp = sqlite3.connect(self.db_path)
+                cur_temp = conn_temp.cursor()
+                cur_temp.execute("SELECT DISTINCT series FROM wallpapers")
+                for (s,) in cur_temp.fetchall():
                     if format_single_camel(s) == displayed_series:
                         target_series = s
                         break
+                conn_temp.close()
                 target_char = self.display_to_raw_key.get((target_series, displayed_char), displayed_char)
 
-        candidates = []
-        if search_query and (not selected_items or selected_items[0].text(0) == "All Wallpapers"):
-            for (s, c), plist in self.wallpaper_cache.items():
-                if s is not None and (search_query in s.lower() or (c is not None and search_query in c.lower())):
-                    candidates.extend(plist)
-            candidates = sorted(list(set(candidates)), key=natural_sort_key)
-        else:
-            cache_key = (target_series, target_char)
-            candidates = self.wallpaper_cache.get(cache_key, [])
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
 
-            if target_series and target_char is None:
-                candidates = []
-                for (s, c), plist in self.wallpaper_cache.items():
-                    if s == target_series:
-                        candidates.extend(plist)
-                candidates = sorted(list(set(candidates)), key=natural_sort_key)
+        query_conditions = []
+        query_params = []
 
         show_sfw = self.sfw_checkbox.isChecked()
         show_nsfw = self.nsfw_checkbox.isChecked()
 
-        pics = []
-        for p in candidates:
-            filename = os.path.basename(p)
-            is_nsfw = filename.lower().startswith("nsfw-")
-            if is_nsfw and not show_nsfw:
-                continue
-            if not is_nsfw and not show_sfw:
-                continue
-            
-            if search_query:
-                path_parts = p.split(os.sep)
-                series_name_from_path = path_parts[-2].lower() if len(path_parts) >= 2 else ""
-                filename_tokens = [t.lower() for t in filename.split('-')]
-                
-                matches_series = search_query in series_name_from_path
-                matches_token = any(search_query in token for token in filename_tokens)
-                
-                if not (matches_series or matches_token):
-                    continue
+        if show_sfw and not show_nsfw:
+            query_conditions.append("is_nsfw = 0")
+        elif show_nsfw and not show_sfw:
+            query_conditions.append("is_nsfw = 1")
+        elif not show_sfw and not show_nsfw:
+            query_conditions.append("1 = 0") # return nothing
 
-            pics.append(p)
+        separate_groups = self.group_categories_checkbox.isChecked()
 
-        self.all_pictures = pics
-        return pics
+        if target_series and target_char:
+            query_conditions.append("series = ?")
+            query_params.append(target_series)
+            if separate_groups:
+                query_conditions.append("characters = ?")
+                query_params.append(target_char)
+            else:
+                query_conditions.append("characters LIKE ?")
+                query_params.append(f"%{target_char}%")
+        elif target_series and not target_char:
+            query_conditions.append("series = ?")
+            query_params.append(target_series)
+
+        if search_query:
+            query_conditions.append("(series LIKE ? OR characters LIKE ? OR path LIKE ?)")
+            query_params.extend([f"%{search_query}%", f"%{search_query}%", f"%{search_query}%"])
+
+        sql = "SELECT path FROM wallpapers"
+        if query_conditions:
+            sql += " WHERE " + " AND ".join(query_conditions)
+
+        cursor.execute(sql, query_params)
+        candidates = [row[0] for row in cursor.fetchall()]
+        conn.close()
+
+        candidates = sorted(list(set(candidates)), key=natural_sort_key)
+        self.all_pictures = candidates
+        return candidates
 
     def update_grid_layout(self):
         if not self.all_pictures:

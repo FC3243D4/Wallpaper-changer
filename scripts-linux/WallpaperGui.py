@@ -8,7 +8,7 @@ from PyQt6.QtGui import QPixmap, QIcon, QImageReader, QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QHBoxLayout, QVBoxLayout,
     QTreeWidget, QTreeWidgetItem, QLabel, QListWidget, QListWidgetItem,
-    QPushButton, QCheckBox, QSplitter, QMessageBox, QWidget, QLineEdit
+    QPushButton, QCheckBox, QSplitter, QMessageBox, QWidget, QLineEdit, QStyledItemDelegate
 )
 
 # Suppress harmless Wayland text-input warnings
@@ -16,6 +16,34 @@ QLoggingCategory.setFilterRules("qt.qpa.wayland.textinput.warning=false")
 
 def natural_sort_key(s):
     return [int(text) if text.isdigit() else text.lower() for text in re.split(r'(\d+)', s)]
+
+def format_character_name(name):
+    if '-' in name:
+        parts = name.split('-')
+        formatted_parts = [format_single_camel(p) for p in parts if p]
+        return " & ".join(formatted_parts)
+    else:
+        return format_single_camel(name)
+
+def format_single_camel(s):
+    if not s:
+        return s
+    spaced = re.sub(r'([a-z0-9])([A-Z])', r'\1 \2', s)
+    return spaced.lower()
+
+
+class WrappingDelegate(QStyledItemDelegate):
+    """Custom delegate to compute dynamic row heights for text wrapping in the tree view."""
+    def sizeHint(self, option, index):
+        text = index.data(Qt.ItemDataRole.DisplayRole)
+        if not text:
+            return super().sizeHint(option, index)
+        
+        # Calculate height based on available width in the tree column
+        width = option.rect.width() if option.rect.width() > 200 else 220
+        metrics = option.fontMetrics
+        bounding_rect = metrics.boundingRect(0, 0, width - 15, 1000, Qt.TextFlag.TextWordWrap, text)
+        return QSize(width, max(bounding_rect.height() + 10, 26))
 
 
 class WallpaperScannerWorker(QThread):
@@ -80,6 +108,7 @@ class WallpaperApp(QMainWindow):
         self._updating_checkboxes = False
         self.raw_records = []
         self.wallpaper_cache = {}
+        self.display_to_raw_key = {}
 
         # Debounce timer for smooth typing
         self.search_timer = QTimer()
@@ -109,6 +138,7 @@ class WallpaperApp(QMainWindow):
     def rebuild_cache(self):
         separate_groups = self.group_categories_checkbox.isChecked()
         wallpaper_cache = {}
+        self.display_to_raw_key.clear()
 
         for item in self.raw_records:
             full_path = item['path']
@@ -120,8 +150,8 @@ class WallpaperApp(QMainWindow):
             wallpaper_cache.setdefault((series, None), []).append(full_path)
 
             if separate_groups and is_group:
-                group_name = "-".join(characters)
-                wallpaper_cache.setdefault((series, group_name), []).append(full_path)
+                raw_key = "-".join(characters)
+                wallpaper_cache.setdefault((series, raw_key), []).append(full_path)
             else:
                 for char_name in characters:
                     wallpaper_cache.setdefault((series, char_name), []).append(full_path)
@@ -162,7 +192,7 @@ class WallpaperApp(QMainWindow):
         
         self.sfw_checkbox.setChecked(True)
         self.nsfw_checkbox.setChecked(True)
-        self.group_categories_checkbox.setChecked(False)  # Default: group wallpapers appear under individual characters
+        self.group_categories_checkbox.setChecked(False)
         
         self.sfw_checkbox.stateChanged.connect(self.on_sfw_toggled)
         self.nsfw_checkbox.stateChanged.connect(self.on_nsfw_toggled)
@@ -177,6 +207,8 @@ class WallpaperApp(QMainWindow):
         self.tree.setHeaderHidden(True)
         self.tree.setAnimated(True)
         self.tree.setRootIsDecorated(True)
+        self.tree.setWordWrap(True)
+        self.tree.setItemDelegate(WrappingDelegate(self.tree))
         self.tree.itemClicked.connect(self.on_tree_item_clicked)
         sidebar_layout.addWidget(self.tree)
 
@@ -271,10 +303,14 @@ class WallpaperApp(QMainWindow):
 
         series_set = set(key[0] for key in self.wallpaper_cache.keys() if key[0] is not None)
         for series in sorted(series_set):
-            series_item = QTreeWidgetItem(self.tree, [series])
+            formatted_series = format_single_camel(series)
+            series_item = QTreeWidgetItem(self.tree, [formatted_series])
+
             chars = set(key[1] for key in self.wallpaper_cache.keys() if key[0] == series and key[1] is not None)
             for char in sorted(chars):
-                QTreeWidgetItem(series_item, [char])
+                formatted_char = format_character_name(char)
+                char_item = QTreeWidgetItem(series_item, [formatted_char])
+                self.display_to_raw_key[(series, formatted_char)] = char
 
         self.tree.collapseAll()
         all_items_root.setExpanded(True)
@@ -364,13 +400,19 @@ class WallpaperApp(QMainWindow):
             parent = item.parent()
             if parent is None:
                 if item.text(0) != "All Wallpapers":
-                    target_series = item.text(0)
+                    displayed_text = item.text(0)
+                    for s in set(k[0] for k in self.wallpaper_cache.keys() if k[0] is not None):
+                        if format_single_camel(s) == displayed_text:
+                            target_series = s
+                            break
             elif parent.parent() is None:
-                target_series = parent.text(0)
-                target_char = item.text(0)
-            else:
-                target_series = parent.parent().text(0)
-                target_char = parent.text(0)
+                displayed_series = parent.text(0)
+                displayed_char = item.text(0)
+                for s in set(k[0] for k in self.wallpaper_cache.keys() if k[0] is not None):
+                    if format_single_camel(s) == displayed_series:
+                        target_series = s
+                        break
+                target_char = self.display_to_raw_key.get((target_series, displayed_char), displayed_char)
 
         candidates = []
         if search_query and (not selected_items or selected_items[0].text(0) == "All Wallpapers"):

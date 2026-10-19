@@ -282,7 +282,7 @@ cmd_full() {
     #Nativmix restart using built-in restart flag
     if command -v nativmix >/dev/null 2>&1 && pgrep -f "nativmix" >/dev/null 2>&1; then
         echo "nativmix running"
-        nativmix --restart --hidden &
+        sleep 1 && nativmix --restart --hidden &
     fi
 
     # Every stop must have finished before anything is relaunched.

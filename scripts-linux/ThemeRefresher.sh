@@ -5,6 +5,12 @@
 # (RGB, KDE, GTK, browsers, mail, Discord, icons, VS Code, SourceGit,
 # ...), restarts the apps it just patched, and restores window layout.
 #
+# --full order: save layout -> pick color -> STOP apps (in the background) ->
+# run patchers while the apps shut down -> relaunch apps -> wait for their
+# windows -> restore layout. Stopping first hides the shutdown time behind the
+# patchers, and means app configs are patched while the app is closed, so an
+# app can't overwrite them on exit.
+#
 # Usage: ThemeRefresher.sh --full|--rgb|--softrun|--tray|--help
 
 supportDir="$HOME/.config/WallpaperChanger/themeRefresherSupportScripts"
@@ -76,47 +82,46 @@ Options:
 EOF
 }
 
-# Blocks until a window of each given Hyprland class appears (or the
+# Blocks until a NEW window of each given Hyprland class appears (or the
 # shared 5s deadline is hit). Used so HyprLayoutPreservation.sh's restore
 # only runs once every relaunched window actually exists — otherwise a
 # late-appearing window (e.g. Spotify) grabs focus after restore already
 # set it. Every app shares one deadline and is checked every tick, so one
 # slow app no longer blocks the ones behind it, and each tick costs one
-# `hyprctl clients -j` call total instead of one per app.
+# `hyprctl clients -j` + `jq` call total.
+#
+# "New" = its address wasn't in $preRestartAddrs (snapshot taken right
+# before the relaunch), so a just-killed window that Hyprland hasn't
+# dropped yet can't be mistaken for the relaunched one.
 #   $1 (nameref) - array of "app|class" entries to wait for
 wait_for_hypr_classes() {
     local -n pending="$1"
-    local deadline=$(( $(date +%s) + 5 ))
-    local startTime=$(date +%s%N)
+    local deadline=$(( SECONDS + 5 ))
+    local startTime=${EPOCHREALTIME/,/.}
 
-    while [ ${#pending[@]} -gt 0 ] && [ "$(date +%s)" -lt "$deadline" ]; do
-        local clientsJson
-        clientsJson=$(hyprctl clients -j)
+    while [ ${#pending[@]} -gt 0 ] && [ "$SECONDS" -lt "$deadline" ]; do
+        local openClasses
+        openClasses=$(hyprctl clients -j | jq -r --arg old "$preRestartAddrs" \
+            '($old | split("\n")) as $o | .[] | select(.address as $a | ($o | index($a)) == null) | .class | ascii_downcase')
         local -a stillPending=()
         for entry in "${pending[@]}"; do
             local app="${entry%%|*}"
             local windowClass="${entry#*|}"
-            if printf '%s' "$clientsJson" | python3 -c "
-import json, sys
-clients = json.load(sys.stdin)
-sys.exit(0 if any('$windowClass'.lower() in c.get('class', '').lower() for c in clients) else 1)
-" 2>/dev/null; then
-                local endTime=$(date +%s%N)
-                local elapsed=$(awk -v a="$startTime" -v b="$endTime" 'BEGIN{printf "%.3f", (b-a)/1000000000}')
-                echo "[timing] wait_for_hypr_class(${app}): ${elapsed}s" >&2
+            if [[ "$openClasses" == *"${windowClass,,}"* ]]; then
+                echo "[timing] wait_for_hypr_class(${app}): $(awk -v a="$startTime" -v b="${EPOCHREALTIME/,/.}" 'BEGIN{printf "%.3f", b-a}')s" >&2
             else
                 stillPending+=("$entry")
             fi
         done
         pending=("${stillPending[@]}")
-        [ ${#pending[@]} -gt 0 ] && sleep 0.1
+        [ ${#pending[@]} -gt 0 ] && sleep 0.03
     done
 
     # Anything left never appeared within the shared deadline — still emit
     # a timing line for it.
     if [ ${#pending[@]} -gt 0 ]; then
-        local endTime=$(date +%s%N)
-        local elapsed=$(awk -v a="$startTime" -v b="$endTime" 'BEGIN{printf "%.3f", (b-a)/1000000000}')
+        local elapsed
+        elapsed=$(awk -v a="$startTime" -v b="${EPOCHREALTIME/,/.}" 'BEGIN{printf "%.3f", b-a}')
         for entry in "${pending[@]}"; do
             echo "[timing] wait_for_hypr_class(${entry%%|*}): ${elapsed}s" >&2
         done
@@ -188,12 +193,22 @@ run_patchers() {
     done
 }
 
+# EXIT trap for cmd_full. The apps are closed for the whole patcher phase now,
+# so if the script is interrupted (Ctrl-C, a crash) between stopping and
+# relaunching them, bring them back instead of leaving them closed.
+restore_apps_on_abort() {
+    if [ "${appsStopped:-0}" = 1 ] && [ "${appsStarted:-0}" != 1 ]; then
+        echo "Interrupted: relaunching the apps that were stopped" >&2
+        app_stop_wait
+        app_start_all
+    fi
+}
+
 cmd_full() {
-    # Save Hyprland layout state before any restarts. Backgrounded: it
-    # touches neither color nor any theme file, so ColorChooser doesn't
-    # need to wait on it — it only needs to finish before AppRestarter
-    # runs, much further down, so it gets this whole pipeline's worth of
-    # headroom for free. Waited on right before AppRestarter below.
+    # Save Hyprland layout state before any app is stopped. Backgrounded: it
+    # touches neither color nor any theme file, so ColorChooser doesn't need
+    # to wait on it — it only needs to finish before the apps are stopped,
+    # below, so it gets ColorChooser's whole runtime for free.
     hyprSavePid=""
     if [ "$XDG_CURRENT_DESKTOP" == "Hyprland" ]; then
         time_step_bg "HyprLayoutPreservation save" "$supportDir/HyprLayoutPreservation.sh" save
@@ -201,6 +216,7 @@ cmd_full() {
     fi
 
     # Choosing the color is genuinely serial — every patcher below needs it.
+    # Nothing has been stopped yet, so aborting here leaves everything running.
     color=$(time_step "ColorChooser" "$supportDir/ColorChooser.sh")
     if [ $? -ne 0 ] || [ -z "$color" ]; then
         echo "ERROR: ColorChooser failed, aborting"
@@ -211,29 +227,48 @@ cmd_full() {
     accent="#$color"
     echo "Final color: $accent"
 
-    # Every patcher must be fully finished before AppRestarter (below)
-    # relaunches the apps they theme — a relaunch racing an in-flight
-    # patcher could load a half-written or stale config. Concurrent jobs'
-    # own stdout/stderr interleave line-by-line above; accepted tradeoff
-    # of running them in parallel.
-    run_patchers "$color"
-
+    # Format: pgrepFlag|detectPattern|killPattern|launchCmd|hyprlandWindowClass|gracePeriod
+    # An empty class means "don't wait for its window"; a grace of 0 means
+    # SIGKILL right away (code and vesktop were being SIGKILLed after the full
+    # grace anyway, so 0 only skips the wait).
     declare -A apps
     apps[dolphin]="x|dolphin|dolphin|dolphin|dolphin"
     apps[ferdium]="f|electron.*ferdium-bin|electron.*ferdium-bin|ferdium|ferdium"
     apps[sourcegit]="x|sourcegit|sourcegit|sourcegit|sourcegit"
-    apps[code]="x|code|code|code|com.microsoft.VSCode"
-    apps[vesktop]="x|vesktop|vesktop|vesktop -m|"
-    apps[nativmix]="x|nativmix|nativmix|nativmix --hidden --restart|"
+    apps[gitcomet]="x|gitcomet|gitcomet|gitcomet|gitcomet"
+    apps[code]="x|code|code|code|com.microsoft.VSCode|0"
+    apps[vesktop]="x|vesktop|vesktop|vesktop -m||0"
     apps[localsend]="x|localsend|localsend|localsend --hidden|"
     apps[betterbird]="f|betterbird|betterbird|betterbird|eu.betterbird.Betterbird"
     apps[thunderbird]="f|thunderbird|thunderbird|thunderbird|org.mozilla.Thunderbird"
     apps[swaync]="x|swaync|swaync|swaync"
 
+    source "$supportDir/AppRestarter.sh"
+
+    # The layout save must be finished before any window disappears.
+    [ -n "$hyprSavePid" ] && wait "$hyprSavePid"
+
+    # STOP PHASE: start closing every running app now. They shut down in the
+    # background while the patchers below run, instead of after them.
+    appsStopped=1
+    appsStarted=0
+    trap restore_apps_on_abort EXIT
+    app_stop_begin
+
+    # Every patcher must be fully finished before the apps are relaunched
+    # (below) — a relaunch racing an in-flight patcher could load a
+    # half-written or stale config. Concurrent jobs' own stdout/stderr
+    # interleave line-by-line above; accepted tradeoff of running them in
+    # parallel.
+    run_patchers "$color"
+
+    # Sonora is only restarted when its settings.json differs from the freshly
+    # rendered palette, which isn't known until matugen has run — so it is
+    # stopped late, here, instead of with the rest.
     if command -v sonora >/dev/null 2>&1 \
         && "$supportDir/appPatchers/SonoraPatcher.sh" --pending; then
         sonoraPatcher="$supportDir/appPatchers/SonoraPatcher.sh"
-        # Must be read now: AppRestarter is about to kill the window.
+        # Must be read now: stopping Sonora is about to kill the window.
         export SONORA_WINDOW_STATE
         SONORA_WINDOW_STATE=$("$sonoraPatcher" --window-state)
         # A tray-only Sonora gets its window closed again right after launch,
@@ -241,23 +276,33 @@ cmd_full() {
         sonoraClass="sonora"
         [ "$SONORA_WINDOW_STATE" = "hidden" ] && sonoraClass=""
         apps[sonora]="x|sonora|sonora|$sonoraPatcher --launch|$sonoraClass"
+        app_stop_begin sonora
     fi
 
-    # HyprLayoutPreservation save (backgrounded above) must finish before
-    # AppRestarter starts killing/relaunching windows.
-    [ -n "$hyprSavePid" ] && wait "$hyprSavePid"
+    #Nativmix restart using built-in restart flag
+    if command -v nativmix >/dev/null 2>&1 && pgrep -f "nativmix" >/dev/null 2>&1; then
+        echo "nativmix running"
+        sleep 1 && nativmix --restart --hidden &
+    fi
 
-    # Sourced directly (not via time_step) so $running lands in THIS
-    # shell for the wait_for_hypr_classes call below.
-    appRestarterStart=$(date +%s%N)
-    source "$supportDir/AppRestarter.sh"
-    appRestarterEnd=$(date +%s%N)
-    echo "[timing] AppRestarter: $(awk -v a="$appRestarterStart" -v b="$appRestarterEnd" 'BEGIN{printf "%.3f", (b-a)/1000000000}')s" >&2
+    # Every stop must have finished before anything is relaunched.
+    app_stop_wait
+
+    # Snapshot of the windows that exist right before the relaunch, so
+    # wait_for_hypr_classes only counts windows created after it.
+    preRestartAddrs=""
+    if [ "$XDG_CURRENT_DESKTOP" == "Hyprland" ]; then
+        preRestartAddrs=$(hyprctl clients -j | jq -r '.[].address')
+    fi
+
+    # START PHASE
+    time_step "app start" app_start_all
+    appsStarted=1
 
     if [ "$XDG_CURRENT_DESKTOP" == "Hyprland" ]; then
         declare -a hyprPending=()
         for app in "${running[@]}"; do
-            IFS='|' read -r _ _ _ _ windowClass <<< "${apps[$app]}"
+            IFS='|' read -r _ _ _ _ windowClass _ <<< "${apps[$app]}"
             [ -z "$windowClass" ] && continue
             echo "Waiting for $app to appear..."
             hyprPending+=("${app}|${windowClass}")

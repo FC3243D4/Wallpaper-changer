@@ -176,6 +176,7 @@ cmd_update_scripts() {
         "./scripts-linux/AspectRatioChecker.sh" \
         "./scripts-linux/ThemeRefresher.sh" \
         "./scripts-linux/GenerateWallpaperThumbnails.sh" \
+        "./scripts-linux/WallpaperGui.py" \
         "$HOME/.config/WallpaperChanger/"
 
     copy_with_bar "Updating theme refresher support scripts..." \

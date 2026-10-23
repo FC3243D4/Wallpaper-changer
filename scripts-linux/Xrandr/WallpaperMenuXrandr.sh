@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # WallpaperMenuXrandr.sh (Xrandr, for non-Wayland users)
-# Rofi menu for picking a wallpaper (or "random"), showing cached
+# Rofi menu for picking a wallpaper (or "random"), showing structured cached
 # thumbnails where available and generating them on the fly otherwise.
 
 # Wallpapers path
@@ -13,7 +13,6 @@ else
         echo "No '16-9' folder found and no subfolders exist under $wallBaseDir, exiting..."
         exit 1
     fi
-    echo "'16-9' folder not found, falling back to: $wallDir"
 fi
 cacheDir="$HOME/.cache/wallpaper-thumbnails"
 
@@ -48,33 +47,34 @@ randomPicName=". random"
 # Rofi command
 rofiCommand="rofi -i -show -dmenu -config $rofiTheme -theme-str $rofiOverride"
 
-# Pre-load all existing thumbnail names into an associative array (one
-# readdir vs 11k stat calls)
-declare -A thumbExists
-while IFS= read -r f; do
-    thumbExists["$f"]=1
-done < <(find "$cacheDir" -maxdepth 1 -name "*.jpg" -printf "%f\n" 2>/dev/null)
-
-# Build sorted menu using pure bash string ops (no subshells in the loop)
 menu() {
     IFS=$'\n' sortedOptions=($(sort <<<"${pics[*]}"))
 
-    # Random entry
-    local randomKey="${randomPic##*/}.jpg"
-    if [ -n "${thumbExists[$randomKey]+x}" ]; then
-        printf "%s\x00icon\x1f%s\n" "$randomPicName" "$cacheDir/$randomKey"
+    get_thumb_path() {
+        local pic="$1"
+        local relPath="${pic#$wallDir/}"
+        local targetDir="$cacheDir/$(dirname "$relPath")"
+        echo "$targetDir/$(basename "$pic").jpg"
+    }
+
+    local randomThumb
+    randomThumb=$(get_thumb_path "$randomPic")
+    if [ -f "$randomThumb" ]; then
+        printf "%s\x00icon\x1f%s\n" "$randomPicName" "$randomThumb"
     else
         printf "%s\x00icon\x1f%s\n" "$randomPicName" "$randomPic"
     fi
 
     for pic in "${sortedOptions[@]}"; do
-        local key="${pic##*/}.jpg"
-        if [ -n "${thumbExists[$key]+x}" ]; then
-            printf "%s\x00icon\x1f%s\n" "${pic##*/}" "$cacheDir/$key"
+        local thumbPath
+        thumbPath=$(get_thumb_path "$pic")
+        
+        if [ -f "$thumbPath" ]; then
+            printf "%s\x00icon\x1f%s\n" "${pic##*/}" "$thumbPath"
         else
-            # Generate thumbnail async for next time
+            mkdir -p "$(dirname "$thumbPath")"
             magick "$pic" -thumbnail "300x169^" -gravity center \
-                -extent "300x169" -quality 80 "$cacheDir/$key" 2>/dev/null &
+                -extent "300x169" -quality 80 "$thumbPath" 2>/dev/null &
             disown
             printf "%s\x00icon\x1f%s\n" "${pic##*/}" "$pic"
         fi
@@ -112,7 +112,7 @@ main() {
     selectedFile="/$selectedFile"
     echo "Selected file path: $selectedFile"
 
-    $HOME/.config/WallpaperChanger/WallpaperApplicatorXrandr.sh $selectedFile
+    $HOME/.config/WallpaperChanger/WallpaperApplicatorXrandr.sh "$selectedFile"
 }
 
 # Check if rofi is already running

@@ -28,7 +28,10 @@ if [ "$copyScripts" = true ]; then
 
     chmod +x "$HOME/.config/WallpaperChanger"/*
     chmod +x "$HOME/.config/WallpaperChanger/themeRefresherSupportScripts"/*
-    chmod +x "$HOME/.config/WallpaperChanger/themeRefresherSupportScripts/appPatchers"/*
+    chmod +x "$HOME/.config/WallpaperChanger/themeRefresherSupportScripts/hyprLayoutPreservationSupportScripts"/*
+    chmod +x "$HOME/.config/WallpaperChanger/themeRefresherSupportScripts/iconPatcherSupportScripts"/*
+    chmod +x "$HOME/.config/WallpaperChanger/themeRefresherSupportScripts/trayIconPatcherSupportScripts"/*
+    chmod +x "$HOME/.config/WallpaperChanger/themeRefresherSupportScripts/appPatchers/"/*
     echo "Scripts copied successfully."
     echo ""
 fi

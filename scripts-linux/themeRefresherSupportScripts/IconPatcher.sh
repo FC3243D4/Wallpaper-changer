@@ -97,11 +97,15 @@ time_step_bg "WlogoutIconPatchers.sh" patch_wlogout_icons
 wlogoutPid=$!
 time_step_bg "SwayIconsPatcher.sh" patch_osd_icons
 osdPid=$!
+# Tray icons — split into its own file, see TrayIconPatcher.sh
+time_step_bg "TrayIconPatcher.sh" "$supportDir/TrayIconPatcher.sh" "$color"
+trayPid=$!
 
 # Prune stale overrides before anything else scans desktopDirs, so a
 # removed entry doesn't shadow a nonexistent original for the rest of
 # this run either.
-time_step "cleanup_stale_desktop_overrides" cleanup_stale_desktop_overrides
+time_step_bg "cleanup_stale_desktop_overrides" cleanup_stale_desktop_overrides
+cleanupStalePid=$!
 
 #----------------------------- BreezeIconsPatcher.sh -----------------------------
 
@@ -111,6 +115,7 @@ time_step "cleanup_stale_desktop_overrides" cleanup_stale_desktop_overrides
 time_step "patch_full_breeze_theme" patch_full_breeze_theme
 
 # Dedicated functions next, so the engine knows what's already handled
+wait "$cleanupStalePid"
 time_step "patch_folder_icons"             patch_folder_icons
 time_step "patch_trash_icon"               patch_trash_icon
 time_step "patch_kdeconnect_places_icon"   patch_kdeconnect_places_icon
@@ -134,14 +139,12 @@ time_step "DiscordVesktopIconPatcher.sh"    patch_discord_vesktop_icons
 # The generic engine — everything else, games included
 time_step "DesktopEntriesPatcher.sh" patch_all_desktop_icons
 
-# Tray icons — split into its own file, see TrayIconPatcher.sh
-time_step "TrayIconPatcher.sh" "$supportDir/TrayIconPatcher.sh" "$color"
-
 _run_update_desktop_database() {
     update-desktop-database "$HOME/.local/share/applications" 2>/dev/null
 }
 time_step "update-desktop-database" _run_update_desktop_database
 
+wait "$trayPid"
 time_step "cleanup_icon_cache" cleanup_icon_cache
 
 wait "$wlogoutPid" "$osdPid"

@@ -102,6 +102,22 @@ cmd_update_wallpapers() {
     # so new ratio folders added to the repo are picked up automatically.
     detectedRatios=()
     detect_aspect_ratios "$wallpapersSource" detectedRatios
+    installedRatios=()
+    detect_aspect_ratios "$HOME/Pictures/wallpapers" installedRatios
+
+    if (( ${#installedRatios[@]} == 0 )); then
+        echo "there are no installed wallpaper, please run --install first."
+        exit 1
+    fi
+
+    in_array() {
+        local needle="$1"; shift
+        local item
+        for item in "$@"; do
+            [[ "$item" == "$needle" ]] && return 0
+        done
+        return 1
+    }
 
     # Check if any nsfw wallpapers are already present in the destination
     # by looking for files whose names start with "nsfw".
@@ -113,11 +129,15 @@ cmd_update_wallpapers() {
 
     sourceDirs=()
     for ratio in "${detectedRatios[@]}"; do
-        [ -d "$wallpapersSource/sfw/$ratio" ] && sourceDirs+=("$wallpapersSource/sfw/$ratio")
+        if [ -d "$wallpapersSource/sfw/$ratio" ] && in_array "$ratio" "${installedRatios[@]}"; then
+            sourceDirs+=("$wallpapersSource/sfw/$ratio")
+        fi
     done
     if [ "$syncNsfw" = true ]; then
         for ratio in "${detectedRatios[@]}"; do
-            [ -d "$wallpapersSource/nsfw/$ratio" ] && sourceDirs+=("$wallpapersSource/nsfw/$ratio")
+            if [ -d "$wallpapersSource/nsfw/$ratio" ] && in_array "$ratio" "${installedRatios[@]}"; then
+                sourceDirs+=("$wallpapersSource/nsfw/$ratio")
+            fi
         done
     fi
 

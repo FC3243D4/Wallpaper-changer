@@ -44,7 +44,7 @@ if [ "$1" == "random" ]; then
     # Choose a new image until it differs from the current one
     while [ "$wallpaperRelativePath" == "$wallpaperPath" ]
     do
-        wallpaperRelativePath=${pics[ $RANDOM % ${#pics[@]} ]}
+        wallpaperRelativePath=${pics[ $SRANDOM % ${#pics[@]} ]}
         wallpaperRelativePath=${wallpaperRelativePath#*$HOME/Pictures/wallpapers/}
         wallpaperRelativePath=$(echo "$wallpaperRelativePath" | sed 's,^[^/]*/,,')
         wallpaperRelativePath="/$wallpaperRelativePath"

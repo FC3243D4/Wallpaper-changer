@@ -103,7 +103,9 @@ cmd_update_wallpapers() {
     detectedRatios=()
     detect_aspect_ratios "$wallpapersSource" detectedRatios
     installedRatios=()
-    detect_aspect_ratios "$HOME/Pictures/wallpapers" installedRatios
+    mapfile -t installedRatios < <(
+        find "$HOME/Pictures/wallpapers" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort
+    )
 
     if (( ${#installedRatios[@]} == 0 )); then
         echo "there are no installed wallpaper, please run --install first."
@@ -127,29 +129,29 @@ cmd_update_wallpapers() {
         echo "Detected existing nsfw wallpapers — those will be synced too."
     fi
 
-    sourceDirs=()
+    sfwDirs=()
+    nsfwDirs=()
     for ratio in "${detectedRatios[@]}"; do
-        if [ -d "$wallpapersSource/sfw/$ratio" ] && in_array "$ratio" "${installedRatios[@]}"; then
-            sourceDirs+=("$wallpapersSource/sfw/$ratio")
-        fi
+        in_array "$ratio" "${installedRatios[@]}" || continue
+        [ -d "$wallpapersSource/sfw/$ratio" ]  && sfwDirs+=("$wallpapersSource/sfw/$ratio")
+        [ -d "$wallpapersSource/nsfw/$ratio" ] && nsfwDirs+=("$wallpapersSource/nsfw/$ratio")
     done
-    if [ "$syncNsfw" = true ]; then
-        for ratio in "${detectedRatios[@]}"; do
-            if [ -d "$wallpapersSource/nsfw/$ratio" ] && in_array "$ratio" "${installedRatios[@]}"; then
-                sourceDirs+=("$wallpapersSource/nsfw/$ratio")
-            fi
-        done
-    fi
 
-    if (( ${#sourceDirs[@]} == 0 )); then
-        echo "No wallpaper directories found in the repo."
+    dest="$HOME/Pictures/wallpapers/"
+
+    if (( ${#sfwDirs[@]} == 0 )) && (( ${#nsfwDirs[@]} == 0 )); then
+        echo "No matching aspect ratio folders found in the repo to sync with installed wallpapers."
         exit 1
     fi
 
-    if [ "$syncNsfw" = true ]; then
-        copy_with_bar "Syncing wallpapers..." "${sourceDirs[@]}" "$HOME/Pictures/wallpapers/"
-    else
-        copy_with_bar "Syncing wallpapers..." --exclude="nsfw*" "${sourceDirs[@]}" "$HOME/Pictures/wallpapers/"
+    # sfw: skip anything named nsfw-*, so those files are also protected from deletion
+    copy_with_bar "Syncing wallpapers..." --delete --exclude='nsfw-*' "${sfwDirs[@]}" "$dest"
+
+    # nsfw: only touch nsfw-* files (keep directories, include nsfw-*, exclude the rest)
+    if [ "$syncNsfw" = true ] && (( ${#nsfwDirs[@]} > 0 )); then
+        copy_with_bar "Syncing nsfw wallpapers..." --delete \
+            --include='*/' --include='nsfw-*' --exclude='*' \
+            "${nsfwDirs[@]}" "$dest"
     fi
 
     # Invalidate aspect ratio cache so the changer picks up new wallpapers

@@ -130,4 +130,8 @@ app_start_all() {
     if command -v spicetify >/dev/null 2>&1; then
         "$supportDir/appPatchers/SpicetifyRestarter.sh"
     fi
+
+    if command -v vicinae >/dev/null 2>&1 && pgrep -f "vicinae" >/dev/null 2>&1; then
+        "$supportDir/appPatchers/VicinaeRestarter.sh"
+    fi
 }

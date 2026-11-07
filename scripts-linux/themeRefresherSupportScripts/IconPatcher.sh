@@ -57,6 +57,7 @@ source "$scriptSupportDir/DiscordVesktopIconPatcher.sh"
 source "$scriptSupportDir/NativmixIconPatcher.sh"
 source "$scriptSupportDir/OrcaSlicerIconPatcher.sh"
 source "$scriptSupportDir/SwayIconsPatcher.sh"
+source "$scriptSupportDir/VicinaeExtensionsPatcher.sh"
 source "$scriptSupportDir/WlogoutIconPatcher.sh"
 
 # Symbolic (ColorScheme-Text) icons use matugen's resolved primary color
@@ -107,6 +108,9 @@ trayPid=$!
 time_step_bg "cleanup_stale_desktop_overrides" cleanup_stale_desktop_overrides
 cleanupStalePid=$!
 
+time_step_bg "VicinaeExtensionsPatcher.sh" patch_vicinae_extension_icons
+vicinaePid=$!
+
 #----------------------------- BreezeIconsPatcher.sh -----------------------------
 
 # Full breeze-dark theme pass first — recolors every accent/highlight icon
@@ -147,6 +151,6 @@ time_step "update-desktop-database" _run_update_desktop_database
 wait "$trayPid"
 time_step "cleanup_icon_cache" cleanup_icon_cache
 
-wait "$wlogoutPid" "$osdPid"
+wait "$wlogoutPid" "$osdPid" "$vicinaePid"
 
 echo "Icons patched with $accent"

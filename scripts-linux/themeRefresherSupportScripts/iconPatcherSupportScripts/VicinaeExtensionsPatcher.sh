@@ -24,7 +24,7 @@ vicinaeExtensionIcons=(
     "color-palette:store.vicinae.color-converter"
     "keyboard:store.vicinae.hypr-keybinds"
     "character:store.vicinae.nerdfont-search"
-    "window_close:store.vicinae.process-manager"
+    "window-close:store.vicinae.process-manager"
     "systemd:store.vicinae.systemd"
 )
 

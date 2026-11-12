@@ -33,8 +33,8 @@ fi
 echo "Cache miss for $wallpaperName, generating color..." >&2
 
 # 2. Dynamic generation fallback
-colorLine="$($HOME/.config/WallpaperChanger/themeRefresherSupportScripts/dominantcolor -m 1 -n 2 -e black -p dominant "$wallpaperPath" | grep -E '#')"
-candidate=$(echo "$colorLine" | tr -d '#')
+# Dominant color: downscale to 50x50, quantize to 2 colors, pick the most frequent
+candidate=$(magick "$wallpaperPath" -alpha off +repage -scale 50x50! -depth 8 +dither -colors 2 -depth 8 -format '%c' histogram:info: | sed -n 's/^ *\([0-9]\+\):.*#\([0-9a-fA-F]\{6\}\) .*/\1 \2/p' | sort -rn | head -n 1 | cut -d' ' -f2)
 
 if [ -n "$candidate" ]; then
     r=$((16#${candidate:0:2}))

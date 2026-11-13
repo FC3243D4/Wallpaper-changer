@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # DirectorySetup.sh
-# Checks for existing config/wallpaper directories and the rofi config,
+# Checks for existing config/wallpaper,
 # prompting the user for overwrite/copy decisions.
 # Meant to be SOURCED from Install-Linux.sh so that configDirExists,
 # copyScripts, wallpapersDirExists, copyWallpapers, and createPicturesDir
@@ -82,18 +82,4 @@ else
             copyWallpapers=false
         fi
     fi
-fi
-
-if [ ! -d "$HOME/.config/rofi" ]; then
-    mkdir -p "$HOME/.config/rofi"
-fi
-if [ -f "$HOME/.config/rofi/config-wallpaper.rasi" ]; then
-    read -p "Rofi config for the wallpaper menu already exists. Would you like to overwrite it with the one from the repo? [y/N]" -n 1 -r
-    echo ""
-    echo ""
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        cp ./rofi/config-wallpaper.rasi "$HOME/.config/rofi/"
-    fi
-else
-    cp ./rofi/config-wallpaper.rasi "$HOME/.config/rofi/"
 fi

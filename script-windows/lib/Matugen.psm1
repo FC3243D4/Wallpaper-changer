@@ -85,7 +85,7 @@ function Invoke-Matugen {
     param([Parameter(Mandatory)][string]$Color)
     $Color = ConvertTo-HexColor $Color
     $exe = Find-Matugen
-    if (-not $exe) { throw 'matugen not found. Install it (winget install InioX.matugen, scoop install matugen or cargo install matugen) and make sure it is on PATH.' }
+    if (-not $exe) { throw 'matugen not found. Re-run install-Windows.ps1 (it can build it for you) or run: cargo install matugen --locked' }
     $config = New-MatugenConfig
     New-Item -ItemType Directory -Path (Get-WcPaths).MatugenCache -Force | Out-Null
     $out = & $exe --config $config --quiet color hex "#$Color" 2>&1

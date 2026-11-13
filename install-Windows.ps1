@@ -1,5 +1,17 @@
 # Windows Wallpaper Engine Installation Script
 
+param([switch]$Yes, [switch]$NonInteractive)
+if ($PSVersionTable.PSVersion.Major -lt 7) {
+    $pwsh = Get-Command pwsh -ErrorAction SilentlyContinue
+    if (-not $pwsh) { Write-Host 'PowerShell 7 is required: winget install Microsoft.PowerShell'; exit 1 }
+    $fwd = @(); if ($Yes) { $fwd += '-Yes' }; if ($NonInteractive) { $fwd += '-NonInteractive' }
+    & $pwsh.Source -NoProfile -ExecutionPolicy Bypass -File $PSCommandPath @fwd
+    exit $LASTEXITCODE
+}
+Import-Module "$PSScriptRoot\script-windows\lib\Dependencies.psm1" -DisableNameChecking
+$null = Install-Matugen -Yes:$Yes -NonInteractive:$NonInteractive
+$null = Install-FilePilot -Yes:$Yes -NonInteractive:$NonInteractive
+
 # Check if Wallpaper Engine is installed
 $wallpaperEnginePath = "C:\Program Files (x86)\Steam\steamapps\common\wallpaper_engine"
 

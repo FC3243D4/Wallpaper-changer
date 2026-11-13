@@ -124,7 +124,7 @@ cmd_update_wallpapers() {
     # Check if any nsfw wallpapers are already present in the destination
     # by looking for files whose names start with "nsfw".
     syncNsfw=false
-    if find "$HOME/Pictures/wallpapers" -maxdepth 2 -name "nsfw*" -print -quit 2>/dev/null | grep -q .; then
+    if find "$HOME/Pictures/wallpapers" -maxdepth 3 -name "nsfw*" -print -quit 2>/dev/null | grep -q .; then
         syncNsfw=true
         echo "Detected existing nsfw wallpapers — those will be synced too."
     fi

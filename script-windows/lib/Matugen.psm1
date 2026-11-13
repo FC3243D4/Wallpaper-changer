@@ -36,9 +36,6 @@ function Get-MatugenTemplateSet {
         if (Test-Path -LiteralPath (Join-Path $env:APPDATA 'spicetify')) {
             $set.Add(@{ Name = 'spotify'; Input = 'spicetify-color-template.ini'; Output = Join-Path $env:APPDATA 'spicetify\Themes\Sleek\color.ini' })
         }
-        if (Test-Path -LiteralPath (Join-Path $env:APPDATA 'heroic')) {
-            $set.Add(@{ Name = 'heroic'; Input = 'heroic-game-launcher.css'; Output = Join-Path $env:APPDATA 'heroic\custom-themes\matugen.css' })
-        }
     }
     # SourceGit keeps its data in %APPDATA%\SourceGit on Windows; ~\.sourcegit is the Linux-style fallback.
     $sgDir = @((Join-Path $env:APPDATA 'SourceGit'), (Join-Path $env:USERPROFILE '.sourcegit')) |

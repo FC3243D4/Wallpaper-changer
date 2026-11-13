@@ -4,7 +4,7 @@
 Usage: WallpaperGui.py [ASPECT_FOLDER]     e.g. WallpaperGui.py 21-9
 
 Without an argument the folder to browse is chosen with
-~/.config/WallpaperChanger/AspectRatioChecker.sh from the resolution of the
+~/.config/WallpaperChanger/AspectRatioChecker.sh (AspectRatioChecker.ps1 on Windows) from the resolution of the
 monitor the window opens on (focused Hyprland monitor, else the screen under
 the cursor).
 """
@@ -13,6 +13,7 @@ import json
 import os
 import random
 import re
+import shutil
 import sys
 import sqlite3
 import subprocess
@@ -51,7 +52,72 @@ THUMB_WIDTH_MAX = 520                 # never allow them to get tiny
 THUMB_WIDTH_DEFAULT = 280
 BLUR_DIVISOR = 20                     # NSFW blur strength (bigger = blurrier)
 
-ASPECT_SCRIPT = os.path.expanduser("~/.config/WallpaperChanger/AspectRatioChecker.sh")
+# --- Platform layer --------------------------------------------------------
+# Linux keeps using the bash scripts in ~/.config/WallpaperChanger. On Windows the
+# PowerShell port lives in %LOCALAPPDATA%\WallpaperChanger (override with the
+# WALLPAPERCHANGER_HOME environment variable), and so do the config, the
+# thumbnail cache and the database.
+IS_WINDOWS = sys.platform == "win32"
+# Windows: run helper processes without flashing a console window
+_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0) if IS_WINDOWS else 0
+_DETACHED = (getattr(subprocess, "DETACHED_PROCESS", 0) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+             | _NO_WINDOW) if IS_WINDOWS else 0
+
+if IS_WINDOWS:
+    WC_ROOT = os.environ.get("WALLPAPERCHANGER_HOME") or os.path.join(
+        os.environ.get("LOCALAPPDATA") or os.path.expanduser("~\\AppData\\Local"), "WallpaperChanger")
+    ASPECT_SCRIPT = os.path.join(WC_ROOT, "AspectRatioChecker.ps1")
+    APPLY_SCRIPT = os.path.join(WC_ROOT, "setRandomWallpaper-WE.ps1")
+else:
+    WC_ROOT = os.path.expanduser("~/.config/WallpaperChanger")
+    ASPECT_SCRIPT = os.path.join(WC_ROOT, "AspectRatioChecker.sh")
+    APPLY_SCRIPT = None
+
+
+def default_wallpaper_dir():
+    """Wallpaper library: Windows reads wallpaperDir from config.json (shared with
+    the PowerShell scripts); Linux uses ~/Pictures/wallpapers."""
+    if IS_WINDOWS:
+        try:
+            with open(os.path.join(WC_ROOT, "config.json"), encoding="utf-8-sig") as fh:
+                configured = json.load(fh).get("wallpaperDir")
+            if configured:
+                return os.path.expandvars(os.path.expanduser(configured))
+        except (OSError, ValueError, AttributeError):
+            pass
+    return os.path.expanduser("~/Pictures/wallpapers")
+
+
+def default_cache_paths():
+    """(thumbnail_dir, database_path)."""
+    if IS_WINDOWS:
+        cache = os.path.join(WC_ROOT, "cache")
+        return os.path.join(cache, "wallpaper-thumbnails"), os.path.join(cache, "wallpaper-changer.db")
+    return (os.path.expanduser("~/.cache/wallpaper-thumbnails"),
+            os.path.expanduser("~/.cache/wallpaper-changer.db"))
+
+
+def find_powershell():
+    return shutil.which("pwsh") or shutil.which("pwsh.exe")
+
+
+def closest_aspect_dir(base_dir, resolution):
+    """Folder under base_dir named W-H whose ratio is closest to 'WIDTHxHEIGHT'
+    (same rule as AspectRatioChecker); used when PowerShell isn't available."""
+    try:
+        w, h = (int(x) for x in resolution.lower().split("x"))
+        actual = w / h
+    except (ValueError, ZeroDivisionError):
+        return None
+    best, best_diff = None, None
+    for name in os.listdir(base_dir):
+        m = re.match(r"^(\d+)-(\d+)", name)
+        if not m or not os.path.isdir(os.path.join(base_dir, name)) or int(m.group(2)) == 0:
+            continue
+        diff = abs(int(m.group(1)) / int(m.group(2)) - actual)
+        if best_diff is None or diff < best_diff:
+            best, best_diff = name, diff
+    return os.path.join(base_dir, best) if best else None
 
 # --- Default window size ---------------------------------------------------
 # Fraction of the monitor's width / height the window opens with, keyed by the
@@ -251,20 +317,31 @@ def pick_wall_dir(base_dir, override=None, resolution=None):
     if override and os.path.isdir(os.path.join(base_dir, override)):
         return os.path.join(base_dir, override)
 
-    # 2. the wallpaper changer's own AspectRatioChecker.sh, so the GUI and the
+    # 2. the wallpaper changer's own AspectRatioChecker script, so the GUI and the
     #    applicator always agree on which folder matches a display
     resolution = resolution or detect_screen_resolution()
     if resolution and os.path.isfile(ASPECT_SCRIPT):
-        try:
-            proc = subprocess.run(["bash", ASPECT_SCRIPT, resolution], capture_output=True,
-                                  text=True, timeout=5)
-            lines = [ln.strip() for ln in proc.stdout.splitlines() if ln.strip()]
-            if lines:
-                candidate = os.path.normpath(lines[-1])
-                if os.path.isdir(candidate):
-                    return candidate
-        except (OSError, subprocess.SubprocessError):
-            pass
+        if IS_WINDOWS:
+            shell = find_powershell()
+            cmd = [shell, "-NoProfile", "-File", ASPECT_SCRIPT, resolution] if shell else None
+        else:
+            cmd = ["bash", ASPECT_SCRIPT, resolution]
+        if cmd:
+            try:
+                proc = subprocess.run(cmd, capture_output=True, text=True, timeout=15 if IS_WINDOWS else 5,
+                                      creationflags=_NO_WINDOW)
+                lines = [ln.strip() for ln in proc.stdout.splitlines() if ln.strip()]
+                if lines:
+                    candidate = os.path.normpath(lines[-1])
+                    if os.path.isdir(candidate):
+                        return candidate
+            except (OSError, subprocess.SubprocessError):
+                pass
+    if IS_WINDOWS and resolution:
+        # no PowerShell 7 (or the script failed): same ratio rule, done in Python
+        candidate = closest_aspect_dir(base_dir, resolution)
+        if candidate:
+            return candidate
 
     # 3. old behaviour: 16-9, else the first folder
     if os.path.isdir(os.path.join(base_dir, "16-9")):
@@ -733,15 +810,15 @@ class WallpaperApp(QMainWindow):
         self.settings = QSettings("wallpaper-selector", "WallpaperGui")
         self._load_settings()
 
-        self.wall_base_dir = os.path.expanduser("~/Pictures/wallpapers")
+        self.wall_base_dir = default_wallpaper_dir()
         monitor = detect_monitor()      # detected once, used for the folder *and* the size
         resolution = f"{monitor[0]}x{monitor[1]}" if monitor else None
         self.wall_dir = pick_wall_dir(self.wall_base_dir, aspect_override, resolution)
         self.resize(self._initial_window_size(monitor))
         self.setWindowTitle(f"Wallpaper Selector — {os.path.basename(self.wall_dir)}")
 
-        self.cache_dir = os.path.expanduser("~/.cache/wallpaper-thumbnails")
-        self.db_path = os.path.expanduser("~/.cache/wallpaper-changer.db")
+        self.cache_dir, self.db_path = default_cache_paths()
+        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
         os.makedirs(self.cache_dir, exist_ok=True)
 
         # Rows in the DB belong to one aspect folder; everything is scoped to it
@@ -1669,6 +1746,10 @@ class WallpaperApp(QMainWindow):
             QMessageBox.warning(self, "Warning", "That wallpaper is hidden by the NSFW blur.")
             return
 
+        if IS_WINDOWS:
+            self._apply_windows(path)
+            return
+
         # The applicator wants the path relative to the aspect folder ("/series/file.png")
         rel_path = "/" + os.path.relpath(path, self.wall_dir)
 
@@ -1698,6 +1779,30 @@ class WallpaperApp(QMainWindow):
             subprocess.Popen([applicator_script, rel_path], start_new_session=True)
         except OSError as exc:
             print(f"Could not start {applicator_script}: {exc}", file=sys.stderr)
+        QApplication.quit()
+
+    def _apply_windows(self, path):
+        """Hand the chosen wallpaper to setRandomWallpaper-WE.ps1 (all monitors + theme refresh)."""
+        shell = find_powershell()
+        if not shell:
+            QMessageBox.critical(self, "Error", "PowerShell 7 (pwsh.exe) not found.\n"
+                                 "Install it with: winget install Microsoft.PowerShell")
+            return
+        if not os.path.isfile(APPLY_SCRIPT):
+            QMessageBox.critical(self, "Error", f"{APPLY_SCRIPT} not found - run install-Windows.ps1 first.")
+            return
+        # relative to the aspect folder, e.g. "series\\file.png"
+        rel_path = os.path.relpath(path, self.wall_dir)
+        cmd = [shell, "-NoProfile", "-WindowStyle", "Hidden", "-File", APPLY_SCRIPT, "-Wallpaper", rel_path]
+
+        self.hide()
+        self.close()
+        QApplication.processEvents()
+        try:
+            # detached: the apply + theme refresh keeps running after the GUI is gone
+            subprocess.Popen(cmd, creationflags=_DETACHED, close_fds=True)
+        except OSError as exc:
+            print(f"Could not start {APPLY_SCRIPT}: {exc}", file=sys.stderr)
         QApplication.quit()
 
 

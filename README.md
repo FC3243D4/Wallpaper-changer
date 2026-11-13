@@ -13,14 +13,34 @@ Any dependency will be checked by the script and it will inform you if there are
 To ensure the script works at its best please remember to configure [matugen](https://github.com/InioX/matugen) on your system
 
 ## Windows
- - Make sure you installed [wallpaper engine through steam](https://store.steampowered.com/app/431960/Wallpaper_Engine/) on your C drive, if not the script will fail
- - If you also walt to use the hotkey to run the script be sure to have [autohotkey](https://www.autohotkey.com/) installed
- - Go into the folder where you cloned the repo
- - Open a cmd windows there and run 
-   ```
-   powershell.exe -ExecutionPolicy Bypass -File .\install-Windows.ps1
-   ```
- - Next either start manually the hotkey by going into Documents\wallpaperScripts and double click on it or logout and login again and it will start automatically
+Requirements:
+ - [PowerShell 7](https://github.com/PowerShell/PowerShell) (`winget install Microsoft.PowerShell`) - the scripts run in `pwsh`, not the built-in Windows PowerShell 5.1
+ - [Wallpaper Engine](https://store.steampowered.com/app/431960/Wallpaper_Engine/) - found automatically in any Steam library on any drive (or set `wallpaperEngineExe` in `config.json`)
+ - [matugen](https://github.com/InioX/matugen) for the theming. Upstream has no Windows binary, so it is built with Rust: the installer checks for it and, if you agree, runs `cargo install matugen --locked` (installing Rust via winget first when needed)
+ - optional: [File Pilot](https://filepilot.tech) (the installer offers it via winget; proprietary, free during its beta), [OpenRGB](https://openrgb.org/) for RGB, [AutoHotkey v1.1](https://www.autohotkey.com/) for the Ctrl+Alt+W hotkey, Python + `pip install PyQt6` for the wallpaper picker GUI
+
+Install - from the repo root (works from `powershell.exe` too: the installer re-launches itself in PowerShell 7 and offers to install it):
+```
+powershell.exe -ExecutionPolicy Bypass -File .\install-Windows.ps1
+```
+`-Yes` answers yes to the dependency prompts, `-NonInteractive` only reports what is missing. Everything lands in `%LOCALAPPDATA%\WallpaperChanger`; re-running updates the scripts and keeps `config.json` and the caches. Wallpapers go in `%USERPROFILE%\Pictures\wallpapers\<aspect-ratio>\` (16-9, 21-9, ...), same layout as on Linux.
+
+# Usage on Windows
+
+```
+pwsh -File "$env:LOCALAPPDATA\WallpaperChanger\setRandomWallpaper-WE.ps1"                 # random wallpaper + theme refresh
+pwsh -File ... setRandomWallpaper-WE.ps1 -Filter Sfw                                        # or Nsfw (also: setRandomWallpaper-WE-SFW/NSFW.ps1)
+pwsh -File ... setRandomWallpaper-WE.ps1 -Wallpaper 'series\image.png'                      # a specific one, on every monitor
+pwsh -File ... ThemeRefresher.ps1 -Mode Full|Softrun|Rgb                                    # re-theme from the current wallpaper only
+python "$env:LOCALAPPDATA\WallpaperChanger\WallpaperGui.py"                                # picker GUI (same file as on Linux)
+```
+`ThemeRefresher.ps1` mirrors the Linux modes: `Full` closes the apps that cache their theme (VS Code, Vesktop, Ferdium, SourceGit, Thunderbird/Betterbird, Spotify via Spicetify), patches everything in parallel and relaunches only the apps that were running; `Softrun` never closes anything; `Rgb` only recolors RGB. Only apps that are installed are touched: VS Code, Vesktop, Ferdium icons, SourceGit, Firefox, Zen, Thunderbird/Betterbird, Spicetify and Heroic (via the same matugen templates as on Linux). The system accent color is left to Wallpaper Engine.
+
+Settings live in `%LOCALAPPDATA%\WallpaperChanger\config.json`: `wallpaperDir`, `wallpaperEngineExe`, `openRgbExe`, `openRgbPort`, `rgbEnabled`, and `refreshMode` (`Full` | `Softrun` | `Rgb` | `None`, what runs after a wallpaper change).
+
+**RGB and administrator rights.** Some hardware (e.g. Corsair RAM) needs OpenRGB to run elevated. Run `pwsh -File "$env:LOCALAPPDATA\WallpaperChanger\Register-OpenRgbServer.ps1"` once: it registers a scheduled task that starts the OpenRGB *server* elevated at logon, and the scripts then talk to it as a normal user - no UAC prompt per wallpaper change, and nothing user-writable ever runs with admin rights. Without the task, the scripts fall back to launching OpenRGB elevated each time (one UAC prompt).
+
+Not ported (no Windows counterpart): GTK/KDE theming, the icon theme, tray-icon patching, Waybar and Hyprland layout preservation.
 
 # Usage on Linux
 

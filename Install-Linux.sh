@@ -259,12 +259,10 @@ cmd_install() {
 
     # 2 WALLPAPER CLONE AND FALLBACK
     # If no wallpapers are cloned it will use the fallback
-    if [ ! -d "./wallpapers" ] && [ -d "./wallpapersDefaultInstall" ]; then
+    if [ ! -d "./wallpapers" ] && [ -d "./wallpapersDefaultInstall/linux" ]; then
         source "$supportDir/WallpaperClone.sh"
-        if [ ! -d "./wallpapers" ] && [ -d "./wallpapersDefaultInstall" ]; then
-            echo "No ./wallpapers folder found — using bundled wallpapersDefaultInstall instead."
-            ln -s "./wallpapersDefaultInstall" "./wallpapers"
-        fi
+        echo "No ./wallpapers folder found — using bundled wallpapersDefaultInstall instead."
+        ln -s "./wallpapersDefaultInstall/linux" "./wallpapers"
     fi
 
     # 3 CHECK FOR EXISTING DIRECTORIES AND FILES

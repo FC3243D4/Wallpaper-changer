@@ -14,7 +14,9 @@
 .PARAMETER InstallDir          Where to install (default %LOCALAPPDATA%\WallpaperChanger).
 .PARAMETER WallpaperDir        Wallpaper library (default %USERPROFILE%\Pictures\wallpapers).
 .PARAMETER SkipWallpapers      Don't copy/sync the repo's bundled wallpapers.
-.PARAMETER IncludeNsfw         Also sync the bundled NSFW wallpapers (files named nsfw-*).
+.PARAMETER IncludeNsfw         Also sync the bundled NSFW wallpapers (files named nsfw-*). Without it you are asked.
+.PARAMETER AspectRatios        Only install these aspect-ratio folders, e.g. -AspectRatios 16-9,21-9 (skips the checklist).
+.PARAMETER AllAspectRatios     Install every aspect ratio the repo has (skips the checklist).
 .PARAMETER NoStartup           Don't set up the keyboard shortcuts (AutoHotkey Startup shortcut).
 .PARAMETER RegisterOpenRgbServer
                                Also register the elevated OpenRGB server task (one UAC prompt).
@@ -27,6 +29,8 @@ param(
     [string]$WallpaperDir = (Join-Path $env:USERPROFILE 'Pictures\wallpapers'),
     [switch]$SkipWallpapers,
     [switch]$IncludeNsfw,
+    [string[]]$AspectRatios,
+    [switch]$AllAspectRatios,
     [switch]$NoStartup,
     [switch]$RegisterOpenRgbServer,
     [switch]$Yes,
@@ -57,6 +61,7 @@ if ($PSVersionTable.PSVersion.Major -lt 7) {
     foreach ($k in $PSBoundParameters.Keys) {
         $v = $PSBoundParameters[$k]
         if ($v -is [System.Management.Automation.SwitchParameter]) { if ($v.IsPresent) { $fwd += "-$k" } }
+        elseif ($v -is [array]) { $fwd += "-$k"; $fwd += ($v -join ',') }
         else { $fwd += "-$k"; $fwd += [string]$v }
     }
     & $pwshExe -NoProfile -ExecutionPolicy Bypass -File $PSCommandPath @fwd
@@ -96,6 +101,7 @@ $env:WALLPAPERCHANGER_HOME = $InstallDir
 Import-Module (Join-Path $InstallDir 'lib\WallpaperChanger.Common.psm1') -Force -DisableNameChecking
 Import-Module (Join-Path $InstallDir 'lib\Matugen.psm1') -Force -DisableNameChecking
 Import-Module (Join-Path $InstallDir 'lib\Dependencies.psm1') -Force -DisableNameChecking
+Import-Module (Join-Path $InstallDir 'lib\InstallerUi.psm1') -Force -DisableNameChecking
 $paths = Get-WcPaths
 if (-not (Test-Path -LiteralPath $paths.Config)) {
     Write-WcFile -Path $paths.Config -Content ([ordered]@{ wallpaperDir = $WallpaperDir; refreshMode = 'Full' } | ConvertTo-Json)
@@ -127,25 +133,48 @@ if ($py) {
 else { Write-Warn 'Python not found - needed only for the wallpaper picker GUI (WallpaperGui.py).' }
 
 # --- 4. wallpapers ---------------------------------------------------------------------------
-# Same sync rules as `Install-Linux.sh --update-wallpapers`, scoped to the wallpaper
-# folder only: SFW folders are mirrored (files named nsfw-* are never touched), NSFW
-# files are only ever added.
+# Same sync rules as `Install-Linux.sh --update-wallpapers`, scoped to the wallpaper folder
+# only: SFW folders are mirrored (files named nsfw-* are never touched), NSFW files are only
+# ever added. Like the Linux installer you pick which aspect ratios to install; the ratios of
+# your connected monitors (and your previous choice) are pre-ticked.
 $wallSrc = @('wallpapers', 'wallpapersDefaultInstall') | ForEach-Object { Join-Path $repo $_ } | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
 if ($wallSrc -and -not $SkipWallpapers -and -not $NonInteractive) {
     # -Yes deliberately does not cover this one: the sync deletes files.
-    $answer = Read-Host "Sync this repo's wallpapers into $WallpaperDir? Existing SFW files not in the repo are removed from those folders (y/n)"
+    $answer = Read-Host "Sync this repo's wallpapers into ${WallpaperDir}? Existing SFW files not in the repo are removed from the ratio folders you pick (y/n)"
     if ($answer -eq 'y') {
-        foreach ($sfw in (Get-ChildItem -LiteralPath (Join-Path $wallSrc 'sfw') -Directory -ErrorAction SilentlyContinue)) {
-            Invoke-Robocopy $sfw.FullName (Join-Path $WallpaperDir $sfw.Name) @('/MIR', '/XF', 'nsfw-*')
-            Write-Step "Synced $($sfw.Name) wallpapers."
-        }
-        if ($IncludeNsfw) {
-            foreach ($n in (Get-ChildItem -LiteralPath (Join-Path $wallSrc 'nsfw') -Directory -ErrorAction SilentlyContinue)) {
-                Invoke-Robocopy $n.FullName (Join-Path $WallpaperDir $n.Name) @('/E')
-                Write-Step "Added NSFW $($n.Name) wallpapers."
+        $sfwRoot = Join-Path $wallSrc 'sfw'
+        $nsfwRoot = Join-Path $wallSrc 'nsfw'
+        $available = @(Get-ChildItem -LiteralPath $sfwRoot -Directory -ErrorAction SilentlyContinue | ForEach-Object { $_.Name })
+        if ($available.Count -eq 0) { Write-Warn "No aspect-ratio folders found in $sfwRoot." }
+        else {
+            $withNsfw = [bool]$IncludeNsfw
+            if (-not $withNsfw -and (Test-Path -LiteralPath $nsfwRoot)) { $withNsfw = (Read-Host 'Also copy the NSFW wallpapers? (y/N)') -match '^(y|yes)$' }
+
+            $suggested = @($cfg.aspectRatios | Where-Object { $_ })              # previous choice
+            try {
+                Import-Module (Join-Path $InstallDir 'lib\Monitors.psm1') -Force -DisableNameChecking
+                foreach ($m in (Get-WcMonitors)) {
+                    $r = Get-AspectFolder -Width $m.Width -Height $m.Height -Folders $available
+                    if ($r) { $suggested += $r }
+                }
             }
+            catch { }                                                          # no monitor info: fall back to the previous choice / all
+            $requested = @($AspectRatios | ForEach-Object { $_ -split '[,\s]+' } | Where-Object { $_ })
+            $chosen = @(Select-AspectRatios -Available $available -Requested $requested -All:$AllAspectRatios -Suggested @($suggested | Select-Object -Unique))
+            Set-WcConfigValue -Name aspectRatios -Value $chosen
+
+            foreach ($ratio in $chosen) {
+                Invoke-Robocopy (Join-Path $sfwRoot $ratio) (Join-Path $WallpaperDir $ratio) @('/MIR', '/XF', 'nsfw-*')
+                Write-Step "Synced $ratio wallpapers."
+                if ($withNsfw -and (Test-Path -LiteralPath (Join-Path $nsfwRoot $ratio))) {
+                    Invoke-Robocopy (Join-Path $nsfwRoot $ratio) (Join-Path $WallpaperDir $ratio) @('/E')
+                    Write-Step "Added NSFW $ratio wallpapers."
+                }
+            }
+            $skipped = @($available | Where-Object { $_ -notin $chosen })
+            if ($skipped.Count -gt 0) { Write-Host "Not installed: $($skipped -join ', '). Re-run the installer to add them later (folders already on disk are never deleted)." }
+            & (Join-Path $InstallDir 'clearCache-Windows.ps1') | Out-Null      # make the changer see the new files
         }
-        & (Join-Path $InstallDir 'clearCache-Windows.ps1') | Out-Null          # make the changer see the new files
     }
     else { Write-Warn "Skipping wallpaper sync. Put your wallpapers in $WallpaperDir\<aspect-ratio>\ (16-9, 21-9, 32-9, 16-10 ...)." }
 }

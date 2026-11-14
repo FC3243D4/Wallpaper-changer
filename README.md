@@ -23,7 +23,7 @@ Install - from the repo root (works from `powershell.exe` too: the installer re-
 ```
 powershell.exe -ExecutionPolicy Bypass -File .\install-Windows.ps1
 ```
-`-Yes` answers yes to the dependency prompts, `-NonInteractive` only reports what is missing. Everything lands in `%LOCALAPPDATA%\WallpaperChanger`; re-running updates the scripts and keeps `config.json` and the caches. Wallpapers go in `%USERPROFILE%\Pictures\wallpapers\<aspect-ratio>\` (16-9, 21-9, ...), same layout as on Linux.
+The installer asks which aspect ratios to install (arrow keys + space; the ratios of your connected monitors and your previous choice are pre-ticked); skip the question with `-AspectRatios 16-9,21-9` or `-AllAspectRatios`. Folders already on disk are never deleted. `-Yes` answers yes to the dependency prompts, `-NonInteractive` only reports what is missing. Everything lands in `%LOCALAPPDATA%\WallpaperChanger`; re-running updates the scripts and keeps `config.json` and the caches. Wallpapers go in `%USERPROFILE%\Pictures\wallpapers\<aspect-ratio>\` (16-9, 21-9, ...), same layout as on Linux.
 
 # Usage on Windows
 

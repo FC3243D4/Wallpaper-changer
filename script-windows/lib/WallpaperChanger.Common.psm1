@@ -43,6 +43,7 @@ function Get-WcConfig {
         openRgbPort        = 6742       # OpenRGB SDK server port
         rgbEnabled         = $true
         refreshMode        = 'Full'     # run after a wallpaper change: Full | Softrun | Rgb | None
+        aspectRatios       = @()        # ratio folders chosen at install time (informational; the changer uses what exists on disk)
     }
     if (Test-Path -LiteralPath $paths.Config) {
         try {

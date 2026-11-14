@@ -25,9 +25,9 @@ _APP = None   # keeps the Qt application object alive for the whole run
 
 
 def load_picker():
-    """Import WallpaperGui.py from this folder (installed side by side) or the repo's scripts-linux."""
+    """Import WallpaperGui.py from this folder (installed side by side) or the repo's scripts-cross-platform."""
     here = os.path.dirname(os.path.abspath(__file__))
-    for cand in (os.path.join(here, "WallpaperGui.py"), os.path.join(here, "..", "scripts-linux", "WallpaperGui.py")):
+    for cand in (os.path.join(here, "WallpaperGui.py"), os.path.join(here, "..", "scripts-cross-platform", "WallpaperGui.py")):
         if os.path.isfile(cand):
             spec = importlib.util.spec_from_file_location("WallpaperGui", cand)
             mod = importlib.util.module_from_spec(spec)

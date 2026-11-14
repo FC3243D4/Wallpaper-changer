@@ -78,9 +78,9 @@ $ErrorActionPreference = 'Stop'
 if (-not $IsWindows) { throw 'This installer is for Windows. Use Install-Linux.sh on Linux.' }
 
 $repo = $PSScriptRoot
-$srcScripts = Join-Path $repo 'script-windows'
+$srcScripts = Join-Path $repo 'scripts-windows'
 $srcSvg = Join-Path $repo 'scripts-linux\themeRefresherSupportScripts\svg'
-$srcGui = Join-Path $repo 'scripts-linux\WallpaperGui.py'
+$srcGui = Join-Path $repo 'scripts-cross-platform\WallpaperGui.py'
 foreach ($p in $srcScripts, $srcSvg, $srcGui) { if (-not (Test-Path -LiteralPath $p)) { throw "Missing in repo: $p (run this from the repo root)" } }
 
 function Write-Step([string]$Text) { Write-Host $Text -ForegroundColor Green }
@@ -143,7 +143,20 @@ else { Write-Warn 'Python not found - needed only for the wallpaper picker GUI (
 # only: SFW folders are mirrored (files named nsfw-* are never touched), NSFW files are only
 # ever added. Like the Linux installer you pick which aspect ratios to install; the ratios of
 # your connected monitors (and your previous choice) are pre-ticked.
-$wallSrc = @('wallpapers', 'wallpapersDefaultInstall') | ForEach-Object { Join-Path $repo $_ } | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+# Source: .\wallpapers if you have one, otherwise the bundled Windows defaults in
+# wallpapersDefaultInstall\windows (the Linux installer does the same with
+# wallpapersDefaultInstall/linux).
+$wallSrc = $null
+$defaultWin = Join-Path $repo 'wallpapersDefaultInstall\windows'
+if (Test-Path -LiteralPath (Join-Path $repo 'wallpapers')) { $wallSrc = Join-Path $repo 'wallpapers' }
+elseif (Test-Path -LiteralPath $defaultWin) {
+    $wallSrc = $defaultWin
+    if (-not $SkipWallpapers) { Write-Warn 'No .\wallpapers folder found - using the bundled wallpapersDefaultInstall\windows instead.' }
+}
+if ($wallSrc -and -not (@(Get-ChildItem -LiteralPath (Join-Path $wallSrc 'sfw') -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -match '^\d+-\d+$' }).Count -gt 0)) {
+    if (-not $SkipWallpapers) { Write-Warn "$wallSrc is not in the expected layout yet (sfw\<aspect-ratio>\<series>\<files>). Put your wallpapers in .\wallpapers, or directly into $WallpaperDir\<aspect-ratio>\." }
+    $wallSrc = $null
+}
 if ($wallSrc -and -not $SkipWallpapers -and -not $NonInteractive) {
     # -Yes deliberately does not cover this one: the sync deletes files.
     $answer = Read-Host "Sync this repo's wallpapers into ${WallpaperDir}? Existing SFW files not in the repo are removed from the ratio folders you pick (y/n)"

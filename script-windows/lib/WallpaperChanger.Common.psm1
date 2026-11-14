@@ -485,4 +485,36 @@ function Invoke-WcTimed {
     try { & $Script } finally { [Console]::Error.WriteLine(('[timing] {0}: {1:N3}s' -f $Label, $sw.Elapsed.TotalSeconds)) }
 }
 
+function Remove-LegacyHotkey {
+    # Cleans up the old AutoHotkey v1 hotkey (Ctrl+Alt+W): stops a running
+    # instance and deletes its script copies and Startup entries. A process
+    # already running the NEW script ($KeepScript) is left alone. Returns a
+    # list of strings describing what was done.
+    param(
+        [Parameter(Mandatory)][string]$StartupDir,
+        [Parameter(Mandatory)][string]$KeepScript
+    )
+    $done = [System.Collections.Generic.List[string]]::new()
+    if ($IsWindows) {
+        $procs = Get-CimInstance Win32_Process -Filter "Name LIKE 'AutoHotkey%'" -ErrorAction SilentlyContinue
+        foreach ($p in $procs) {
+            $cl = [string]$p.CommandLine
+            if ($cl -match 'wallpaperHotkey\.ahk' -and -not $cl.Contains($KeepScript)) {
+                try { Stop-Process -Id $p.ProcessId -Force -ErrorAction Stop; $done.Add("stopped the old hotkey process (PID $($p.ProcessId))") } catch { }
+            }
+        }
+    }
+    $files = @(
+        (Join-Path $StartupDir 'wallpaperHotkey.ahk'),                       # old hard-link startup entry
+        (Join-Path $StartupDir 'WallpaperChanger Hotkey.lnk'),               # shortcut made by an earlier installer
+        (Join-Path $env:USERPROFILE 'Documents\wallpaperScripts\wallpaperHotkey.ahk')   # copy in the old install folder
+    )
+    foreach ($f in $files) {
+        if (Test-Path -LiteralPath $f) {
+            try { Remove-Item -LiteralPath $f -Force -ErrorAction Stop; $done.Add("removed $f") } catch { $done.Add("could not remove ${f}: $($_.Exception.Message)") }
+        }
+    }
+    $done
+}
+
 Export-ModuleMember -Function *-*

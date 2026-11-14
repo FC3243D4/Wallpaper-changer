@@ -15,7 +15,7 @@
 .PARAMETER WallpaperDir        Wallpaper library (default %USERPROFILE%\Pictures\wallpapers).
 .PARAMETER SkipWallpapers      Don't copy/sync the repo's bundled wallpapers.
 .PARAMETER IncludeNsfw         Also sync the bundled NSFW wallpapers (files named nsfw-*).
-.PARAMETER NoStartup           Don't create the Startup shortcut for the Ctrl+Alt+W hotkey.
+.PARAMETER NoStartup           Don't set up the keyboard shortcuts (AutoHotkey Startup shortcut).
 .PARAMETER RegisterOpenRgbServer
                                Also register the elevated OpenRGB server task (one UAC prompt).
 .PARAMETER Yes                 Answer yes to the dependency prompts (matugen / Rust / File Pilot installs).
@@ -115,8 +115,9 @@ $null = Install-Matugen -Yes:$Yes -NonInteractive:$NonInteractive
 $openRgb = Get-OpenRgbExe
 if ($openRgb) { Write-Step "OpenRGB: $openRgb" } else { Write-Warn 'OpenRGB not found - RGB sync will be skipped (https://openrgb.org).' }
 
-# File Pilot is optional.
+# File Pilot and AutoHotkey (keyboard shortcuts) are optional.
 $null = Install-FilePilot -Yes:$Yes -NonInteractive:$NonInteractive
+$ahk = Install-AutoHotkey -Yes:$Yes -NonInteractive:$NonInteractive
 
 $py = Get-Command python -ErrorAction SilentlyContinue
 if ($py) {
@@ -149,18 +150,24 @@ if ($wallSrc -and -not $SkipWallpapers -and -not $NonInteractive) {
     else { Write-Warn "Skipping wallpaper sync. Put your wallpapers in $WallpaperDir\<aspect-ratio>\ (16-9, 21-9, 32-9, 16-10 ...)." }
 }
 
-# --- 5. hotkey (Startup shortcut instead of the old hard link) ------------------------------
+# --- 5. hotkeys -----------------------------------------------------------------------------------
+# AutoHotkey v2 script + a Startup shortcut that launches it with the v2 interpreter at every login.
+$startup = [Environment]::GetFolderPath('Startup')
+$hotkeyScript = Join-Path $InstallDir 'wallpaperHotkey.ahk'
+foreach ($line in (Remove-LegacyHotkey -StartupDir $startup -KeepScript $hotkeyScript)) { Write-Step "Old Ctrl+Alt+W hotkey: $line" }
+
 if (-not $NoStartup) {
-    $startup = [Environment]::GetFolderPath('Startup')
-    $legacy = Join-Path $startup 'wallpaperHotkey.ahk'
-    if (Test-Path -LiteralPath $legacy) { Remove-Item -LiteralPath $legacy -Force; Write-Step 'Removed the old hard-link startup entry.' }
-    $lnk = Join-Path $startup 'WallpaperChanger Hotkey.lnk'
-    $shell = New-Object -ComObject WScript.Shell
-    $sc = $shell.CreateShortcut($lnk)
-    $sc.TargetPath = Join-Path $InstallDir 'wallpaperHotkey.ahk'
-    $sc.WorkingDirectory = $InstallDir
-    $sc.Save()
-    Write-Step 'Startup shortcut created (needs AutoHotkey v1.1: https://www.autohotkey.com). Hotkey: Ctrl+Alt+W.'
+    if ($ahk) {
+        $lnk = Join-Path $startup 'WallpaperChanger Hotkeys.lnk'
+        $sc = (New-Object -ComObject WScript.Shell).CreateShortcut($lnk)
+        $sc.TargetPath = $ahk                                  # explicit v2 interpreter: no dependence on .ahk file association
+        $sc.Arguments = '"' + $hotkeyScript + '"'
+        $sc.WorkingDirectory = $InstallDir
+        $sc.Save()
+        Start-Process -FilePath $ahk -ArgumentList ('"' + $hotkeyScript + '"') -WorkingDirectory $InstallDir
+        Write-Step 'Hotkeys are active now and start at every login: Win+Shift+W random, Win+Ctrl+Shift+W SFW, Win+Shift+Alt+W NSFW, Win+W picker.'
+    }
+    else { Write-Warn 'AutoHotkey v2 is not installed, so no keyboard shortcuts were set up. Re-run this installer and accept the AutoHotkey prompt (or use -Yes).' }
 }
 
 # --- 6. OpenRGB server --------------------------------------------------------------------------

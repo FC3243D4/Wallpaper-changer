@@ -7,6 +7,7 @@
 #                     built from source with `cargo install matugen --locked`;
 #                     if Rust is missing, rustup can be installed via winget first.
 #   Install-FilePilot optional third-party file manager (winget: Voidstar.FilePilot).
+#   Install-AutoHotkey optional, for the keyboard shortcuts (winget: AutoHotkey.AutoHotkey, v2).
 #
 # Every function takes -Yes (answer yes to the install question) and
 # -NonInteractive (never ask, never install - just report what is missing).
@@ -99,6 +100,36 @@ function Install-FilePilot {
     }
     Write-Host 'File Pilot installed (the winget package can trail the newest release on the website).' -ForegroundColor Green
     $true
+}
+
+function Find-AutoHotkey {
+    # Path to the AutoHotkey v2 interpreter, or $null.
+    $cands = @()
+    foreach ($base in @($env:ProgramFiles, (Join-Path $env:LOCALAPPDATA 'Programs'))) {
+        if ($base) { $cands += (Join-Path $base 'AutoHotkey\v2\AutoHotkey64.exe'), (Join-Path $base 'AutoHotkey\v2\AutoHotkey32.exe') }
+    }
+    $cmd = Get-Command 'AutoHotkey64.exe', 'AutoHotkey.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($cmd) { $cands = @($cmd.Source) + $cands }
+    $cands | Where-Object { $_ -and (Test-Path -LiteralPath $_ -PathType Leaf) } | Select-Object -First 1
+}
+
+function Install-AutoHotkey {
+    # Optional. Returns the interpreter path, or $null if it is still missing.
+    param([switch]$Yes, [switch]$NonInteractive)
+
+    $existing = Find-AutoHotkey
+    if ($existing) { Write-Host "AutoHotkey v2: $existing" -ForegroundColor Green; return $existing }
+
+    $winget = Get-Command 'winget' -ErrorAction SilentlyContinue
+    Write-Host 'Optional: AutoHotkey v2 provides the keyboard shortcuts (Win+Shift+W, Win+W, ...).'
+    if (-not $winget) { Write-Host '  winget is not available; get AutoHotkey v2 from https://www.autohotkey.com/download/'; return $null }
+    if (-not (Confirm-Choice 'Install AutoHotkey v2 with winget (AutoHotkey.AutoHotkey)?' -Yes:$Yes -NonInteractive:$NonInteractive)) { return $null }
+
+    & $winget.Source install --id AutoHotkey.AutoHotkey --exact --accept-package-agreements --accept-source-agreements
+    $found = Find-AutoHotkey
+    if ($found) { Write-Host "AutoHotkey v2 installed: $found" -ForegroundColor Green }
+    else { Write-Warning 'winget finished but AutoHotkey v2 was not found; re-run this installer after it appears.' }
+    $found
 }
 
 Export-ModuleMember -Function *-*

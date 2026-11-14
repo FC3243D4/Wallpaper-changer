@@ -17,7 +17,7 @@ Requirements:
  - [PowerShell 7](https://github.com/PowerShell/PowerShell) (`winget install Microsoft.PowerShell`) - the scripts run in `pwsh`, not the built-in Windows PowerShell 5.1
  - [Wallpaper Engine](https://store.steampowered.com/app/431960/Wallpaper_Engine/) - found automatically in any Steam library on any drive (or set `wallpaperEngineExe` in `config.json`)
  - [matugen](https://github.com/InioX/matugen) for the theming. Upstream has no Windows binary, so it is built with Rust: the installer checks for it and, if you agree, runs `cargo install matugen --locked` (installing Rust via winget first when needed)
- - optional: [File Pilot](https://filepilot.tech) (the installer offers it via winget; proprietary, free during its beta), [OpenRGB](https://openrgb.org/) for RGB, [AutoHotkey v1.1](https://www.autohotkey.com/) for the Ctrl+Alt+W hotkey, Python + `pip install PyQt6` for the wallpaper picker GUI
+ - optional: [File Pilot](https://filepilot.tech) (the installer offers it via winget; proprietary, free during its beta), [OpenRGB](https://openrgb.org/) for RGB, [AutoHotkey v2](https://www.autohotkey.com/) for the keyboard shortcuts (the installer offers it via winget), Python + `pip install PyQt6` for the wallpaper picker GUI
 
 Install - from the repo root (works from `powershell.exe` too: the installer re-launches itself in PowerShell 7 and offers to install it):
 ```
@@ -34,6 +34,8 @@ pwsh -File ... setRandomWallpaper-WE.ps1 -Wallpaper 'series\image.png'          
 pwsh -File ... ThemeRefresher.ps1 -Mode Full|Softrun|Rgb                                    # re-theme from the current wallpaper only
 python "$env:LOCALAPPDATA\WallpaperChanger\WallpaperGui.py"                                # picker GUI (same file as on Linux)
 ```
+Keyboard shortcuts (AutoHotkey v2, started at login by the installer): `Win+Shift+W` random wallpaper, `Win+Ctrl+Shift+W` random SFW, `Win+Shift+Alt+W` random NSFW, `Win+W` picker GUI (press again to close it). Presses while a run is still in progress are ignored, and a failed run shows a notification. `Win+W` replaces Windows' Widgets shortcut while the script runs; the bindings are in the HOTKEYS block of `wallpaperHotkey.ahk`.
+
 `ThemeRefresher.ps1` mirrors the Linux modes: `Full` closes the apps that cache their theme (VS Code, Vesktop, Ferdium, SourceGit, Thunderbird/Betterbird, Spotify via Spicetify), patches everything in parallel and relaunches only the apps that were running; `Softrun` never closes anything; `Rgb` only recolors RGB. Only apps that are installed are touched: VS Code, Vesktop, Ferdium icons, SourceGit, Firefox, Zen, Thunderbird/Betterbird, Spicetify and Heroic (via the same matugen templates as on Linux). The system accent color is left to Wallpaper Engine.
 
 Settings live in `%LOCALAPPDATA%\WallpaperChanger\config.json`: `wallpaperDir`, `wallpaperEngineExe`, `openRgbExe`, `openRgbPort`, `rgbEnabled`, and `refreshMode` (`Full` | `Softrun` | `Rgb` | `None`, what runs after a wallpaper change).

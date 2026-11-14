@@ -141,4 +141,23 @@ function Select-AspectRatios {
     $chosen
 }
 
+function New-StartupShortcut {
+    # Creates (or replaces) a shortcut in the user's Startup folder; returns its path.
+    param(
+        [Parameter(Mandatory)][string]$Name,                # file name without .lnk
+        [Parameter(Mandatory)][string]$Target,
+        [string]$Arguments = '',
+        [string]$WorkingDirectory = '',
+        [switch]$Hidden                                     # run minimized/hidden (console tools)
+    )
+    $lnk = Join-Path ([Environment]::GetFolderPath('Startup')) ($Name + '.lnk')
+    $sc = (New-Object -ComObject WScript.Shell).CreateShortcut($lnk)
+    $sc.TargetPath = $Target
+    $sc.Arguments = $Arguments
+    if ($WorkingDirectory) { $sc.WorkingDirectory = $WorkingDirectory }
+    if ($Hidden) { $sc.WindowStyle = 7 }                    # 7 = minimized
+    $sc.Save()
+    $lnk
+}
+
 Export-ModuleMember -Function *-*

@@ -17,6 +17,9 @@
 .PARAMETER IncludeNsfw         Also sync the bundled NSFW wallpapers (files named nsfw-*). Without it you are asked.
 .PARAMETER AspectRatios        Only install these aspect-ratio folders, e.g. -AspectRatios 16-9,21-9 (skips the checklist).
 .PARAMETER AllAspectRatios     Install every aspect ratio the repo has (skips the checklist).
+.PARAMETER BuildCache          Pre-generate thumbnails and accent colors right away (otherwise you are asked).
+.PARAMETER CacheWatcher        Keep those caches up to date in the background from login (otherwise you are asked).
+.PARAMETER NoCache             Skip everything about the thumbnail/color cache.
 .PARAMETER NoStartup           Don't set up the keyboard shortcuts (AutoHotkey Startup shortcut).
 .PARAMETER RegisterOpenRgbServer
                                Also register the elevated OpenRGB server task (one UAC prompt).
@@ -31,6 +34,9 @@ param(
     [switch]$IncludeNsfw,
     [string[]]$AspectRatios,
     [switch]$AllAspectRatios,
+    [switch]$BuildCache,
+    [switch]$CacheWatcher,
+    [switch]$NoCache,
     [switch]$NoStartup,
     [switch]$RegisterOpenRgbServer,
     [switch]$Yes,
@@ -179,6 +185,25 @@ if ($wallSrc -and -not $SkipWallpapers -and -not $NonInteractive) {
     else { Write-Warn "Skipping wallpaper sync. Put your wallpapers in $WallpaperDir\<aspect-ratio>\ (16-9, 21-9, 32-9, 16-10 ...)." }
 }
 
+# --- 4b. thumbnail + accent-color cache ---------------------------------------------------------
+# Both fill themselves lazily; this does it ahead of time (like GenerateWallpaperThumbnails.sh on
+# Linux) and can keep doing it when the wallpaper folder changes (like the systemd path watcher).
+$haveWalls = (Test-Path -LiteralPath $WallpaperDir) -and (@(Get-ChildItem -LiteralPath $WallpaperDir -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -match '^\d+-\d+$' }).Count -gt 0)
+if ($haveWalls -and -not $NoCache) {
+    $cacheScript = Join-Path $InstallDir 'Build-WallpaperCache.ps1'
+    $buildNow = $BuildCache -or (Confirm-Choice 'Pre-generate wallpaper thumbnails and accent colors now? (one-time, a few minutes for a big library; the picker opens instantly afterwards)' -Yes:$Yes -NonInteractive:$NonInteractive)
+    if ($buildNow) { & $cacheScript }
+    # A resident background process is opt-in: -Yes does not cover it.
+    $watch = $CacheWatcher -or (Confirm-Choice 'Keep them up to date automatically? (a small hidden PowerShell process started at login, idle until the wallpaper folder changes)' -NonInteractive:$NonInteractive)
+    if ($watch) {
+        $pwshExe = (Get-Process -Id $PID).Path
+        $null = New-StartupShortcut -Name 'WallpaperChanger Cache Watcher' -Target $pwshExe -Hidden -WorkingDirectory $InstallDir `
+            -Arguments ('-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "' + $cacheScript + '" -Watch -Quiet')
+        Start-Process -FilePath $pwshExe -WindowStyle Hidden -ArgumentList ('-NoProfile -ExecutionPolicy Bypass -File "' + $cacheScript + '" -Watch -Quiet')
+        Write-Step 'Cache watcher is running and will start at every login.'
+    }
+}
+
 # --- 5. hotkeys -----------------------------------------------------------------------------------
 # AutoHotkey v2 script + a Startup shortcut that launches it with the v2 interpreter at every login.
 $startup = [Environment]::GetFolderPath('Startup')
@@ -187,12 +212,8 @@ foreach ($line in (Remove-LegacyHotkey -StartupDir $startup -KeepScript $hotkeyS
 
 if (-not $NoStartup) {
     if ($ahk) {
-        $lnk = Join-Path $startup 'WallpaperChanger Hotkeys.lnk'
-        $sc = (New-Object -ComObject WScript.Shell).CreateShortcut($lnk)
-        $sc.TargetPath = $ahk                                  # explicit v2 interpreter: no dependence on .ahk file association
-        $sc.Arguments = '"' + $hotkeyScript + '"'
-        $sc.WorkingDirectory = $InstallDir
-        $sc.Save()
+        # explicit v2 interpreter: no dependence on the .ahk file association
+        $null = New-StartupShortcut -Name 'WallpaperChanger Hotkeys' -Target $ahk -Arguments ('"' + $hotkeyScript + '"') -WorkingDirectory $InstallDir
         Start-Process -FilePath $ahk -ArgumentList ('"' + $hotkeyScript + '"') -WorkingDirectory $InstallDir
         Write-Step 'Hotkeys are active now and start at every login: Win+Shift+W random, Win+Ctrl+Shift+W SFW, Win+Shift+Alt+W NSFW, Win+W picker.'
     }

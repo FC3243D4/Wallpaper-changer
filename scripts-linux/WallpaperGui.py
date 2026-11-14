@@ -245,6 +245,19 @@ def load_or_make_thumbnail(src, thumb_path):
     return img
 
 
+def thumbnail_cache_path(cache_dir, wall_dir, pic):
+    """Where the cached thumbnail of `pic` lives. `wall_dir` is the aspect folder being browsed.
+
+    Linux keeps one flat tree (keyed by the path relative to the aspect folder). On Windows each
+    aspect folder gets its own subfolder: 16-9 and 21-9 share file names, so a flat tree would
+    make them overwrite each other's thumbnails (the shape check then regenerates them forever).
+    """
+    rel_path = os.path.relpath(pic, wall_dir)
+    if IS_WINDOWS:
+        return os.path.join(cache_dir, os.path.basename(os.path.normpath(wall_dir)), rel_path + ".jpg")
+    return os.path.join(cache_dir, rel_path + ".jpg")
+
+
 def make_blurred(pixmap, size):
     """Soft blur that keeps the picture's colours and general shapes.
 
@@ -654,8 +667,7 @@ class WallpaperModel(QAbstractListModel):
 
     # --- lazy thumbnail loading ---
     def _thumb_path(self, pic):
-        rel_path = os.path.relpath(pic, self.wall_dir)
-        return os.path.join(self.cache_dir, rel_path + ".jpg")
+        return thumbnail_cache_path(self.cache_dir, self.wall_dir, pic)
 
     def _request(self, path):
         if path in self._inflight or path in self._failed:

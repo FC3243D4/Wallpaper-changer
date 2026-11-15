@@ -1,0 +1,8 @@
+# Python packages for the wallpaper picker (WallpaperGui.py) and, on Windows, the thumbnail
+# generator. The Windows installer installs these into a private venv:
+#     python -m pip install -r requirements.txt
+# On Linux prefer your distro's package (python-pyqt6 / python3-pyqt6); pip works too.
+PyQt6
+
+# Optional, not installed by the Windows installer:
+#   Pillow    - only the Linux Conky icon patcher uses it (distro package: python-pillow)

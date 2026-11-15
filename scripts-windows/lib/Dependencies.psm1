@@ -178,7 +178,10 @@ function Install-PythonEnv {
     & $base.Exe -m venv $venv
     $venvPy = if ($IsWindows) { Join-Path $venv 'Scripts\python.exe' } else { Join-Path $venv 'bin/python' }
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $venvPy)) { Write-Warning "Could not create the virtual environment in $venv"; return $null }
-    & $venvPy -m pip install --disable-pip-version-check PyQt6
+    $requirements = Join-Path (Get-WcPaths).Root 'requirements.txt'      # copied there by the installer
+    $pipArgs = @('-m', 'pip', 'install', '--disable-pip-version-check')
+    if (Test-Path -LiteralPath $requirements) { $pipArgs += @('-r', $requirements) } else { $pipArgs += 'PyQt6' }
+    & $venvPy @pipArgs
     if ($LASTEXITCODE -ne 0) { Write-Warning "pip could not install PyQt6 (exit $LASTEXITCODE). Check your internet connection and re-run this installer."; return $null }
 
     $done = Find-Python -RequirePyQt6

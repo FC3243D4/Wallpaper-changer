@@ -48,7 +48,9 @@ SetWallpaper(extraArgs) {
     global busy
     if busy                          ; a run is still in progress: ignore the extra key press
         return
-    pwsh := FindExe(["pwsh.exe"], [A_ProgramFiles "\PowerShell\7\pwsh.exe"])
+    pwsh := ReadConfigString("pwshExe")        ; the PowerShell 7 the installer verified, else search
+    if (pwsh = "" || !FileExist(pwsh))
+        pwsh := FindExe(["pwsh.exe"], [A_ProgramFiles "\PowerShell\7\pwsh.exe"])
     if (pwsh = "") {
         Notify("PowerShell 7 (pwsh.exe) not found. Install it with: winget install Microsoft.PowerShell", true)
         return

@@ -81,6 +81,7 @@ $repo = $PSScriptRoot
 $srcScripts = Join-Path $repo 'scripts-windows'
 $srcSvg = Join-Path $repo 'scripts-linux\themeRefresherSupportScripts\svg'
 $srcGui = Join-Path $repo 'scripts-cross-platform\WallpaperGui.py'
+$srcReq = Join-Path $repo 'scripts-cross-platform\requirements.txt'
 foreach ($p in $srcScripts, $srcSvg, $srcGui) { if (-not (Test-Path -LiteralPath $p)) { throw "Missing in repo: $p (run this from the repo root)" } }
 
 function Write-Step([string]$Text) { Write-Host $Text -ForegroundColor Green }
@@ -98,6 +99,7 @@ New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
 Invoke-Robocopy $srcScripts $InstallDir @('/E')                         # no purge: keeps config.json + cache
 Invoke-Robocopy $srcSvg (Join-Path $InstallDir 'themeRefresherSupportScripts\svg') @('/MIR')
 Copy-Item -LiteralPath $srcGui -Destination (Join-Path $InstallDir 'WallpaperGui.py') -Force
+if (Test-Path -LiteralPath $srcReq) { Copy-Item -LiteralPath $srcReq -Destination (Join-Path $InstallDir 'requirements.txt') -Force }
 Remove-Item -LiteralPath (Join-Path $InstallDir 'getDominantColor.ps1') -ErrorAction SilentlyContinue   # replaced by ColorChooser.ps1
 Get-ChildItem -LiteralPath $InstallDir -Recurse -File | Unblock-File -ErrorAction SilentlyContinue
 Write-Step "Scripts installed to $InstallDir"
@@ -113,6 +115,7 @@ if (-not (Test-Path -LiteralPath $paths.Config)) {
     Write-WcFile -Path $paths.Config -Content ([ordered]@{ wallpaperDir = $WallpaperDir; refreshMode = 'Full' } | ConvertTo-Json)
     Write-Step "Created $($paths.Config)"
 }
+Set-WcConfigValue -Name pwshExe -Value (Get-Process -Id $PID).Path        # the hotkeys use exactly this PowerShell
 $cfg = Get-WcConfig
 $WallpaperDir = $cfg.wallpaperDir
 

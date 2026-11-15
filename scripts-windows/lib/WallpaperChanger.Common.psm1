@@ -40,8 +40,11 @@ function Get-WcConfig {
     $cfg = [ordered]@{
         wallpaperDir       = Join-Path $env:USERPROFILE 'Pictures\wallpapers'
         wallpaperEngineExe = $null      # null = auto-detect (any Steam library, running process, registry)
+        wallpaperEngineAutoStart     = $true   # start Wallpaper Engine first if it is not running
+        wallpaperEngineSettleSeconds = 3       # pause after it appears, before it receives commands
         openRgbExe         = $null      # null = auto-detect
         pythonExe          = $null      # interpreter for the picker/thumbnails; set by the installer (null = auto-detect)
+        pwshExe            = $null      # PowerShell 7 used by the hotkeys; set by the installer (null = auto-detect)
         pythonwExe         = $null      # windowless twin of pythonExe, used by the hotkey
         openRgbPort        = 6742       # OpenRGB SDK server port
         rgbEnabled         = $true
@@ -403,6 +406,33 @@ function Get-WallpaperEngineExe {
         }
     }
     $null
+}
+
+function Test-WallpaperEngineRunning {
+    [bool](Get-Process -Name 'wallpaper64', 'wallpaper32' -ErrorAction SilentlyContinue)
+}
+
+function Start-WallpaperEngineIfNeeded {
+    # The wallpaper is applied by sending a "-control" command to Wallpaper Engine, which
+    # needs a running instance. If none is (first hotkey press after login, before its
+    # autostart has finished), start it, wait for the process to appear and give it a moment
+    # to initialise. Returns $true if an instance is running afterwards.
+    param(
+        [Parameter(Mandatory)][string]$Exe,
+        [int]$TimeoutSeconds = 20,
+        [int]$SettleSeconds = 3
+    )
+    if (Test-WallpaperEngineRunning) { return $true }
+    Write-Host 'Wallpaper Engine is not running - starting it...'
+    Start-Process -FilePath $Exe -WorkingDirectory (Split-Path -Parent $Exe)
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    while ((Get-Date) -lt $deadline -and -not (Test-WallpaperEngineRunning)) { Start-Sleep -Milliseconds 250 }
+    if (-not (Test-WallpaperEngineRunning)) {
+        Write-Warning "Wallpaper Engine did not start within $TimeoutSeconds seconds; trying to apply the wallpaper anyway."
+        return $false
+    }
+    if ($SettleSeconds -gt 0) { Start-Sleep -Seconds $SettleSeconds }
+    $true
 }
 
 function Get-OpenRgbExe {

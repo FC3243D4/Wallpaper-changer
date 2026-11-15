@@ -40,6 +40,7 @@ $we = Get-WallpaperEngineExe
 if (-not $we) {
     throw "Wallpaper Engine not found. Start it once, or set 'wallpaperEngineExe' in $($paths.Config) (or the WALLPAPER_ENGINE_EXE environment variable)."
 }
+if ($cfg.wallpaperEngineAutoStart) { $null = Start-WallpaperEngineIfNeeded -Exe $we -SettleSeconds ([int]$cfg.wallpaperEngineSettleSeconds) }
 
 $folders = @(Get-ChildItem -LiteralPath $base -Directory | Where-Object Name -Match '^\d+-\d+' | ForEach-Object Name)
 if ($folders.Count -eq 0) { throw "No aspect-ratio folders (16-9, 21-9, ...) found in $base" }

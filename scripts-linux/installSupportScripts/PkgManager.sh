@@ -66,7 +66,7 @@ _resolve_pkg() {
                 breeze-gtk)     echo "breeze-gtk" ;;
                 breeze-icons)   echo "breeze-icon-theme" ;;
                 python-pillow)  echo "python3-pillow" ;;
-                python-pyqt6)   echo "python3-pyqt6" ;;   # UNVERIFIED — check manually
+                python-pyqt6)   echo "python3-pyqt6" ;;
                 jq)             echo "jq" ;;
                 librsvg)        echo "librsvg2-tools" ;;
                 *)              echo "$logical" ;;
@@ -80,10 +80,10 @@ _resolve_pkg() {
                 breeze)         echo "breeze5" ;;
                 breeze-gtk)     echo "breeze5-gtk" ;;
                 breeze-icons)   echo "breeze5-icons" ;;
-                python-pillow)  echo "python3-Pillow" ;;   # UNVERIFIED — check manually
-                python-pyqt6)   echo "python3-qt6" ;;      # UNVERIFIED — check manually
+                python-pillow)  echo "python3-Pillow" ;;
+                python-pyqt6)   echo "python3-pyqt6" ;;
                 jq)             echo "jq" ;;
-                librsvg)        echo "rsvg-convert" ;;      # UNVERIFIED — check manually
+                librsvg)        echo "rsvg-convert" ;;
                 *)              echo "$logical" ;;
             esac ;;
     esac

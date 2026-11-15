@@ -68,13 +68,14 @@ if ! openrgb --version &> /dev/null; then
     echo "openrgb is not installed. You will not have the wallpaper's dominant color applied to your devices. Please install openrgb if you want this feature."
     echo ""
 fi
-# Optional: reported, never installed automatically.
 if ! command -v rsvg-convert &>/dev/null; then
-    echo "rsvg-convert is not installed. Recoloured app and tray icons (Steam, Ferdium, Vesktop, ...) will be skipped. Install it with: $(install_hint librsvg)"
+    echo "rsvg-convert"
+    packageList+=("rsvg-convert")
     echo ""
 fi
 if ! python3 -c "import PIL" &>/dev/null; then
-    echo "python-pillow is not installed. The Conky icon patcher will be skipped. Install it with: $(install_hint python-pillow)"
+    echo "python-pillow"
+    packageList+=("python-pillow")
     echo ""
 fi
 

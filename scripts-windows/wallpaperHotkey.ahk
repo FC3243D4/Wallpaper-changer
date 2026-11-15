@@ -66,6 +66,17 @@ SetWallpaper(extraArgs) {
     }
 }
 
+; Reads a string value from config.json (written by the installer / Install-PythonEnv).
+ReadConfigString(name) {
+    cfg := installDir "\config.json"
+    if !FileExist(cfg)
+        return ""
+    text := FileRead(cfg, "UTF-8")
+    if RegExMatch(text, '"' name '"\s*:\s*"((?:[^"\\]|\\.)*)"', &m)
+        return StrReplace(StrReplace(m[1], '\"', '"'), "\\", "\")      ; undo JSON escaping of the path
+    return ""
+}
+
 ToggleGui() {
     title := "Wallpaper Selector"    ; the GUI's window title starts with this (matched as a prefix)
     if WinExist(title) {
@@ -75,14 +86,21 @@ ToggleGui() {
             WinActivate(title)       ; open but behind something: bring it to the front
         return
     }
-    py := FindExe(["pythonw.exe", "pyw.exe"])
+    ; The interpreter the installer verified (config.json), else whatever is on PATH.
+    py := ReadConfigString("pythonwExe")
+    if (py = "" || !FileExist(py))
+        py := FindExe(["pythonw.exe", "pyw.exe"])
     if (py = "") {
-        Notify("Python not found (needed for the picker). Install Python, then: pip install PyQt6", true)
+        Notify("Python not found (needed for the picker). Re-run install-Windows.ps1, it can set Python and PyQt6 up.", true)
         return
     }
     try {
         Run('"' py '" "' guiScript '"', installDir)
     } catch as err {
         Notify("Could not start the picker: " err.Message, true)
+        return
     }
+    ; pythonw has no console, so a crash would be invisible: tell the user if no window shows up.
+    if !WinWait(title, , 12)
+        Notify("The wallpaper picker did not open. Run WallpaperGui.py in a terminal to see the error.", true)
 }

@@ -36,6 +36,9 @@ _resolve_pkg() {
                 breeze-gtk)     echo "breeze-gtk" ;;
                 breeze-icons)   echo "breeze-icons" ;;
                 python-pillow)  echo "python-pillow" ;;
+                python-pyqt6)   echo "python-pyqt6" ;;
+                jq)             echo "jq" ;;
+                librsvg)        echo "librsvg" ;;
                 *)              echo "$logical" ;;
             esac ;;
         apt)
@@ -48,6 +51,9 @@ _resolve_pkg() {
                 breeze-gtk)     echo "breeze-gtk-theme" ;;
                 breeze-icons)   echo "breeze-icon-theme" ;;
                 python-pillow)  echo "python3-pil" ;;
+                python-pyqt6)   echo "python3-pyqt6" ;;
+                jq)             echo "jq" ;;
+                librsvg)        echo "librsvg2-bin" ;;
                 *)              echo "$logical" ;;
             esac ;;
         dnf)
@@ -60,6 +66,9 @@ _resolve_pkg() {
                 breeze-gtk)     echo "breeze-gtk" ;;
                 breeze-icons)   echo "breeze-icon-theme" ;;
                 python-pillow)  echo "python3-pillow" ;;
+                python-pyqt6)   echo "python3-pyqt6" ;;   # UNVERIFIED — check manually
+                jq)             echo "jq" ;;
+                librsvg)        echo "librsvg2-tools" ;;
                 *)              echo "$logical" ;;
             esac ;;
         zypper)
@@ -72,8 +81,24 @@ _resolve_pkg() {
                 breeze-gtk)     echo "breeze5-gtk" ;;
                 breeze-icons)   echo "breeze5-icons" ;;
                 python-pillow)  echo "python3-Pillow" ;;   # UNVERIFIED — check manually
+                python-pyqt6)   echo "python3-qt6" ;;      # UNVERIFIED — check manually
+                jq)             echo "jq" ;;
+                librsvg)        echo "rsvg-convert" ;;      # UNVERIFIED — check manually
                 *)              echo "$logical" ;;
             esac ;;
+    esac
+}
+
+# Prints the command that installs a logical package name on this distro. Used in the messages
+# for optional dependencies, which are reported but never installed automatically.
+install_hint() {
+    local resolved
+    resolved="$(_resolve_pkg "$1")"
+    case "$pkgManager" in
+        pacman) echo "sudo pacman -S $resolved" ;;
+        apt)    echo "sudo apt install $resolved" ;;
+        dnf)    echo "sudo dnf install $resolved" ;;
+        zypper) echo "sudo zypper install $resolved" ;;
     esac
 }
 

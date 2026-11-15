@@ -68,31 +68,26 @@ function Invoke-ColorPass {
     $total = $files.Count
     Say "Colors: $total wallpapers..."
     if ($total -eq 0) { return }
-    $counts = @{ cache = 0; made = 0; failed = 0 }
+    $counts = @{ cache = 0; made = 0; failed = 0; fallback = 0 }
     $done = 0; $forceFlag = [bool]$Force
     $files | ForEach-Object -ThrottleLimit $Throttle -Parallel {
         Import-Module $using:colorModule -DisableNameChecking
         try { (Get-WallpaperColor -Image $_ -Force:$using:forceFlag).Source } catch { 'FAIL' }
     } | ForEach-Object {
         $done++
-        if ($_ -eq 'cache') { $counts.cache++ } elseif ($_ -eq 'FAIL') { $counts.failed++ } else { $counts.made++ }
+        if ($_ -eq 'cache') { $counts.cache++ } elseif ($_ -eq 'FAIL') { $counts.failed++ } elseif ($_ -in 'lifted', 'last', 'default') { $counts.fallback++ } else { $counts.made++ }
         if (-not $Quiet -and ($done % 25 -eq 0 -or $done -eq $total)) { Write-Host -NoNewline ("`r  [{0}/{1}] {2}%" -f $done, $total, [int](100 * $done / $total)) }
     }
     Say ''
     Say ("Colors: {0} computed, {1} already cached, {2} failed" -f $counts.made, $counts.cache, $counts.failed)
+    if ($counts.fallback -gt 0) { Write-Warning ("{0} wallpaper(s) only got a fallback color (very dark and matugen missing?). They are not cached; install matugen and re-run to fix them." -f $counts.fallback) }
 }
 
 function Invoke-ThumbnailPass {
     param([string[]]$Folders)
-    $py = $null
-    foreach ($name in 'python', 'python3') {
-        $cmd = Get-Command $name -ErrorAction SilentlyContinue
-        if ($cmd) {
-            & $cmd.Source -c 'import PyQt6.QtGui' 2>$null
-            if ($LASTEXITCODE -eq 0) { $py = $cmd.Source; break }
-        }
-    }
-    if (-not $py) { Write-Warning 'Thumbnails skipped: need Python with PyQt6 (python -m pip install PyQt6). The picker still makes them on demand.'; return }
+    $found = Find-Python -RequirePyQt6
+    if (-not $found) { Write-Warning 'Thumbnails skipped: no Python with PyQt6 found (re-run install-Windows.ps1, it can set that up). The picker still makes them on demand.'; return }
+    $py = $found.Exe
     $script = Join-Path $PSScriptRoot 'GenerateWallpaperThumbnails.py'
     $pyArgs = @($script, '--wallpapers', $base, '--ratios', ($Folders -join ','))
     if ($Quiet) { $pyArgs += '--quiet' }

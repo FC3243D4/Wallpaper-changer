@@ -131,12 +131,8 @@ if ($openRgb) { Write-Step "OpenRGB: $openRgb" } else { Write-Warn 'OpenRGB not 
 $null = Install-FilePilot -Yes:$Yes -NonInteractive:$NonInteractive
 $ahk = Install-AutoHotkey -Yes:$Yes -NonInteractive:$NonInteractive
 
-$py = Get-Command python -ErrorAction SilentlyContinue
-if ($py) {
-    & $py.Source -c 'import PyQt6' 2>$null
-    if ($LASTEXITCODE -ne 0) { Write-Warn 'PyQt6 missing for the wallpaper picker GUI: python -m pip install PyQt6' }
-}
-else { Write-Warn 'Python not found - needed only for the wallpaper picker GUI (WallpaperGui.py).' }
+# Python + PyQt6 (picker GUI, thumbnails): detected, and offered as winget Python + a private venv.
+$null = Install-PythonEnv -Yes:$Yes -NonInteractive:$NonInteractive
 
 # --- 4. wallpapers ---------------------------------------------------------------------------
 # Same sync rules as `Install-Linux.sh --update-wallpapers`, scoped to the wallpaper folder

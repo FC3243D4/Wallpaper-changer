@@ -29,6 +29,7 @@ function Get-WcPaths {
         Thumbnails       = Join-Path $cache 'wallpaper-thumbnails'
         CurrentWallpaper = Join-Path $script:Root 'current_wallpaper.txt'
         LastWallpaper    = Join-Path $cache 'wallpaper_last.txt'
+        LastAccent       = Join-Path $cache 'last_accent.txt'
         FileCache        = Join-Path $cache 'wallpaper_cache.json'
     }
 }
@@ -40,6 +41,8 @@ function Get-WcConfig {
         wallpaperDir       = Join-Path $env:USERPROFILE 'Pictures\wallpapers'
         wallpaperEngineExe = $null      # null = auto-detect (any Steam library, running process, registry)
         openRgbExe         = $null      # null = auto-detect
+        pythonExe          = $null      # interpreter for the picker/thumbnails; set by the installer (null = auto-detect)
+        pythonwExe         = $null      # windowless twin of pythonExe, used by the hotkey
         openRgbPort        = 6742       # OpenRGB SDK server port
         rgbEnabled         = $true
         refreshMode        = 'Full'     # run after a wallpaper change: Full | Softrun | Rgb | None
@@ -440,6 +443,84 @@ function Get-AspectFolder {
         if ($diff -lt $bestDiff) { $best = $f; $bestDiff = $diff }
     }
     $best
+}
+
+# ------------------------------------------------------------------ Python --
+function Test-PythonStub {
+    # The Microsoft Store "python.exe" alias (with no Python behind it) opens the Store
+    # instead of running anything - never execute it. A real Store-installed Python lives in
+    # the same folder, so look for its package before calling an alias a stub.
+    param([Parameter(Mandatory)][string]$Path)
+    if (-not $IsWindows) { return $false }
+    if ($Path -notlike '*\Microsoft\WindowsApps\*') { return $false }
+    try { -not (Get-AppxPackage -Name 'PythonSoftwareFoundation.Python*' -ErrorAction Stop) } catch { $true }
+}
+
+function Get-PythonInfo {
+    # Runs the interpreter once; returns Version + HasPyQt6, or $null if it is not a working Python >= 3.9.
+    param([Parameter(Mandatory)][string]$Exe)
+    try {
+        $code = "import sys`ntry:`n import PyQt6.QtGui`n h = 1`nexcept Exception:`n h = 0`nprint('%d.%d.%d %d' % (sys.version_info[0], sys.version_info[1], sys.version_info[2], h))"
+        $out = & $Exe -c $code 2>$null
+        if ($LASTEXITCODE -ne 0 -or -not $out) { return $null }
+        $m = [regex]::Match(([string](@($out)[-1])).Trim(), '^(\d+)\.(\d+)\.(\d+) ([01])$')
+        if (-not $m.Success) { return $null }
+        if ([int]$m.Groups[1].Value -lt 3 -or ([int]$m.Groups[1].Value -eq 3 -and [int]$m.Groups[2].Value -lt 9)) { return $null }
+        [pscustomobject]@{ Version = "$($m.Groups[1].Value).$($m.Groups[2].Value).$($m.Groups[3].Value)"; HasPyQt6 = ($m.Groups[4].Value -eq '1') }
+    }
+    catch { $null }
+}
+
+function Find-Python {
+    # Finds a usable Python 3.9+ and says whether it can import PyQt6. Order: explicit override,
+    # config, the private venv the installer makes, the "py" launcher, PATH, standard install folders.
+    # Microsoft Store alias stubs are skipped. Returns
+    #   [pscustomobject]@{ Exe; Pythonw; Version; HasPyQt6; Source }  or $null.
+    # -RequirePyQt6 only accepts an interpreter that can import PyQt6.QtGui.
+    param([switch]$RequirePyQt6)
+    $cfg = Get-WcConfig
+    $paths = Get-WcPaths
+    $venvPy = if ($IsWindows) { Join-Path $paths.Root 'venv\Scripts\python.exe' } else { Join-Path $paths.Root 'venv/bin/python' }
+    $cands = [System.Collections.Generic.List[object]]::new()
+    $add = { param($exe, $src) if ($exe) { $cands.Add(@{ Exe = $exe; Source = $src }) } }
+    & $add $env:WALLPAPERCHANGER_PYTHON 'environment'
+    & $add $cfg.pythonExe 'config'
+    & $add $venvPy 'venv'
+    if ($IsWindows) {
+        $launcher = Get-Command 'py.exe' -ErrorAction SilentlyContinue
+        if ($launcher) {
+            try { $real = (& $launcher.Source -3 -c 'import sys; print(sys.executable)' 2>$null | Select-Object -First 1); & $add $real 'py launcher' } catch { }
+        }
+    }
+    foreach ($name in 'python', 'python3') {
+        foreach ($c in @(Get-Command $name -All -ErrorAction SilentlyContinue)) { & $add $c.Source 'PATH' }
+    }
+    if ($IsWindows) {
+        foreach ($base in @((Join-Path $env:LOCALAPPDATA 'Programs\Python'), $env:ProgramFiles)) {
+            if ($base -and (Test-Path -LiteralPath $base)) {
+                Get-ChildItem -LiteralPath $base -Directory -Filter 'Python3*' -ErrorAction SilentlyContinue | Sort-Object Name -Descending |
+                    ForEach-Object { & $add (Join-Path $_.FullName 'python.exe') 'install folder' }
+            }
+        }
+    }
+
+    $seen = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    $firstWorking = $null
+    foreach ($c in $cands) {
+        if (-not (Test-Path -LiteralPath $c.Exe -PathType Leaf)) { continue }
+        $full = (Resolve-Path -LiteralPath $c.Exe).Path
+        if (-not $seen.Add($full)) { continue }
+        if (Test-PythonStub -Path $full) { continue }
+        $info = Get-PythonInfo -Exe $full
+        if (-not $info) { continue }
+        $pythonw = if ($IsWindows) { Join-Path (Split-Path -Parent $full) 'pythonw.exe' } else { $null }
+        if ($pythonw -and -not (Test-Path -LiteralPath $pythonw)) { $pythonw = $null }
+        $result = [pscustomobject]@{ Exe = $full; Pythonw = $pythonw; Version = $info.Version; HasPyQt6 = $info.HasPyQt6; Source = $c.Source }
+        if ($info.HasPyQt6) { return $result }
+        if (-not $firstWorking) { $firstWorking = $result }
+    }
+    if ($RequirePyQt6) { return $null }
+    $firstWorking
 }
 
 # --------------------------------------------------------- job plumbing ----

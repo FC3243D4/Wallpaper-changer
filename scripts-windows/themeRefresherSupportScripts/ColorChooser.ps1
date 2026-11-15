@@ -32,5 +32,12 @@ switch -Wildcard ($result.Source) {
     'cache' { Write-Host "Using cached color for $(Split-Path -Leaf $Image)" }
     'image' { Write-Host "Dominant color: #$($result.Color)" }
     'matugen:*' { Write-Host "Using matugen seed #$($result.Source.Split(':')[1]): #$($result.Color)" }
+    'lifted' { Write-Warning "No bright accent found for $(Split-Path -Leaf $Image) (is matugen installed?) - using its dominant color brightened: #$($result.Color)" }
+    'last' { Write-Warning "Could not determine an accent color for $(Split-Path -Leaf $Image) (is matugen installed?) - keeping the last accent: #$($result.Color)" }
+    'default' { Write-Warning "Could not determine an accent color for $(Split-Path -Leaf $Image) (is matugen installed?) - using the default blue: #$($result.Color)" }
+}
+if (-not $result.Fallback) {
+    # remembered so a later failure can keep the previous accent instead of jumping to the default
+    try { Write-WcFile -Path (Get-WcPaths).LastAccent -Content "$($result.Color)`n" } catch { }
 }
 Write-Output $result.Color

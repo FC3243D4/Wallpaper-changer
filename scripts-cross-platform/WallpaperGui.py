@@ -23,6 +23,43 @@ from contextlib import closing
 from functools import lru_cache
 from itertools import groupby
 
+
+def _report_missing_qt(exc):
+    """Tell the user PyQt6 is missing in a way they will actually see.
+
+    On Windows the picker normally runs under pythonw (no console), where a plain ImportError
+    would vanish without a trace, so show a native message box. Elsewhere print to stderr and
+    send a desktop notification when notify-send is available (the picker is usually started
+    from a keybinding, where stderr is not visible either)."""
+    msg = ("The wallpaper picker needs PyQt6, which could not be loaded:\n\n"
+           f"{exc}\n\n"
+           "Re-run the installer (it can set Python and PyQt6 up for you), or run:\n"
+           f"    \"{sys.executable}\" -m pip install PyQt6")
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            ctypes.windll.user32.MessageBoxW(None, msg, "Wallpaper Changer", 0x10)   # MB_ICONERROR
+            return
+        except Exception:
+            pass
+    print(msg, file=sys.stderr)
+    if shutil.which("notify-send"):
+        try:
+            subprocess.run(["notify-send", "-u", "critical", "Wallpaper Changer",
+                            "The wallpaper picker needs PyQt6 (pip install PyQt6 / your distro's python-pyqt6 package)."],
+                           timeout=5)
+        except Exception:
+            pass
+
+
+try:
+    import PyQt6.QtCore, PyQt6.QtGui, PyQt6.QtWidgets      # noqa: F401  (fail early, with a readable message)
+except ImportError as _qt_error:
+    if __name__ == "__main__":
+        _report_missing_qt(_qt_error)
+        sys.exit(1)
+    raise                                                   # imported as a module: let the caller decide
+
 from PyQt6.QtCore import (
     Qt, QSize, QLoggingCategory, QTimer, QThread, QThreadPool, QRunnable,
     QObject, QAbstractListModel, QModelIndex, QSettings, pyqtSignal, pyqtSlot

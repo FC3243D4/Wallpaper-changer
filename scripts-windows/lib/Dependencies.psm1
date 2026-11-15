@@ -8,6 +8,9 @@
 #                     if Rust is missing, rustup can be installed via winget first.
 #   Install-FilePilot optional third-party file manager (winget: Voidstar.FilePilot).
 #   Install-AutoHotkey optional, for the keyboard shortcuts (winget: AutoHotkey.AutoHotkey, v2).
+#   Install-PythonEnv  Python + PyQt6 for the picker GUI and thumbnails: finds a working interpreter
+#                      (skipping the Microsoft Store stub), offers to install Python (winget:
+#                      Python.Python.3.13) and to create a private venv with PyQt6 in it.
 #
 # Every function takes -Yes (answer yes to the install question) and
 # -NonInteractive (never ask, never install - just report what is missing).
@@ -130,6 +133,58 @@ function Install-AutoHotkey {
     if ($found) { Write-Host "AutoHotkey v2 installed: $found" -ForegroundColor Green }
     else { Write-Warning 'winget finished but AutoHotkey v2 was not found; re-run this installer after it appears.' }
     $found
+}
+
+function Install-PythonEnv {
+    # Makes sure there is a Python that can import PyQt6, and records it in config.json
+    # (pythonExe / pythonwExe) for the hotkey, the cache builder and the installer.
+    # Returns the Find-Python result, or $null if it could not be completed.
+    param([switch]$Yes, [switch]$NonInteractive)
+
+    $save = {
+        param($found)
+        Set-WcConfigValue -Name pythonExe -Value $found.Exe
+        Set-WcConfigValue -Name pythonwExe -Value $found.Pythonw
+    }
+
+    $ready = Find-Python -RequirePyQt6
+    if ($ready) {
+        Write-Host "Python $($ready.Version) with PyQt6: $($ready.Exe)" -ForegroundColor Green
+        & $save $ready
+        return $ready
+    }
+
+    # Is there a Python at all (any, without PyQt6)?
+    $base = Find-Python
+    if (-not $base) {
+        Write-Host 'No usable Python 3.9+ was found (the Microsoft Store python.exe stub does not count). It is needed for the wallpaper picker and thumbnails.' -ForegroundColor Yellow
+        $winget = Get-Command 'winget' -ErrorAction SilentlyContinue
+        if ($winget -and (Confirm-Choice 'Install Python 3.13 with winget (Python.Python.3.13, per-user, added to PATH)?' -Yes:$Yes -NonInteractive:$NonInteractive)) {
+            & $winget.Source install --id Python.Python.3.13 --exact --scope user --accept-package-agreements --accept-source-agreements
+            $base = Find-Python          # also looks in %LOCALAPPDATA%\Programs\Python, so a fresh install is found before PATH refreshes
+            if (-not $base) { Write-Warning 'Python was installed but could not be located yet. Open a new terminal and re-run this installer.' }
+        }
+        if (-not $base) {
+            Write-Host '  Install Python from https://www.python.org/downloads/ (tick "Add python.exe to PATH") and re-run this installer.' -ForegroundColor Yellow
+            return $null
+        }
+    }
+
+    $venv = Join-Path (Get-WcPaths).Root 'venv'
+    if (-not (Confirm-Choice "Create a private Python environment in $venv and install PyQt6 into it (a download of roughly 100 MB; nothing is changed in your system Python)?" -Yes:$Yes -NonInteractive:$NonInteractive)) {
+        Write-Host '  Skipped. The picker (Win+W) and thumbnails need it: python -m pip install PyQt6' -ForegroundColor Yellow
+        return $null
+    }
+    & $base.Exe -m venv $venv
+    $venvPy = if ($IsWindows) { Join-Path $venv 'Scripts\python.exe' } else { Join-Path $venv 'bin/python' }
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $venvPy)) { Write-Warning "Could not create the virtual environment in $venv"; return $null }
+    & $venvPy -m pip install --disable-pip-version-check PyQt6
+    if ($LASTEXITCODE -ne 0) { Write-Warning "pip could not install PyQt6 (exit $LASTEXITCODE). Check your internet connection and re-run this installer."; return $null }
+
+    $done = Find-Python -RequirePyQt6
+    if ($done) { Write-Host "Python $($done.Version) with PyQt6: $($done.Exe)" -ForegroundColor Green; & $save $done }
+    else { Write-Warning 'PyQt6 was installed but cannot be imported. Run: python -c "import PyQt6.QtGui" to see why.' }
+    $done
 }
 
 Export-ModuleMember -Function *-*

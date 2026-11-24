@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # ColorChooser.sh
 # Checks structured cache for wallpaper accent color. Falls back to dynamic calculation if missing.
+# The fallback logic must stay identical to GenerateWallpaperThumbnails.sh so a
+# cache hit and a cache miss always give the same color.
 
 wallBaseDir="$HOME/Pictures/wallpapers"
 if [ -d "$wallBaseDir/16-9" ]; then
@@ -19,6 +21,25 @@ wallpaperName=$(basename "$resolvedWallpaper")
 colorCacheFile="$targetCacheDir/${wallpaperName}.color"
 brightnessThreshold=20
 color=""
+
+# Prints the most frequent quantized color that passes the brightness threshold.
+# With mode "any", falls back to the brightest color found when none passes,
+# so very dark images still get a valid color instead of failing forever.
+pick_quantized() {
+    local img="$1" threshold="${2:-20}" mode="${3:-strict}"
+    local cnt hex r g b br bestBr=-1 bestHex=""
+    while read -r cnt hex; do
+        [ -z "$hex" ] && continue
+        r=$((16#${hex:0:2})); g=$((16#${hex:2:2})); b=$((16#${hex:4:2}))
+        br=$(( (r * 299 + g * 587 + b * 114) / 1000 ))
+        if (( br >= threshold )); then echo "$hex"; return 0; fi
+        if (( br > bestBr )); then bestBr=$br; bestHex="$hex"; fi
+    done < <(magick "$img" -alpha off +repage -scale 50x50! -depth 8 +dither \
+                 -colors 2 -depth 8 -format '%c' histogram:info: 2>/dev/null \
+             | sed -n 's/^ *\([0-9]\+\):.*#\([0-9a-fA-F]\{6\}\) .*/\1 \2/p' | sort -rn)
+    if [ "$mode" = any ] && [ -n "$bestHex" ]; then echo "$bestHex"; return 0; fi
+    return 1
+}
 
 # 1. Check structured cache first
 if [ -f "$colorCacheFile" ]; then
@@ -46,8 +67,12 @@ if [ -n "$candidate" ]; then
     fi
 fi
 
+# Walk the quantized colors by frequency: handles images whose dominant
+# color is too dark but that still contain a usable lighter color.
+[ -z "$color" ] && color=$(pick_quantized "$wallpaperPath" "$brightnessThreshold")
+
 if [ -z "$color" ]; then
-    for i in 0 1 2 3 4; do
+    for i in 0 1 2 3; do
         candidate=$(matugen image "$wallpaperPath" --source-color-index $i --dry-run 2>/dev/null \
             | grep -oP '#\K[0-9a-fA-F]{6}' | head -1)
 
@@ -69,6 +94,9 @@ if [ -z "$color" ]; then
         fi
     done
 fi
+
+# Last resort: brightest quantized color, so very dark images do not fail
+[ -z "$color" ] && color=$(pick_quantized "$wallpaperPath" "$brightnessThreshold" any)
 
 color=$(echo "$color" | grep -oP '[0-9a-fA-F]{6}' | tail -1)
 

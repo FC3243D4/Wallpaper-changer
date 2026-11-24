@@ -74,6 +74,25 @@ fi
 thumbHeight=$(( thumbWidth * ratioH / ratioW ))
 thumbSize="${thumbWidth}x${thumbHeight}"
 
+# Prints the most frequent quantized color that passes the brightness threshold.
+# With mode "any", falls back to the brightest color found when none passes,
+# so very dark images still get a valid color instead of failing forever.
+pick_quantized() {
+    local img="$1" threshold="${2:-20}" mode="${3:-strict}"
+    local cnt hex r g b br bestBr=-1 bestHex=""
+    while read -r cnt hex; do
+        [ -z "$hex" ] && continue
+        r=$((16#${hex:0:2})); g=$((16#${hex:2:2})); b=$((16#${hex:4:2}))
+        br=$(( (r * 299 + g * 587 + b * 114) / 1000 ))
+        if (( br >= threshold )); then echo "$hex"; return 0; fi
+        if (( br > bestBr )); then bestBr=$br; bestHex="$hex"; fi
+    done < <(magick "$img" -alpha off +repage -scale 50x50! -depth 8 +dither \
+                 -colors 2 -depth 8 -format '%c' histogram:info: 2>/dev/null \
+             | sed -n 's/^ *\([0-9]\+\):.*#\([0-9a-fA-F]\{6\}\) .*/\1 \2/p' | sort -rn)
+    if [ "$mode" = any ] && [ -n "$bestHex" ]; then echo "$bestHex"; return 0; fi
+    return 1
+}
+
 generate_thumb() {
     local src="$1"
 
@@ -99,7 +118,7 @@ generate_thumb() {
 
     # 1. Generate thumbnail
     magick "$src" -thumbnail "$thumbSize^" -gravity center \
-        -extent "$thumbSize" -quality 80 "$dst" 2>/dev/null || { echo "FAIL"; return; }
+        -extent "$thumbSize" -quality 80 "$dst" 2>/dev/null || { echo "FAIL:thumbnail:$src"; return; }
 
     # 2. Extract color
     local color=""
@@ -117,8 +136,12 @@ generate_thumb() {
         fi
     fi
 
+    # Walk the quantized colors by frequency: handles images whose dominant
+    # color is too dark but that still contain a usable lighter color.
+    [ -z "$color" ] && color=$(pick_quantized "$src" "$brightnessThreshold")
+
     if [ -z "$color" ]; then
-        for i in 0 1 2 3 4; do
+        for i in 0 1 2 3; do
             candidate=$(matugen image "$src" --source-color-index $i --dry-run 2>/dev/null \
                 | grep -oP '#\K[0-9a-fA-F]{6}' | head -1)
 
@@ -141,17 +164,20 @@ generate_thumb() {
         done
     fi
 
+    # Last resort: brightest quantized color, so the image is not retried forever
+    [ -z "$color" ] && color=$(pick_quantized "$src" "$brightnessThreshold" any)
+
     color=$(echo "$color" | grep -oP '[0-9a-fA-F]{6}' | tail -1)
 
     if [ ${#color} -eq 6 ]; then
         echo "${color,,}" > "$colorDst"
         echo "OK"
     else
-        echo "FAIL"
+        echo "FAIL:color:$src"
     fi
 }
 
-export -f generate_thumb
+export -f generate_thumb pick_quantized
 export cacheDir thumbSize wallDir
 
 barWidth=40
@@ -171,6 +197,7 @@ draw_progress() {
 count=0
 generated=0
 failed=0
+failedFiles=()
 lastDrawUs=0
 minIntervalUs=80000
 
@@ -179,7 +206,10 @@ while IFS= read -r line; do
     case "$line" in
         OK) generated=$((generated + 1)) ;;
         SKIP) skipped=$((skipped + 1)) ;;
-        FAIL) failed=$((failed + 1)) ;;
+        FAIL:*)
+            failed=$((failed + 1))
+            failedFiles+=("${line#FAIL:}")
+            ;;
     esac
 
     if [ -t 1 ]; then
@@ -197,4 +227,10 @@ done < <(printf '%s\0' "${todo[@]}" | \
 
 [ -t 1 ] && echo
 echo "Done: $generated generated, $skipped skipped, $failed failed"
+if [ "$failed" -gt 0 ]; then
+    failLog="$cacheDir/failed.log"
+    printf '%s\n' "${failedFiles[@]}" > "$failLog"
+    echo "Failed files (step:path), also saved to $failLog:"
+    printf '  %s\n' "${failedFiles[@]}"
+fi
 echo "Thumbnails & color cache stored in: $cacheDir"

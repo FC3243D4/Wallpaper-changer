@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # GenerateWallpaperThumbnails.sh
 # Pre-generates thumbnails and color caches for all wallpapers preserving folder structure.
+# Up-to-date files are filtered out in the main shell (no forks), so only
+# wallpapers that really need work are handed to the parallel workers.
 
 wallBaseDir="$HOME/Pictures/wallpapers"
 if [ -d "$wallBaseDir/16-9" ]; then
@@ -15,18 +17,44 @@ else
 fi
 cacheDir="$HOME/.cache/wallpaper-thumbnails"
 thumbWidth=300
-jobs=$(nproc)
+
+# Half the cores: each job decodes full-size PNGs, so memory/CPU add up fast.
+jobs=$(( $(nproc) / 2 ))
+(( jobs < 1 )) && jobs=1
 
 mkdir -p "$cacheDir"
 
 mapfile -d '' walls < <(find -L "$wallDir" -type f \( \
     -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" \) -print0)
 
-total=${#walls[@]}
-echo "Found $total wallpapers. Generating thumbnails and color cache with $jobs parallel jobs..."
+if [ "${#walls[@]}" -eq 0 ]; then
+    echo "No wallpapers found, nothing to do."
+    exit 0
+fi
+
+# ---------------------------------------------------------------------------
+# Pre-filter: decide what to skip using only bash builtins (no process spawns).
+# A wallpaper is up to date if its thumbnail and .color file both exist and
+# the thumbnail is newer than the source.
+# ---------------------------------------------------------------------------
+todo=()
+skipped=0
+for src in "${walls[@]}"; do
+    rel="${src#$wallDir/}"
+    dst="$cacheDir/$rel.jpg"
+    colorDst="$cacheDir/$rel.color"
+    if [[ -f $dst && -f $colorDst && $dst -nt $src ]]; then
+        skipped=$((skipped + 1))
+    else
+        todo+=("$src")
+    fi
+done
+
+total=${#todo[@]}
+echo "Found ${#walls[@]} wallpapers: $skipped up to date, $total to process (parallel jobs: $jobs)."
 
 if [ "$total" -eq 0 ]; then
-    echo "No wallpapers found, nothing to do."
+    echo "Nothing to do."
     exit 0
 fi
 
@@ -48,21 +76,26 @@ thumbSize="${thumbWidth}x${thumbHeight}"
 
 generate_thumb() {
     local src="$1"
-    
-    # Compute relative path from wallDir to maintain folder structure in cache
-    local relPath="${src#$wallDir/}"
-    local targetDir="$cacheDir/$(dirname "$relPath")"
-    mkdir -p "$targetDir"
 
-    local dst="$targetDir/$(basename "$src").jpg"
-    local colorDst="$targetDir/$(basename "$src").color"
+    # Compute relative path from wallDir to maintain folder structure in cache
+    # (pure parameter expansion, no dirname/basename forks)
+    local relPath="${src#$wallDir/}"
+    local relDir="${relPath%/*}"
+    [ "$relDir" = "$relPath" ] && relDir="."
+    local name="${src##*/}"
+    local targetDir="$cacheDir/$relDir"
+
+    local dst="$targetDir/$name.jpg"
+    local colorDst="$targetDir/$name.color"
     local brightnessThreshold=20
 
-    # Skip if thumbnail and color cache both exist and are newer than source
+    # Safety net: skip if thumbnail and color cache both exist and are newer than source
     if [ -f "$dst" ] && [ -f "$colorDst" ] && [ "$dst" -nt "$src" ]; then
         echo "SKIP"
         return
     fi
+
+    mkdir -p "$targetDir"
 
     # 1. Generate thumbnail
     magick "$src" -thumbnail "$thumbSize^" -gravity center \
@@ -137,7 +170,6 @@ draw_progress() {
 
 count=0
 generated=0
-skipped=0
 failed=0
 lastDrawUs=0
 minIntervalUs=80000
@@ -150,14 +182,19 @@ while IFS= read -r line; do
         FAIL) failed=$((failed + 1)) ;;
     esac
 
-    nowUs="${EPOCHREALTIME//[^0-9]/}"
-    if (( nowUs - lastDrawUs >= minIntervalUs )) || [ "$count" -eq "$total" ]; then
-        draw_progress "$count" "$total"
-        lastDrawUs="$nowUs"
+    if [ -t 1 ]; then
+        nowUs="${EPOCHREALTIME//[^0-9]/}"
+        if (( nowUs - lastDrawUs >= minIntervalUs )) || [ "$count" -eq "$total" ]; then
+            draw_progress "$count" "$total"
+            lastDrawUs="$nowUs"
+        fi
+    elif (( count % 500 == 0 )) || [ "$count" -eq "$total" ]; then
+        # Not a terminal (e.g. systemd/journal): plain readable lines, no \r bar
+        echo "Progress: $count/$total"
     fi
-done < <(printf '%s\0' "${walls[@]}" | \
+done < <(printf '%s\0' "${todo[@]}" | \
     xargs -0 -P "$jobs" -I{} bash -c 'generate_thumb "$@"' _ {})
 
-echo
+[ -t 1 ] && echo
 echo "Done: $generated generated, $skipped skipped, $failed failed"
 echo "Thumbnails & color cache stored in: $cacheDir"

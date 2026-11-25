@@ -168,7 +168,16 @@ run_patchers() {
     fi
 
     # matugen, launched alongside Group A — nothing in Group A reads its output.
-    time_step_bg "matugen" matugen color hex "#$color" --quiet
+    # Near-gray accents (e.g. black-and-white line art) have a meaningless hue,
+    # and tonal-spot would still paint it with a saturated primary (often blue),
+    # so use a monochrome scheme when the color has almost no saturation.
+    local r=$((16#${color:0:2})) g=$((16#${color:2:2})) b=$((16#${color:4:2}))
+    local max=$(( r > g ? (r > b ? r : b) : (g > b ? g : b) ))
+    local min=$(( r < g ? (r < b ? r : b) : (g < b ? g : b) ))
+    local matugenType=()
+    (( max - min < 8 )) && matugenType=(--type scheme-monochrome)
+
+    time_step_bg "matugen" matugen color hex "#$color" "${matugenType[@]}" --quiet
     local matugenPid=$!
 
     wait "$matugenPid"

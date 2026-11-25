@@ -31,6 +31,7 @@ $result = Get-WallpaperColor -Image $Image
 switch -Wildcard ($result.Source) {
     'cache' { Write-Host "Using cached color for $(Split-Path -Leaf $Image)" }
     'image' { Write-Host "Dominant color: #$($result.Color)" }
+    'quantized' { Write-Host "Dominant color too dark, using the image's lighter main color: #$($result.Color)" }
     'matugen:*' { Write-Host "Using matugen seed #$($result.Source.Split(':')[1]): #$($result.Color)" }
     'lifted' { Write-Warning "No bright accent found for $(Split-Path -Leaf $Image) (is matugen installed?) - using its dominant color brightened: #$($result.Color)" }
     'last' { Write-Warning "Could not determine an accent color for $(Split-Path -Leaf $Image) (is matugen installed?) - keeping the last accent: #$($result.Color)" }

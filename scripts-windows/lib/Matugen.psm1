@@ -76,6 +76,16 @@ function New-MatugenConfig {
     $paths.MatugenConfig
 }
 
+function Test-NearGrayColor {
+    # True when the color has almost no saturation (largest minus smallest channel < $Spread).
+    # The hue of such a color is meaningless, but matugen's default tonal-spot scheme would
+    # still paint it with a fully saturated primary (#888787 -> light blue).
+    param([Parameter(Mandatory)][string]$Hex, [int]$Spread = 8)
+    $Hex = ConvertTo-HexColor $Hex
+    $m = 0, 2, 4 | ForEach-Object { [Convert]::ToInt32($Hex.Substring($_, 2), 16) } | Measure-Object -Maximum -Minimum
+    ($m.Maximum - $m.Minimum) -lt $Spread
+}
+
 function Invoke-Matugen {
     # Renders every template for the given seed color. Throws if matugen is
     # missing or fails.
@@ -85,8 +95,11 @@ function Invoke-Matugen {
     if (-not $exe) { throw 'matugen not found. Re-run install-Windows.ps1 (it can build it for you) or run: cargo install matugen --locked' }
     $config = New-MatugenConfig
     New-Item -ItemType Directory -Path (Get-WcPaths).MatugenCache -Force | Out-Null
-    $out = & $exe --config $config --quiet color hex "#$Color" 2>&1
+    # Near-gray seeds (black-and-white art) get a monochrome palette instead of tonal-spot's blue.
+    $typeArgs = if (Test-NearGrayColor -Hex $Color) { @('--type', 'scheme-monochrome') } else { @() }
+    $out = & $exe --config $config --quiet @typeArgs color hex "#$Color" 2>&1
     if ($LASTEXITCODE -ne 0) { throw "matugen failed (exit $LASTEXITCODE): $($out -join ' ')" }
+    if ($typeArgs.Count) { Write-Output 'near-gray accent: using scheme-monochrome' }
     $out | Where-Object { $_ } | ForEach-Object { Write-Output "$_" }
 }
 

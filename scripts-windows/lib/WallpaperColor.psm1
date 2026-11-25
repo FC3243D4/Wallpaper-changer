@@ -47,9 +47,85 @@ function Get-LiftedColor {
     '{0:x2}{1:x2}{2:x2}' -f $o[0], $o[1], $o[2]
 }
 
+function Get-ImageQuantizedColors {
+    # The image's two main colors, most populated first, as 6-digit hex strings. Windows
+    # counterpart of the "-scale 50x50 -colors 2 histogram" step of the Linux scripts: the image
+    # is scaled to 50x50 and split into two clusters (2-means, seeded with the darkest and the
+    # brightest pixel). Finds the usable color of images whose dominant color is too dark, e.g.
+    # white line art on black. Returns nothing if the image can't be decoded.
+    param([Parameter(Mandatory)][string]$Path)
+    if (-not $script:CanDecodeImages) { return }
+    try {
+        Add-Type -AssemblyName System.Drawing
+        $size = 50
+        $src = [System.Drawing.Image]::FromFile($Path)
+        $bmp = [System.Drawing.Bitmap]::new($size, $size, [System.Drawing.Imaging.PixelFormat]::Format32bppRgb)
+        try {
+            $g = [System.Drawing.Graphics]::FromImage($bmp)
+            try {
+                $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+                $g.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::Half
+                $g.DrawImage($src, 0, 0, $size, $size)
+            }
+            finally { $g.Dispose() }
+            $rect = [System.Drawing.Rectangle]::new(0, 0, $size, $size)
+            $data = $bmp.LockBits($rect, [System.Drawing.Imaging.ImageLockMode]::ReadOnly, [System.Drawing.Imaging.PixelFormat]::Format32bppRgb)
+            try {
+                $stride = $data.Stride
+                $bytes = [byte[]]::new($stride * $size)
+                [System.Runtime.InteropServices.Marshal]::Copy($data.Scan0, $bytes, 0, $bytes.Length)
+            }
+            finally { $bmp.UnlockBits($data) }
+        }
+        finally { $src.Dispose(); $bmp.Dispose() }
+
+        # pixels (memory order is B, G, R, X)
+        $n = $size * $size
+        $pr = [int[]]::new($n); $pg = [int[]]::new($n); $pb = [int[]]::new($n)
+        $iMin = 0; $iMax = 0; $lMin = [int]::MaxValue; $lMax = -1
+        for ($y = 0; $y -lt $size; $y++) {
+            for ($x = 0; $x -lt $size; $x++) {
+                $p = $y * $size + $x
+                $o = $y * $stride + $x * 4
+                $pb[$p] = $bytes[$o]; $pg[$p] = $bytes[$o + 1]; $pr[$p] = $bytes[$o + 2]
+                $l = 299 * $pr[$p] + 587 * $pg[$p] + 114 * $pb[$p]
+                if ($l -lt $lMin) { $lMin = $l; $iMin = $p }
+                if ($l -gt $lMax) { $lMax = $l; $iMax = $p }
+            }
+        }
+
+        # 2-means
+        $c = @(
+            @([double]$pr[$iMin], [double]$pg[$iMin], [double]$pb[$iMin]),
+            @([double]$pr[$iMax], [double]$pg[$iMax], [double]$pb[$iMax])
+        )
+        $count = @(0, 0)
+        for ($iter = 0; $iter -lt 8; $iter++) {
+            $sum = @(@(0.0, 0.0, 0.0), @(0.0, 0.0, 0.0))
+            $count = @(0, 0)
+            for ($p = 0; $p -lt $n; $p++) {
+                $d0 = [Math]::Pow($pr[$p] - $c[0][0], 2) + [Math]::Pow($pg[$p] - $c[0][1], 2) + [Math]::Pow($pb[$p] - $c[0][2], 2)
+                $d1 = [Math]::Pow($pr[$p] - $c[1][0], 2) + [Math]::Pow($pg[$p] - $c[1][1], 2) + [Math]::Pow($pb[$p] - $c[1][2], 2)
+                $k = if ($d1 -lt $d0) { 1 } else { 0 }
+                $sum[$k][0] += $pr[$p]; $sum[$k][1] += $pg[$p]; $sum[$k][2] += $pb[$p]
+                $count[$k]++
+            }
+            foreach ($k in 0, 1) {
+                if ($count[$k] -gt 0) { $c[$k] = @($sum[$k][0] / $count[$k], $sum[$k][1] / $count[$k], $sum[$k][2] / $count[$k]) }
+            }
+        }
+
+        0, 1 | Where-Object { $count[$_] -gt 0 } | Sort-Object { $count[$_] } -Descending | ForEach-Object {
+            $v = $c[$_] | ForEach-Object { [int][Math]::Round($_, [MidpointRounding]::AwayFromZero) }
+            '{0:x2}{1:x2}{2:x2}' -f $v[0], $v[1], $v[2]
+        }
+    }
+    catch { Write-Verbose "Get-ImageQuantizedColors failed for ${Path}: $($_.Exception.Message)" }
+}
+
 function Get-WallpaperColor {
     # Returns [pscustomobject]@{ Color; Source; CacheFile; Fallback }
-    #   Source: 'cache' | 'image' | 'matugen:<index>'                  (normal, cached)
+    #   Source: 'cache' | 'image' | 'quantized' | 'matugen:<index>'    (normal, cached)
     #           'lifted' | 'last' | 'default'                           (fallbacks, Fallback = $true)
     # A cache entry is only trusted if it is at least as new as the image, so a replaced
     # wallpaper gets a fresh color. When no good color can be found (very dark image and no
@@ -75,9 +151,17 @@ function Get-WallpaperColor {
     if ($script:CanDecodeImages) { $dominant = Get-ImageDominantColor -Path $Image }
     if ($dominant -and (Get-Brightness $dominant) -ge $script:MinBrightness) { $color = $dominant; $source = 'image' }
 
-    # too dark (or undecodable) -> matugen's own ranked seed colors
+    # dominant color too dark -> the image's other main color (white line art on black has a
+    # dark dominant color but a perfectly usable light one), most populated first
+    if (-not $color -and $script:CanDecodeImages) {
+        foreach ($q in @(Get-ImageQuantizedColors -Path $Image)) {
+            if ((Get-Brightness $q) -ge $script:MinBrightness) { $color = $q; $source = 'quantized'; break }
+        }
+    }
+
+    # still nothing -> matugen's own ranked seed colors (valid indexes are 0..3)
     if (-not $color) {
-        for ($i = 0; $i -le 4; $i++) {
+        for ($i = 0; $i -le 3; $i++) {
             $candidate = Get-MatugenSourceColor -ImagePath $Image -Index $i
             if ($candidate -and (Get-Brightness $candidate) -ge $script:MinBrightness) { $color = $candidate; $source = "matugen:$i"; break }
         }

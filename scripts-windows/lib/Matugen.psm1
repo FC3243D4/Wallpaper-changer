@@ -111,15 +111,20 @@ function Get-MatugenSourceColor {
     $exe = Find-Matugen
     if (-not $exe) { return $null }
     $paths = Get-WcPaths
-    $outFile = Join-Path $paths.MatugenCache 'chooser-source-color'
-    $cfgFile = Join-Path $paths.MatugenCache 'chooser.toml'
+    # Unique files per call: Build-WallpaperCache.ps1 runs this from several threads at once, and
+    # a shared output file would let one worker read (and cache) another worker's colour.
+    $id = [guid]::NewGuid().ToString('N')
+    $outFile = Join-Path $paths.MatugenCache "chooser-source-color-$id"
+    $cfgFile = Join-Path $paths.MatugenCache "chooser-$id.toml"
     $tpl = Join-Path $paths.Templates 'source-color.txt'
-    Write-WcFile -Path $cfgFile -Content ("[config]`n[templates.seed]`ninput_path = $(ConvertTo-TomlString $tpl)`noutput_path = $(ConvertTo-TomlString $outFile)`n")
-    Remove-Item -LiteralPath $outFile -ErrorAction SilentlyContinue
-    & $exe --config $cfgFile --quiet image $ImagePath --source-color-index $Index 2>&1 | Out-Null
-    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $outFile)) { return $null }
-    $c = (Get-Content -LiteralPath $outFile -Raw).Trim()
-    if (Test-HexColor $c) { ConvertTo-HexColor $c } else { $null }
+    try {
+        Write-WcFile -Path $cfgFile -Content ("[config]`n[templates.seed]`ninput_path = $(ConvertTo-TomlString $tpl)`noutput_path = $(ConvertTo-TomlString $outFile)`n")
+        & $exe --config $cfgFile --quiet image $ImagePath --source-color-index $Index 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $outFile)) { return $null }
+        $c = (Get-Content -LiteralPath $outFile -Raw).Trim()
+        if (Test-HexColor $c) { ConvertTo-HexColor $c } else { $null }
+    }
+    finally { Remove-Item -LiteralPath $outFile, $cfgFile -Force -ErrorAction SilentlyContinue }
 }
 
 Export-ModuleMember -Function *-*

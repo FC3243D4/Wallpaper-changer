@@ -9,7 +9,7 @@
 param([switch]$All)
 Import-Module (Join-Path $PSScriptRoot 'lib\WallpaperChanger.Common.psm1') -DisableNameChecking
 $p = Get-WcPaths
-$targets = @($p.FileCache, $p.LastWallpaper)
+$targets = @($p.FileCache, $p.LegacyFileCache, $p.LastWallpaper)   # wallpaper lists rebuild themselves; this just forces it
 if ($All) { $targets += $p.ColorCache, $p.Thumbnails }
 foreach ($t in $targets) {
     if (Test-Path -LiteralPath $t) { Remove-Item -LiteralPath $t -Recurse -Force; Write-Host "Cleared: $t" }

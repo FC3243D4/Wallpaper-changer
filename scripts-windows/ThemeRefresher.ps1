@@ -55,36 +55,55 @@ try {
         return
     }
 
-    # --- 2. close apps that cache their theme --------------------------------
-    if ($Mode -eq 'Full') { Invoke-WcTimed 'app_stop_begin' { Start-AppStopPhase }; $hadRestart = $true }
-
-    # --- 3. group A: independent of matugen --------------------------------------
-    $a = @{ Color = $hex }
+    # --- 2-5. close apps, patch, relaunch ---------------------------------------
+    # Once the apps are closed they MUST come back, whatever happens in between (a throwing
+    # patcher, Ctrl+C, a missing module...), so everything between stop and relaunch is in a
+    # try/finally whose finally block always waits for the stops and relaunches.
+    $failed = @()
     $jobs = [System.Collections.Generic.List[object]]::new()
-    $jobs.Add((Start-WcPatcherJob -Label 'rgb' -Script (Join-Path $support 'RgbApply.ps1') -Arguments $a))
-    $matugenJob = Start-WcPatcherJob -Label 'matugen' -Script (Join-Path $support 'MatugenRun.ps1') -Arguments $a
-    $appData = $env:APPDATA
-    if (Test-Path -LiteralPath (Join-Path $appData 'Ferdium\recipes')) { $jobs.Add((Start-WcPatcherJob -Label 'ferdium' -Script (Join-Path $patchers 'FerdiumPatcher.ps1') -Arguments $a)) }
-    if (Test-Path -LiteralPath (Join-Path $appData 'vesktop')) { $jobs.Add((Start-WcPatcherJob -Label 'vesktop' -Script (Join-Path $patchers 'DiscordPatcher.ps1') -Arguments $a)) }
-    $moz = @{ Firefox = 'Mozilla\Firefox\profiles.ini'; Zen = 'zen\profiles.ini'; Thunderbird = 'Thunderbird\profiles.ini' }
-    foreach ($app in $moz.Keys) {
-        $present = Test-Path -LiteralPath (Join-Path $appData $moz[$app])
-        if ($app -eq 'Thunderbird' -and -not $present) { $present = Test-Path -LiteralPath (Join-Path $appData 'Betterbird\profiles.ini') }
-        if ($present) { $jobs.Add((Start-WcPatcherJob -Label $app.ToLower() -Script (Join-Path $patchers 'MozillaPatcher.ps1') -Arguments @{ Color = $hex; App = $app })) }
+    $matugenJob = $null
+    try {
+        # close apps that cache their theme
+        if ($Mode -eq 'Full') { $hadRestart = $true; Invoke-WcTimed 'app_stop_begin' { Start-AppStopPhase } }
+
+        # group A: independent of matugen
+        $a = @{ Color = $hex }
+        $jobs.Add((Start-WcPatcherJob -Label 'rgb' -Script (Join-Path $support 'RgbApply.ps1') -Arguments $a))
+        $matugenJob = Start-WcPatcherJob -Label 'matugen' -Script (Join-Path $support 'MatugenRun.ps1') -Arguments $a
+        $appData = $env:APPDATA
+        if (Test-Path -LiteralPath (Join-Path $appData 'Ferdium\recipes')) { $jobs.Add((Start-WcPatcherJob -Label 'ferdium' -Script (Join-Path $patchers 'FerdiumPatcher.ps1') -Arguments $a)) }
+        if (Test-Path -LiteralPath (Join-Path $appData 'vesktop')) { $jobs.Add((Start-WcPatcherJob -Label 'vesktop' -Script (Join-Path $patchers 'DiscordPatcher.ps1') -Arguments $a)) }
+        $moz = @{ Firefox = 'Mozilla\Firefox\profiles.ini'; Zen = 'zen\profiles.ini'; Thunderbird = 'Thunderbird\profiles.ini' }
+        foreach ($app in $moz.Keys) {
+            $present = Test-Path -LiteralPath (Join-Path $appData $moz[$app])
+            if ($app -eq 'Thunderbird' -and -not $present) { $present = Test-Path -LiteralPath (Join-Path $appData 'Betterbird\profiles.ini') }
+            if ($present) { $jobs.Add((Start-WcPatcherJob -Label $app.ToLower() -Script (Join-Path $patchers 'MozillaPatcher.ps1') -Arguments @{ Color = $hex; App = $app })) }
+        }
+
+        # group B: needs the files matugen renders
+        $failed = @(Wait-WcPatcherJobs @($matugenJob))
+        $matugenJob = $null
+        if ($failed.Count -gt 0) { Write-Warning 'matugen failed; patchers that read its output may fall back or fail.' }
+        if (Test-Path -LiteralPath (Join-Path $appData 'Code\User\settings.json')) { $jobs.Add((Start-WcPatcherJob -Label 'vscode' -Script (Join-Path $patchers 'VscodePatcher.ps1') -Arguments $a)) }
+        if (Get-SourceGitDir) { $jobs.Add((Start-WcPatcherJob -Label 'sourcegit' -Script (Join-Path $patchers 'SourceGitPatcher.ps1') -Arguments $a)) }
+
+        $failed += @(Wait-WcPatcherJobs $jobs.ToArray())
+        $jobs.Clear()
+    }
+    finally {
+        # jobs still alive after an error must not keep writing while the apps start again
+        foreach ($j in @($matugenJob) + $jobs.ToArray()) {
+            if ($j -and $j.State -in 'Running', 'NotStarted') { Stop-Job -Job $j -ErrorAction SilentlyContinue; Remove-Job -Job $j -Force -ErrorAction SilentlyContinue }
+        }
+        if ($hadRestart) {
+            try { Invoke-WcTimed 'app_stop_wait' { Wait-AppStopPhase } }
+            catch { Write-Warning "Waiting for the apps to close failed: $($_.Exception.Message)" }
+            try { Invoke-WcTimed 'app_restart' { Start-AppRestartPhase } }
+            catch { Write-Warning "Relaunching the apps failed: $($_.Exception.Message)" }
+        }
     }
 
-    # --- 4. group B: needs the files matugen renders -------------------------------
-    $failed = @(Wait-WcPatcherJobs @($matugenJob))
-    if ($failed.Count -gt 0) { Write-Warning 'matugen failed; patchers that read its output may fall back or fail.' }
-    if (Test-Path -LiteralPath (Join-Path $appData 'Code\User\settings.json')) { $jobs.Add((Start-WcPatcherJob -Label 'vscode' -Script (Join-Path $patchers 'VscodePatcher.ps1') -Arguments $a)) }
-    if (Get-SourceGitDir) { $jobs.Add((Start-WcPatcherJob -Label 'sourcegit' -Script (Join-Path $patchers 'SourceGitPatcher.ps1') -Arguments $a)) }
-
-    $failed += @(Wait-WcPatcherJobs $jobs.ToArray())
-
-    # --- 5. relaunch -----------------------------------------------------------------
     if ($hadRestart) {
-        Invoke-WcTimed 'app_stop_wait' { Wait-AppStopPhase }
-        Invoke-WcTimed 'app_restart' { Start-AppRestartPhase }
         Invoke-WcTimed 'spicetify' { & (Join-Path $patchers 'SpicetifyRestarter.ps1') | ForEach-Object { Write-Host "[spicetify] $_" } }
     }
 

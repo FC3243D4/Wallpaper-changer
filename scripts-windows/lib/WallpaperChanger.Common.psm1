@@ -30,7 +30,8 @@ function Get-WcPaths {
         CurrentWallpaper = Join-Path $script:Root 'current_wallpaper.txt'
         LastWallpaper    = Join-Path $cache 'wallpaper_last.txt'
         LastAccent       = Join-Path $cache 'last_accent.txt'
-        FileCache        = Join-Path $cache 'wallpaper_cache.json'
+        FileCache        = Join-Path $cache 'wallpaper-lists'          # one <ratio>.txt per aspect folder
+        LegacyFileCache  = Join-Path $cache 'wallpaper_cache.json'     # pre-stamp format, no longer read
     }
 }
 
@@ -191,12 +192,16 @@ function Write-WcFile {
     )
     $dir = Split-Path -Parent $Path
     if ($dir -and -not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
-    $tmp = "$Path.wc-tmp"
-    [System.IO.File]::WriteAllText($tmp, $Content, [System.Text.UTF8Encoding]::new($false))
-    if ($Backup -and (Test-Path -LiteralPath $Path) -and -not (Test-Path -LiteralPath "$Path.wc-bak")) {
-        Copy-Item -LiteralPath $Path -Destination "$Path.wc-bak"
+    # unique temp name: parallel workers / jobs writing the same target must not share one temp file
+    $tmp = "$Path.$([guid]::NewGuid().ToString('N')).wc-tmp"
+    try {
+        [System.IO.File]::WriteAllText($tmp, $Content, [System.Text.UTF8Encoding]::new($false))
+        if ($Backup -and (Test-Path -LiteralPath $Path) -and -not (Test-Path -LiteralPath "$Path.wc-bak")) {
+            Copy-Item -LiteralPath $Path -Destination "$Path.wc-bak"
+        }
+        [System.IO.File]::Move($tmp, $Path, $true)       # atomic replace; throws (unlike Move-Item -Force) if it cannot
     }
-    Move-Item -LiteralPath $tmp -Destination $Path -Force
+    finally { if (Test-Path -LiteralPath $tmp) { Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue } }
 }
 
 function Set-MarkedBlock {
@@ -473,6 +478,67 @@ function Get-AspectFolder {
         if ($diff -lt $bestDiff) { $best = $f; $bestDiff = $diff }
     }
     $best
+}
+
+# ------------------------------------------------- wallpaper list cache ----
+# The random picker needs the list of wallpapers of one aspect folder (25k+ files). Listing them
+# on every run is slow, so the list is cached in <cache>\wallpaper-lists\<ratio>.txt
+# (line 1 = stamp, then one relative path per line).
+#
+# The cache validates itself: the stamp is the number of sub-folders plus the newest folder
+# modification time under the ratio folder. Adding, deleting or renaming a file changes the
+# mtime of the folder that holds it, so any such change makes the stamp differ and the list is
+# rebuilt on next use - no watcher or manual clearing needed. Checking the stamp only walks the
+# folders (hundreds), never the files. Build-WallpaperCache.ps1 -Watch rebuilds the lists in the
+# background so the hotkey never pays for it.
+$script:WallpaperExtensions = '.jpg', '.jpeg', '.png', '.bmp', '.webp'
+
+function Get-WcFolderStamp {
+    param([Parameter(Mandatory)][string]$Root)
+    $opts = [System.IO.EnumerationOptions]::new()
+    $opts.RecurseSubdirectories = $true
+    $opts.IgnoreInaccessible = $true
+    $di = [System.IO.DirectoryInfo]::new($Root)
+    $max = $di.LastWriteTimeUtc.Ticks; $n = 0
+    foreach ($d in $di.EnumerateDirectories('*', $opts)) {
+        $n++
+        $t = $d.LastWriteTimeUtc.Ticks
+        if ($t -gt $max) { $max = $t }
+    }
+    "$n|$max"
+}
+
+function Get-WcWallpaperList {
+    # Relative paths ("series\file.png") of every wallpaper inside one aspect folder.
+    # -Force rebuilds even if the stamp still matches.
+    param([Parameter(Mandatory)][string]$Folder, [switch]$Force)
+    $root = Join-Path (Get-WcConfig).wallpaperDir $Folder
+    if (-not (Test-Path -LiteralPath $root -PathType Container)) { return @() }
+    $stamp = Get-WcFolderStamp -Root $root          # taken BEFORE listing: a change during the listing just triggers one more rebuild
+    $file = Join-Path (Get-WcPaths).FileCache ($Folder + '.txt')
+
+    if (-not $Force -and (Test-Path -LiteralPath $file -PathType Leaf)) {
+        try {
+            $lines = [System.IO.File]::ReadAllLines($file)
+            if ($lines.Length -ge 1 -and $lines[0] -ceq $stamp) {
+                if ($lines.Length -eq 1) { return @() }
+                return $lines[1..($lines.Length - 1)]
+            }
+        }
+        catch { }                                    # unreadable cache: rebuild
+    }
+
+    $opts = [System.IO.EnumerationOptions]::new()
+    $opts.RecurseSubdirectories = $true
+    $opts.IgnoreInaccessible = $true
+    $prefix = $root.TrimEnd('\', '/') + [System.IO.Path]::DirectorySeparatorChar
+    $files = [System.Collections.Generic.List[string]]::new()
+    foreach ($f in [System.IO.Directory]::EnumerateFiles($root, '*', $opts)) {
+        if ([System.IO.Path]::GetExtension($f).ToLowerInvariant() -in $script:WallpaperExtensions) { $files.Add($f.Substring($prefix.Length)) }
+    }
+    try { Write-WcFile -Path $file -Content ($stamp + "`n" + ($files -join "`n")) }
+    catch { Write-Verbose "Could not save the wallpaper list for ${Folder}: $($_.Exception.Message)" }
+    $files.ToArray()
 }
 
 # ------------------------------------------------------------------ Python --

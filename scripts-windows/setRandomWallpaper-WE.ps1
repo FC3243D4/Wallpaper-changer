@@ -33,7 +33,6 @@ Import-Module (Join-Path $PSScriptRoot 'lib\Monitors.psm1') -DisableNameChecking
 $paths = Get-WcPaths
 $cfg = Get-WcConfig
 $base = $cfg.wallpaperDir
-$extensions = '.jpg', '.jpeg', '.png', '.bmp', '.webp'
 
 if (-not (Test-Path -LiteralPath $base)) { throw "Wallpaper folder not found: $base (set wallpaperDir in $($paths.Config))" }
 $we = Get-WallpaperEngineExe
@@ -48,24 +47,6 @@ if ($folders.Count -eq 0) { throw "No aspect-ratio folders (16-9, 21-9, ...) fou
 $monitors = @(Get-WcMonitors)
 $primary = @($monitors | Where-Object Primary | Select-Object -First 1) + @($monitors) | Select-Object -First 1
 
-function Get-WallpaperList {
-    # Relative paths ("series\file.png") inside one aspect folder, cached on disk.
-    param([string]$Folder)
-    $cache = @{}
-    if (Test-Path -LiteralPath $paths.FileCache) {
-        try { $cache = Get-Content -LiteralPath $paths.FileCache -Raw | ConvertFrom-Json -AsHashtable } catch { $cache = @{} }
-        if ($cache -isnot [hashtable]) { $cache = @{} }
-    }
-    if (-not $cache.ContainsKey($Folder)) {
-        $root = Join-Path $base $Folder
-        $cache[$Folder] = @(Get-ChildItem -LiteralPath $root -Recurse -File |
-                Where-Object { $_.Extension.ToLowerInvariant() -in $extensions } |
-                ForEach-Object { $_.FullName.Substring($root.Length).TrimStart('\', '/') })
-        Write-WcFile -Path $paths.FileCache -Content ($cache | ConvertTo-Json -Depth 4 -Compress)
-    }
-    $cache[$Folder]
-}
-
 # --- pick -------------------------------------------------------------------------
 if ($Wallpaper) {
     $rel = $Wallpaper -replace '/', '\'
@@ -73,7 +54,7 @@ if ($Wallpaper) {
 }
 else {
     $primaryFolder = Get-AspectFolder -Width $primary.Width -Height $primary.Height -Folders $folders
-    $candidates = @(Get-WallpaperList -Folder $primaryFolder)
+    $candidates = @(Get-WcWallpaperList -Folder $primaryFolder)   # cached, self-validating (see Common.psm1)
     switch ($Filter) {
         'Sfw' { $candidates = @($candidates | Where-Object { $_ -notmatch 'nsfw' }) }
         'Nsfw' { $candidates = @($candidates | Where-Object { $_ -match 'nsfw' }) }

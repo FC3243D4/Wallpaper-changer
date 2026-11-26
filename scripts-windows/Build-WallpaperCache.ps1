@@ -59,10 +59,8 @@ function Invoke-ColorPass {
     $seen = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
     $files = [System.Collections.Generic.List[string]]::new()
     foreach ($f in $Folders) {
-        $root = Join-Path $base $f
-        foreach ($item in (Get-ChildItem -LiteralPath $root -Recurse -File)) {
-            if ($item.Extension.ToLowerInvariant() -notin $extensions) { continue }
-            if ($seen.Add($item.FullName.Substring($root.Length))) { $files.Add($item.FullName) }
+        foreach ($rel in @(Get-WcWallpaperList -Folder $f)) {
+            if ($seen.Add($rel)) { $files.Add((Join-Path (Join-Path $base $f) $rel)) }
         }
     }
     $total = $files.Count
@@ -83,6 +81,16 @@ function Invoke-ColorPass {
     if ($counts.fallback -gt 0) { Write-Warning ("{0} wallpaper(s) only got a fallback color (very dark and matugen missing?). They are not cached; install matugen and re-run to fix them." -f $counts.fallback) }
 }
 
+function Invoke-ListPass {
+    # The random picker's wallpaper lists (self-validating, see Common.psm1). Only rebuilds what changed.
+    param([string[]]$Folders)
+    foreach ($f in $Folders) {
+        $sw = [System.Diagnostics.Stopwatch]::StartNew()
+        $n = @(Get-WcWallpaperList -Folder $f).Count
+        Say ("Wallpaper list {0}: {1} files ({2:N1}s)" -f $f, $n, $sw.Elapsed.TotalSeconds)
+    }
+}
+
 function Invoke-ThumbnailPass {
     param([string[]]$Folders)
     $found = Find-Python -RequirePyQt6
@@ -101,6 +109,7 @@ function Invoke-CachePass {
     try {
         $folders = Get-RatioFolders
         Say "Aspect folders: $($folders -join ', ')"
+        Invoke-ListPass -Folders $folders
         if (-not $NoColors) { Invoke-ColorPass -Folders $folders }
         if (-not $NoThumbnails) { Invoke-ThumbnailPass -Folders $folders }
     }
@@ -112,21 +121,37 @@ if (-not (Test-Path -LiteralPath $base)) { throw "Wallpaper folder not found: $b
 if (-not $Watch) { Invoke-CachePass; return }
 
 # ---- watch mode -------------------------------------------------------------------------------
+# Events go into PowerShell's event queue (Register-ObjectEvent), so changes that happen WHILE a
+# cache pass is running are not lost: they are still queued when the pass ends and trigger the
+# next one. A burst of events (copying a folder) is debounced into a single pass. Each pass
+# refreshes, in order: the picker's wallpaper lists (seconds - so a new wallpaper can be picked
+# almost immediately), the accent colors, then the thumbnails.
 $single = [System.Threading.Mutex]::new($false, 'Local\WallpaperChanger.CacheWatcher')
 if (-not $single.WaitOne(0)) { Say 'The cache watcher is already running.'; return }
+$watcher = $null
 try {
-    Invoke-CachePass
     $watcher = [System.IO.FileSystemWatcher]::new($base)
     $watcher.IncludeSubdirectories = $true
+    $watcher.InternalBufferSize = 65536                 # fewer overflows when thousands of files arrive at once
     $watcher.NotifyFilter = [System.IO.NotifyFilters]'FileName, DirectoryName, LastWrite'
+    foreach ($ev in 'Created', 'Changed', 'Deleted', 'Renamed', 'Error') {
+        $null = Register-ObjectEvent -InputObject $watcher -EventName $ev -SourceIdentifier "WallpaperChanger.Watch.$ev"
+    }
+    $watcher.EnableRaisingEvents = $true                # start listening BEFORE the first pass, so nothing in between is missed
+
+    Invoke-CachePass
     Say "Watching $base for changes (Ctrl+C to stop)..."
     while ($true) {
-        $r = $watcher.WaitForChanged([System.IO.WatcherChangeTypes]::All, 60000)
-        if ($r.TimedOut) { continue }
-        # debounce: copying a batch of files fires many events; wait until it goes quiet
-        do { $r = $watcher.WaitForChanged([System.IO.WatcherChangeTypes]::All, 5000) } until ($r.TimedOut)
+        if (-not (Wait-Event -Timeout 60)) { continue }
+        # debounce: keep draining until the folder has been quiet for 5 seconds
+        do { Get-Event | Remove-Event; $more = Wait-Event -Timeout 5 } while ($more)
         Say 'Wallpaper folder changed - updating caches...'
         try { Invoke-CachePass } catch { Write-Warning $_.Exception.Message }
+        # anything that changed during the pass is still queued and starts the next loop immediately
     }
 }
-finally { $single.ReleaseMutex(); $single.Dispose() }
+finally {
+    Get-EventSubscriber -Force | Where-Object { $_.SourceIdentifier -like 'WallpaperChanger.Watch.*' } | Unregister-Event -Force -ErrorAction SilentlyContinue
+    if ($watcher) { $watcher.Dispose() }
+    $single.ReleaseMutex(); $single.Dispose()
+}

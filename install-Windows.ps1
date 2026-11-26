@@ -169,14 +169,16 @@ if ($wallSrc -and -not $SkipWallpapers -and -not $NonInteractive) {
             if (-not $withNsfw -and (Test-Path -LiteralPath $nsfwRoot)) { $withNsfw = (Read-Host 'Also copy the NSFW wallpapers? (y/N)') -match '^(y|yes)$' }
 
             $suggested = @($cfg.aspectRatios | Where-Object { $_ })              # previous choice
+            $detected = @()
             try {
                 Import-Module (Join-Path $InstallDir 'lib\Monitors.psm1') -Force -DisableNameChecking
                 foreach ($m in (Get-WcMonitors)) {
                     $r = Get-AspectFolder -Width $m.Width -Height $m.Height -Folders $available
-                    if ($r) { $suggested += $r }
+                    if ($r) { $suggested += $r; $detected += ('{0}x{1} -> {2}' -f $m.Width, $m.Height, $r) }
                 }
             }
             catch { }                                                          # no monitor info: fall back to the previous choice / all
+            if ($detected.Count -gt 0) { Write-Host ("Connected displays: {0} (these ratios are pre-ticked)" -f ($detected -join ', ')) }
             $requested = @($AspectRatios | ForEach-Object { $_ -split '[,\s]+' } | Where-Object { $_ })
             $chosen = @(Select-AspectRatios -Available $available -Requested $requested -All:$AllAspectRatios -Suggested @($suggested | Select-Object -Unique))
             Set-WcConfigValue -Name aspectRatios -Value $chosen

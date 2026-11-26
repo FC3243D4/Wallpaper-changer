@@ -39,6 +39,9 @@ copy_with_bar() {
 # $3 = optional name of array holding "locked" option values (pass as
 #      arrayname[@]) — these are pre-selected and cannot be toggled off,
 #      shown with a "(required)" tag.
+# $4 = optional name of array holding options that start ticked but can still
+#      be toggled off (e.g. the ratios of the connected displays), shown with
+#      a "(connected display)" tag.
 # ---------------------------------------------------------------------------
 multiselect() {
     local -n result=$1
@@ -46,6 +49,10 @@ multiselect() {
     local locked=()
     if [ -n "${3:-}" ]; then
         locked=("${!3}")
+    fi
+    local suggested=()
+    if [ -n "${4:-}" ]; then
+        suggested=("${!4}")
     fi
     local selected=()
     local cursor=0
@@ -60,8 +67,17 @@ multiselect() {
         return 1
     }
 
+    is_suggested() {
+        local item="$1"
+        local s
+        for s in "${suggested[@]}"; do
+            [ "$item" = "$s" ] && return 0
+        done
+        return 1
+    }
+
     for ((i = 0; i < count; i++)); do
-        if is_locked "${options[i]}"; then
+        if is_locked "${options[i]}" || is_suggested "${options[i]}"; then
             selected[i]=1
         else
             selected[i]=0
@@ -76,7 +92,11 @@ multiselect() {
                 printf "\033[7m"
             fi
             local tag=""
-            is_locked "${options[i]}" && tag=" (required)"
+            if is_locked "${options[i]}"; then
+                tag=" (required)"
+            elif is_suggested "${options[i]}"; then
+                tag=" (connected display)"
+            fi
             if [ "${selected[i]}" -eq 1 ]; then
                 printf " [x] %s%s \033[0m\n" "${options[i]}" "$tag"
             else

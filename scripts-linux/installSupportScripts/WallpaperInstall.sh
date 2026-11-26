@@ -23,6 +23,53 @@ detect_aspect_ratios() {
     done
 }
 
+# detect_display_resolutions: prints the resolution (WIDTHxHEIGHT) of every
+# connected display, one per line. Uses the same sources as the wallpaper
+# applicators: wayland-info on Wayland (wayland/WallpaperApplicator.sh), xrandr
+# otherwise (Xrandr/WallpaperApplicatorXrandr.sh), which also works under
+# XWayland when wayland-info is not installed. Prints nothing if neither is available.
+detect_display_resolutions() {
+    local resList=""
+    if [ -n "${WAYLAND_DISPLAY:-}" ] && command -v wayland-info &>/dev/null; then
+        resList=$(wayland-info 2>/dev/null | awk '
+            /interface: .wl_output./ { in_output=1; next }
+            /^interface:/            { in_output=0 }
+            in_output && /^[[:space:]]*width:.*height:.*refresh:/ { width=$2; height=$5 }
+            in_output && /flags:.*current/ { print width"x"height }
+        ')
+    fi
+    if [ -z "$resList" ] && command -v xrandr &>/dev/null; then
+        resList=$(xrandr --current 2>/dev/null | grep -F '*' | uniq | awk '{print $1}')
+    fi
+    [ -n "$resList" ] && printf '%s\n' "$resList"
+    return 0
+}
+
+# suggest_aspect_ratios SFW_DIR RESULT_ARRAY
+# Fills RESULT_ARRAY (by name) with the ratio folders of SFW_DIR that the
+# connected displays map to, using AspectRatioChecker.sh, the same script the
+# changer uses at runtime, so these are exactly the folders it will look for.
+# Prints what was detected. Leaves the array empty if no display is found.
+suggest_aspect_ratios() {
+    local sfwDir="$1"
+    local -n _sar_out=$2
+    _sar_out=()
+    local res folder f dup shown=false
+    while read -r res; do
+        [ -n "$res" ] || continue
+        folder=$(bash ./scripts-linux/AspectRatioChecker.sh "$res" "$sfwDir" 2>/dev/null)
+        folder=$(basename "$folder")
+        [ -n "$folder" ] && [ -d "$sfwDir/$folder" ] || continue
+        $shown || { echo "Connected displays:"; shown=true; }
+        printf '  %-11s -> %s\n' "$res" "$folder"
+        dup=false
+        for f in "${_sar_out[@]}"; do [ "$f" = "$folder" ] && dup=true; done
+        $dup || _sar_out+=("$folder")
+    done < <(detect_display_resolutions)
+    if $shown; then echo ""; else echo "Could not detect the connected displays, so nothing is pre-selected."; fi
+    return 0
+}
+
 # validate_wallpaper_structure: checks:
 #   - at least one aspect ratio folder is present under sfw
 #   - every ratio folder under sfw (and nsfw, if present) has the same
@@ -134,10 +181,13 @@ if [ "$copyWallpapers" = true ]; then
     noneLocked=()
     chosenRatios=()
     if (( ${#detectedRatios[@]} > 1 )); then
+        # Pre-tick the ratios that match the connected displays.
+        suggestedRatios=()
+        suggest_aspect_ratios "$wallpapersSource/sfw" suggestedRatios
         echo "Multiple aspect ratios were found. Select which ones to install:"
         echo "(space to toggle, enter to confirm)"
         echo ""
-        multiselect chosenRatios detectedRatios[@] noneLocked[@]
+        multiselect chosenRatios detectedRatios[@] noneLocked[@] suggestedRatios[@]
     else
         chosenRatios=("${detectedRatios[@]}")
     fi

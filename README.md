@@ -15,7 +15,7 @@ Prefer a window over the terminal questions? Run
 ```
 python3 Install-Linux-GUI.py
 ```
-It first installs PyQt6 if it is missing (with the same package manager layer the installer uses; you are asked for your password in the terminal), then opens a wizard: existing files, wallpaper source (bundled, your own folder or a git repo), aspect ratios (pre-ticked to match your connected displays) and the extras. It then runs the same `Install-Linux.sh` and answers its questions for you; a `sudo` password or any question it did not expect shows up as a dialog. The wizard also covers `--update-scripts`, `--update-wallpapers`, `--thumbnails` and `--zen-hotreload`.
+It first installs PyQt6 if it is missing (with the same package manager layer the installer uses). The administrator password is asked in your desktop's own authentication dialog (polkit), so no terminal is needed; without polkit it falls back to `sudo` in the terminal. It then opens a wizard: existing files, wallpaper source (bundled, your own folder or a git repo), aspect ratios (pre-ticked to match your connected displays) and the extras. It then runs the same `Install-Linux.sh` and answers its questions for you; a `sudo` password or any question it did not expect shows up as a dialog. The wizard also covers `--update-scripts`, `--update-wallpapers`, `--thumbnails` and `--zen-hotreload`.
 
 The terminal installer is unchanged. Its questions can also be answered in advance with `WC_ANSWER_<KEY>` variables (see `./Install-Linux.sh --help`), for example `WC_ANSWER_RATIOS="16-9 21-9" WC_ANSWER_NSFW=n ./Install-Linux.sh --install`; anything not preset is asked as usual.
 

@@ -35,6 +35,42 @@ INSTALLER = REPO / "Install-Linux.sh"
 # --------------------------------------------------------------------------- #
 # Bootstrap: PyQt6 first, using the installer's own package manager layer.
 # --------------------------------------------------------------------------- #
+def _notify(message: str, error: bool = True):
+    """Best effort to reach a user who launched this without a terminal (file manager, launcher)."""
+    print(message, file=sys.stderr if error else sys.stdout)
+    for cmd in (["notify-send", "WallpaperChanger installer", message],
+                ["kdialog", "--error" if error else "--msgbox", message],
+                ["zenity", "--error" if error else "--info", "--text", message]):
+        if shutil.which(cmd[0]) and (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")):
+            subprocess.call(cmd, stderr=subprocess.DEVNULL)
+            return
+
+
+# Same PkgManager.sh the installer uses: sync the repos, install the distro's PyQt6 package.
+_PKG_STEP = 'source "$1/PkgManager.sh" || exit 1; sync_repos; install_pkgs python-pyqt6'
+
+
+def _install_pyqt6() -> int:
+    """Returns 0 on success. Asks for privileges without needing a terminal when it can."""
+    graphical = bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
+    # 1) polkit: the desktop's own password dialog. The package step then runs as root, so the
+    #    sudo calls inside PkgManager.sh become plain calls (and cannot prompt a second time).
+    if graphical and shutil.which("pkexec"):
+        rc = subprocess.call(["pkexec", "bash", "-c", 'sudo() { "$@"; }; ' + _PKG_STEP, "bash", str(SUPPORT)], cwd=REPO)
+        if rc == 126:                      # dialog dismissed or not authorised: respect that
+            _notify("Authentication was cancelled, so PyQt6 was not installed.")
+            return 126
+        if rc != 127:                      # 127 = no polkit agent could ask; anything else is the real result
+            return rc
+        print("No polkit authentication agent is running; trying the terminal instead.")
+    # 2) plain sudo, prompting on the terminal
+    if sys.stdin.isatty():
+        return subprocess.call(["bash", "-c", _PKG_STEP, "bash", str(SUPPORT)], cwd=REPO)
+    _notify("PyQt6 has to be installed first, which needs administrator rights, and neither a polkit "
+            "authentication dialog nor a terminal is available. Start this from a terminal instead.")
+    return 127
+
+
 def ensure_pyqt6():
     try:
         import PyQt6.QtWidgets  # noqa: F401
@@ -43,11 +79,12 @@ def ensure_pyqt6():
         pass
 
     print("PyQt6 is not installed. Installing it first (the wallpaper picker needs it too)...")
-    if not sys.stdin.isatty():
-        sys.exit("Package installation needs your sudo password: run this script from a terminal.")
-    snippet = 'source "$1/PkgManager.sh" || exit 1; sync_repos; install_pkgs python-pyqt6'
-    if subprocess.call(["bash", "-c", snippet, "bash", str(SUPPORT)], cwd=REPO) != 0:
-        sys.exit("Could not install PyQt6. Install your distribution's PyQt6 package and run this again.")
+    rc = _install_pyqt6()
+    if rc in (126, 127):
+        sys.exit(1)
+    if rc != 0:
+        _notify("Could not install PyQt6. Install your distribution's PyQt6 package and run this again.")
+        sys.exit(1)
 
     # Restart so the freshly installed system package is picked up (also tries the
     # system python in case this one runs from a virtualenv).
@@ -55,8 +92,9 @@ def ensure_pyqt6():
         if py and os.path.exists(py) and subprocess.call(
                 [py, "-c", "import PyQt6.QtWidgets"], stderr=subprocess.DEVNULL) == 0:
             os.execv(py, [py] + sys.argv)
-    sys.exit("PyQt6 is still not importable after the package step. If the package manager reported an error above, "
-             "install your distribution's PyQt6 package yourself; if you use a virtualenv, run: /usr/bin/python3 " + sys.argv[0])
+    _notify("PyQt6 is still not importable after the package step. If the package manager reported an error, "
+            "install your distribution's PyQt6 package yourself; if you use a virtualenv, run: /usr/bin/python3 " + sys.argv[0])
+    sys.exit(1)
 
 
 if __name__ == "__main__":

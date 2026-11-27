@@ -5,7 +5,7 @@
 # Sets $wallpapersRepo for use by FinalMessage.sh. Meant to be SOURCED
 # from Install-Linux.sh (uses `return` to bail out, not `exit`).
 
-read -p "Do you want to clone a repo's wallpapers or provide your own for this script? [y/N]"
+ask_read CLONE_OFFER -p "Do you want to clone a repo's wallpapers or provide your own for this script? [y/N]"
 echo ""
 echo ""
 if [[ ! $REPLY =~ ^[Yy]$ ]]; then

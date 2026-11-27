@@ -10,6 +10,15 @@ chmod +x Install-Linux.sh
 ```
 Any dependency will be checked by the script and it will inform you if there are missing ones
 
+### Graphical installer
+Prefer a window over the terminal questions? Run
+```
+python3 Install-Linux-GUI.py
+```
+It first installs PyQt6 if it is missing (with the same package manager layer the installer uses; you are asked for your password in the terminal), then opens a wizard: existing files, wallpaper source (bundled, your own folder or a git repo), aspect ratios (pre-ticked to match your connected displays) and the extras. It then runs the same `Install-Linux.sh` and answers its questions for you; a `sudo` password or any question it did not expect shows up as a dialog. The wizard also covers `--update-scripts`, `--update-wallpapers`, `--thumbnails` and `--zen-hotreload`.
+
+The terminal installer is unchanged. Its questions can also be answered in advance with `WC_ANSWER_<KEY>` variables (see `./Install-Linux.sh --help`), for example `WC_ANSWER_RATIOS="16-9 21-9" WC_ANSWER_NSFW=n ./Install-Linux.sh --install`; anything not preset is asked as usual.
+
 To ensure the script works at its best please remember to configure [matugen](https://github.com/InioX/matugen) on your system
 
 ## Windows

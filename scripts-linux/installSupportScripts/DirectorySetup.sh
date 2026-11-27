@@ -7,12 +7,12 @@
 # are visible to later modules.
 
 if [ -d "$HOME/.config/WallpaperChanger" ]; then
-    read -p "Directory $HOME/.config/WallpaperChanger exists. Do you want to delete it and all its content? [y/N]" -n 1 -r
+    ask_read DELETE_CONFIG_DIR -p "Directory $HOME/.config/WallpaperChanger exists. Do you want to delete it and all its content? [y/N]" -n 1 -r
     echo ""
     echo ""
     if [[ ! $REPLY =~ ^[Yy]$ ]]; then
         configDirExists=true
-        read -p "Do you still want to copy the current wallpapers folder's scripts to the directory? [y/N]" -n 1 -r
+        ask_read COPY_SCRIPTS -p "Do you still want to copy the current wallpapers folder's scripts to the directory? [y/N]" -n 1 -r
         echo ""
         echo ""
         if [[ ! $REPLY =~ ^[Yy]$ ]]; then
@@ -27,13 +27,13 @@ fi
 
 if [ -d "$HOME/Pictures" ]; then
     if [ -d "$HOME/Pictures/wallpapers" ]; then
-        read -p "Directory $HOME/Pictures/wallpapers exists. Do you want to delete it and all its content? [y/N]" -n 1 -r
+        ask_read DELETE_WALLPAPERS_DIR -p "Directory $HOME/Pictures/wallpapers exists. Do you want to delete it and all its content? [y/N]" -n 1 -r
         echo ""
         echo ""
         if [[ ! $REPLY =~ ^[Yy]$ ]]; then
             wallpapersDirExists=true
             if [ -d ./wallpapers ]; then
-                read -p "Do you still want to copy the current wallpapers folder's wallpapers to the directory? [y/N]" -n 1 -r
+                ask_read COPY_WALLPAPERS -p "Do you still want to copy the current wallpapers folder's wallpapers to the directory? [y/N]" -n 1 -r
                 echo ""
                 echo ""
                 if [[ ! $REPLY =~ ^[Yy]$ ]]; then
@@ -47,7 +47,7 @@ if [ -d "$HOME/Pictures" ]; then
         else
             rm -r "$HOME/Pictures/wallpapers"
             if [ -d ./wallpapers ]; then
-                read -p "Do you want to copy the current wallpapers folder's wallpapers to the directory? [y/N]" -n 1 -r
+                ask_read COPY_WALLPAPERS -p "Do you want to copy the current wallpapers folder's wallpapers to the directory? [y/N]" -n 1 -r
                 echo ""
                 echo ""
                 if [[ ! $REPLY =~ ^[Yy]$ ]]; then
@@ -61,7 +61,7 @@ if [ -d "$HOME/Pictures" ]; then
         fi
     fi
 else
-    read -p "Pictures directory does not exist. This can be because of your system language or because you deleted it. Do you want to create it? [y/N]" -n 1 -r
+    ask_read CREATE_PICTURES_DIR -p "Pictures directory does not exist. This can be because of your system language or because you deleted it. Do you want to create it? [y/N]" -n 1 -r
     echo ""
     echo ""
     if [[ ! $REPLY =~ ^[Yy]$ ]]; then
@@ -70,7 +70,7 @@ else
     else
         createPicturesDir=true
         if [ -d ./wallpapers ]; then
-            read -p "Do you want to copy the current wallpapers folder's wallpapers to the directory? [y/N]" -n 1 -r
+            ask_read COPY_WALLPAPERS -p "Do you want to copy the current wallpapers folder's wallpapers to the directory? [y/N]" -n 1 -r
             echo ""
             echo ""
             if [[ ! $REPLY =~ ^[Yy]$ ]]; then

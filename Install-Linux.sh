@@ -25,6 +25,12 @@ Options:
   --update-wallpapers   Copy only new and updated wallpapers to the destination
   --zen-hotreload       Install live theme reload support for Zen Browser
   --help                Show this help message
+
+Every question can be answered in advance with an environment variable, which is
+how Install-Linux-GUI.py drives this script: WC_ANSWER_<KEY>=y|n for DELETE_CONFIG_DIR,
+COPY_SCRIPTS, DELETE_WALLPAPERS_DIR, COPY_WALLPAPERS, CREATE_PICTURES_DIR, CLONE_OFFER,
+NSFW and APPLY_NOW; WC_ANSWER_RATIOS="16-9 21-9" for the aspect ratios; and
+ZEN_HOTRELOAD_AUTO=yes|no for Zen. Unset ones are asked as usual.
 EOF
 }
 
@@ -239,6 +245,7 @@ cmd_update_scripts() {
 cmd_install() {
     echo "Starting installation process..."
     chmod +x "$supportDir"/*
+    source "$supportDir/Utils.sh"     # ask_read: questions can be preset via WC_ANSWER_<KEY>
 
     packageList=()
     useWayland=true
@@ -287,7 +294,7 @@ cmd_install() {
     # of waiting for the next Hyprland session start, so the system is
     # fully themed the moment installation finishes.
     if [ -x "$HOME/.config/WallpaperChanger/WallpaperApplicator.sh" ]; then
-        read -p "wallpaperApplicator.sh random will now be run, be advised that some of your programs might be closed and open again for the theming to be applied, do you wish to procede? [Y/n]"
+        ask_read APPLY_NOW -p "wallpaperApplicator.sh random will now be run, be advised that some of your programs might be closed and open again for the theming to be applied, do you wish to procede? [Y/n]"
         echo ""
         echo ""
         if [[ ! $REPLY =~ ^[Nn]$ ]]; then

@@ -141,3 +141,33 @@ multiselect() {
         fi
     done
 }
+
+# ---------------------------------------------------------------------------
+# ask_read: drop-in for `read` in the installer's questions. Usage:
+#   ask_read KEY <the exact arguments you would give to read>
+# If the environment variable WC_ANSWER_<KEY> is set (by a front-end such as
+# Install-Linux-GUI.py, or by hand: WC_ANSWER_NSFW=y ./Install-Linux.sh --install)
+# its value is used as the answer and nothing is asked; otherwise this is
+# exactly `read ...`. The answer lands where read would put it: the named
+# variable, or REPLY.
+# ---------------------------------------------------------------------------
+ask_read() {
+    local presetVar="WC_ANSWER_$1"
+    shift
+    if [ -z "${!presetVar+x}" ]; then
+        read "$@"
+        return
+    fi
+    local answer="${!presetVar}" prompt="" target="REPLY" args=("$@") i
+    for ((i = 0; i < ${#args[@]}; i++)); do
+        case "${args[i]}" in
+            -p) prompt="${args[i + 1]}"; ((i++)) ;;
+            -n|-N|-t|-d|-i|-u) ((i++)) ;;
+            -*) ;;
+            *) target="${args[i]}" ;;
+        esac
+    done
+    echo "${prompt}${answer}  (preset)"
+    printf -v "$target" '%s' "$answer"
+    REPLY="$answer"
+}

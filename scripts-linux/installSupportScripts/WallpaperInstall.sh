@@ -165,7 +165,7 @@ if [ "$copyWallpapers" = true ]; then
 
     #Checks if nsfw wallpapers exist and in case asks the user if he wants to install them
     if [ -d "$wallpapersSource/nsfw" ]; then
-        read -p "Do you want to copy the nsfw wallpapers? [y/N]" -n 1 -r
+        ask_read NSFW -p "Do you want to copy the nsfw wallpapers? [y/N]" -n 1 -r
         echo ""
         echo ""
         if [[ ! $REPLY =~ ^[Yy]$ ]]; then
@@ -180,7 +180,16 @@ if [ "$copyWallpapers" = true ]; then
 
     noneLocked=()
     chosenRatios=()
-    if (( ${#detectedRatios[@]} > 1 )); then
+    if (( ${#detectedRatios[@]} > 1 )) && [ -n "${WC_ANSWER_RATIOS+x}" ]; then
+        # Preset by a front-end (WC_ANSWER_RATIOS="16-9 21-9"): no menu. Names that
+        # are not available are ignored; an empty result falls back to all below.
+        for ratio in ${WC_ANSWER_RATIOS//,/ }; do
+            for avail in "${detectedRatios[@]}"; do
+                [ "$ratio" = "$avail" ] && chosenRatios+=("$ratio")
+            done
+        done
+        echo "Aspect ratios (preset): ${chosenRatios[*]}"
+    elif (( ${#detectedRatios[@]} > 1 )); then
         # Pre-tick the ratios that match the connected displays.
         suggestedRatios=()
         suggest_aspect_ratios "$wallpapersSource/sfw" suggestedRatios

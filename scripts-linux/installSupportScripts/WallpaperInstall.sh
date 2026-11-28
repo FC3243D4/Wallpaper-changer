@@ -220,7 +220,6 @@ if [ "$copyWallpapers" = true ]; then
 
     if (( ${#sourceDirs[@]} != 0 )); then
         copy_with_bar "Copying wallpapers..." "${sourceDirs[@]}" "$HOME/Pictures/wallpapers/"
-        printf '%s\n' "${chosenRatios[@]}" > "$HOME/.cache/wallpaper_ratios.cache"
         echo "Wallpapers copied successfully."
         echo ""
     fi

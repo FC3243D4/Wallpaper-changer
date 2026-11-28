@@ -112,7 +112,7 @@ from PyQt6.QtGui import QFontDatabase, QPainter, QPalette
 from PyQt6.QtWidgets import (QAbstractButton, QApplication, QButtonGroup, QCheckBox, QComboBox, QFileDialog,
                              QFrame, QGridLayout, QGroupBox, QHBoxLayout, QInputDialog, QLabel, QLineEdit, QMessageBox,
                              QPlainTextEdit, QProgressBar, QProgressDialog, QPushButton, QRadioButton, QTextBrowser,
-                             QVBoxLayout, QWidget, QWizard, QWizardPage)
+                             QVBoxLayout, QWidget, QWizard, QWizardPage, QSizePolicy)
 
 HOME = Path.home()
 CONFIG_DIR = HOME / ".config" / "WallpaperChanger"
@@ -469,6 +469,43 @@ class ActionCard(QFrame):
             self.radio.setChecked(True)
         super().mousePressEvent(event)
 
+class RatioPreview(QWidget):
+    """Small proportional aspect-ratio preview."""
+
+    def __init__(self, ratio: str, parent=None):
+        super().__init__(parent)
+        self.ratio = ratio
+        self.setFixedSize(68, 44)
+
+    def paintEvent(self, event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        try:
+            w, h = map(float, re.split(r"[-:x/]", self.ratio))
+            if w <= 0 or h <= 0:
+                return
+        except (ValueError, TypeError):
+            return
+
+        # Fit the rectangle inside a consistent preview area.
+        max_w, max_h = 60.0, 36.0
+        scale = min(max_w / w, max_h / h)
+
+        rect_w = w * scale
+        rect_h = h * scale
+
+        x = (self.width() - rect_w) / 2
+        y = (self.height() - rect_h) / 2
+
+        pal = self.palette()
+
+        p.setPen(pal.color(QPalette.ColorRole.Highlight))
+        p.setBrush(pal.color(QPalette.ColorRole.AlternateBase))
+        p.drawRoundedRect(
+            QRectF(x, y, rect_w, rect_h),
+            2, 2
+        )
 
 class RatioTile(QFrame):
     """Selectable tile for an aspect ratio inside a responsive multi-column grid."""
@@ -495,6 +532,9 @@ class RatioTile(QFrame):
         if is_suggested:
             col.addWidget(label("Connected display", wrap=False, point_delta=-1))
         lay.addLayout(col, 1)
+
+        self.preview = RatioPreview(ratio)
+        lay.addWidget(self.preview, 0, Qt.AlignmentFlag.AlignCenter)
 
         self.checkbox.toggled.connect(self._sync_state)
         self._sync_state(is_suggested)
@@ -553,141 +593,300 @@ class RatioGrid(QWidget):
             self.grid.setColumnStretch(c, 1)
 
 
+
 class StartPage(QWizardPage):
     def __init__(self):
         super().__init__()
         self.setTitle("WallpaperChanger")
-        self.setSubTitle("What would you like to do?")
-        lay = QVBoxLayout(self)
-        lay.setSpacing(8)
+        self.setSubTitle("Choose what you want to do.")
 
-        self.banner = QFrame()
-        self.banner.setObjectName("StatusBanner")
-        self.banner.setFrameShape(QFrame.Shape.StyledPanel)
-        banner_lay = QHBoxLayout(self.banner)
-        banner_lay.setContentsMargins(12, 8, 12, 8)
-        self.note = label("")
-        banner_lay.addWidget(self.note)
-        lay.addWidget(self.banner)
+        self._action = "install"
+        self.buttons = {}
 
-        self.group = QButtonGroup(self)
-        self.radios = {}
-        self.cards = {}
-        for i, (key, title, desc, _flag) in enumerate(ACTIONS):
-            rb = QRadioButton()
-            rb.setToolTip(desc)
-            self.group.addButton(rb, i)
-            self.radios[key] = rb
-            card = ActionCard(rb, title, desc)
-            self.cards[key] = card
-            lay.addWidget(card)
+        layout = QVBoxLayout(self)
+        layout.setSpacing(18)
 
-        self.radios["install"].setChecked(True)
-        lay.addStretch()
+        def create_button(key, title, description, large=False):
+            button = QPushButton(f"{title}\n{description}")
+            button.setObjectName("StartActionButton")
+            button.setCursor(Qt.CursorShape.PointingHandCursor)
+            button.setMinimumHeight(large and 112 or 82)
+            button.setSizePolicy(
+                QSizePolicy.Policy.Expanding,
+                QSizePolicy.Policy.Fixed,
+            )
+
+            if large:
+                button.setObjectName("InstallActionButton")
+
+            button.clicked.connect(
+                lambda checked=False, action=key: self.choose_action(action)
+            )
+
+            self.buttons[key] = button
+            return button
+
+        # Main install button, centered and approximately 2/3 width.
+        install_row = QHBoxLayout()
+        install_row.addStretch(1)
+
+        install_button = create_button(
+            "install",
+            "Install WallpaperChanger",
+            "Install or reinstall scripts, wallpapers and themes.",
+            large=True,
+        )
+        install_row.addWidget(install_button, 2)
+        install_row.addStretch(1)
+        layout.addLayout(install_row)
+
+        # Update section.
+        update_group = QGroupBox("Update")
+        update_layout = QHBoxLayout(update_group)
+        update_layout.setSpacing(12)
+
+        update_layout.addWidget(create_button(
+            "update_scripts",
+            "Update scripts",
+            "Copy new and changed scripts.",
+        ))
+        update_layout.addWidget(create_button(
+            "update_wallpapers",
+            "Sync wallpapers",
+            "Copy new and updated wallpapers.",
+        ))
+
+        layout.addWidget(update_group)
+
+        # Extras section.
+        extras_group = QGroupBox("Extras")
+        extras_layout = QHBoxLayout(extras_group)
+        extras_layout.setSpacing(12)
+
+        extras_layout.addWidget(create_button(
+            "thumbnails",
+            "Thumbnail watcher",
+            "Keep the picker's thumbnails up to date.",
+        ))
+        extras_layout.addWidget(create_button(
+            "zen",
+            "Zen Browser integration",
+            "Set up live theme reloading.",
+        ))
+
+        layout.addWidget(extras_group)
+        layout.addStretch()
+
         self.initializePage()
 
+    def choose_action(self, action):
+        self._action = action
+        self.wizard().next()
+
     def initializePage(self):
-        """Which maintenance actions make sense depends on what is installed right now."""
         installed = CONFIG_DIR.is_dir()
-        for key in ("update_scripts", "thumbnails"):
-            self.cards[key].setEnabled(installed)
-        self.cards["update_wallpapers"].setEnabled(WALLS_DIR.is_dir())
-        if not self.group.checkedButton().isEnabled():
-            self.radios["install"].setChecked(True)
-        self.note.setText("WallpaperChanger is already installed on this system." if installed else "")
-        self.banner.setVisible(installed)
+        wallpapers_installed = WALLS_DIR.is_dir()
+
+        self.buttons["update_scripts"].setEnabled(installed)
+        self.buttons["thumbnails"].setEnabled(installed)
+        self.buttons["update_wallpapers"].setEnabled(wallpapers_installed)
 
     def action(self):
-        return ACTIONS[self.group.checkedId()][0]
+        return self._action
 
     def nextId(self):
-        if self.action() != "install":
+        if self._action != "install":
             return P_RUN
-        if self.wizard().needs_existing_page():
+
+        if CONFIG_DIR.is_dir():
             return P_EXISTING
-        return P_OPTIONS if self.wizard().has_repo_wallpapers() else P_SOURCE
+
+        return P_SOURCE
+
 
 
 class ExistingPage(QWizardPage):
     def __init__(self):
         super().__init__()
         self.setTitle("Existing files found")
-        self.setSubTitle("Choose what happens to what is already on this system. Nothing is deleted unless you say so.")
+        self.setSubTitle(
+            "Choose what happens to what is already on this system. "
+            "Nothing is deleted unless you say so."
+        )
+
         lay = QVBoxLayout(self)
         lay.setSpacing(14)
 
         split_row = QHBoxLayout()
         split_row.setSpacing(14)
 
-        self.cfg_combo = self.wall_combo = None
-        if CONFIG_DIR.is_dir():
-            box = QGroupBox("Scripts")
+        self.cfg_buttons = []
+        self.wall_buttons = []
+
+        def create_choice_group(title, options, buttons):
+            box = QGroupBox(title)
             v = QVBoxLayout(box)
-            v.setContentsMargins(12, 14, 12, 14)
-            self.cfg_combo = QComboBox()
-            self.cfg_combo.addItems([
-                "Update scripts and keep settings",
-                "Delete and install clean",
-                "Leave untouched",
-            ])
-            v.addWidget(self.cfg_combo)
+            v.setContentsMargins(12, 14, 12, 12)
+            v.setSpacing(8)
+
+            for index, option in enumerate(options):
+                button = QPushButton(option)
+                button.setCheckable(True)
+                button.setAutoExclusive(True)
+                button.setMinimumHeight(42)
+                button.setCursor(Qt.CursorShape.PointingHandCursor)
+                button.setStyleSheet("""
+                    QPushButton {
+                        text-align: left;
+                        padding: 9px 12px;
+                        border: 1px solid palette(mid);
+                        border-radius: 6px;
+                        background: palette(base);
+                    }
+                    QPushButton:hover {
+                        border-color: palette(highlight);
+                    }
+                    QPushButton:checked {
+                        border: 2px solid palette(highlight);
+                        background: palette(alternate-base);
+                        font-weight: 600;
+                    }
+                """)
+
+                if index == 0:
+                    button.setChecked(True)
+
+                buttons.append(button)
+                v.addWidget(button)
+
             v.addStretch()
-            split_row.addWidget(box, 1)
+            return box
+
+        self.cfg_combo = None
+        self.wall_combo = None
+
+        if CONFIG_DIR.is_dir():
+            split_row.addWidget(create_choice_group(
+                "Scripts",
+                [
+                    "Update scripts and keep settings",
+                    "Delete and install clean",
+                    "Leave untouched",
+                ],
+                self.cfg_buttons,
+            ), 1)
 
         if WALLS_DIR.is_dir():
-            box = QGroupBox("Wallpapers")
-            v = QVBoxLayout(box)
-            v.setContentsMargins(12, 14, 12, 14)
-            self.wall_combo = QComboBox()
-            self.wall_combo.addItems([
-                "Keep existing and add/update from source",
-                "Keep existing and copy nothing",
-                "Delete everything first, then copy",
-            ])
-            v.addWidget(self.wall_combo)
-            v.addStretch()
-            split_row.addWidget(box, 1)
+            split_row.addWidget(create_choice_group(
+                "Wallpapers",
+                [
+                    "Keep existing and add/update from source",
+                    "Keep existing and copy nothing",
+                    "Delete everything first, then copy",
+                ],
+                self.wall_buttons,
+            ), 1)
 
         if split_row.count():
             lay.addLayout(split_row)
 
         self.make_pictures = None
         if not PICTURES.is_dir():
-            self.make_pictures = QCheckBox(f"Create {PICTURES} (it does not exist)")
+            self.make_pictures = QCheckBox(
+                f"Create {PICTURES} (it does not exist)"
+            )
             self.make_pictures.setChecked(True)
             lay.addWidget(self.make_pictures)
+
         lay.addStretch()
 
+    def answers(self):
+        cfg = next(
+            (i for i, button in enumerate(self.cfg_buttons)
+             if button.isChecked()),
+            0,
+        )
+        wall = next(
+            (i for i, button in enumerate(self.wall_buttons)
+             if button.isChecked()),
+            0,
+        )
+
+        return cfg, wall
+
+
     def nextId(self):
-        return P_OPTIONS if self.wizard().has_repo_wallpapers() else P_SOURCE
+        # Nothing will be copied: skip source selection and aspect ratios.
+        if self.wall_buttons and self.wall_buttons[1].isChecked():
+            return P_EXTRAS
+
+        # Wallpapers already exist: go directly to aspect-ratio selection.
+        if WALLS_DIR.is_dir():
+            return P_OPTIONS
+
+        # No existing wallpapers: source selection is required.
+        return P_SOURCE
 
     def answers(self) -> dict:
         a = {}
-        if self.cfg_combo:
-            c = self.cfg_combo.currentIndex()
+
+        if self.cfg_buttons:
+            c = next(
+                (i for i, button in enumerate(self.cfg_buttons)
+                if button.isChecked()),
+                0,
+            )
             a["DELETE_CONFIG_DIR"] = yn(c == 1)
             a["COPY_SCRIPTS"] = yn(c == 0)
-        if self.wall_combo:
-            w = self.wall_combo.currentIndex()
+
+        if self.wall_buttons:
+            w = next(
+                (i for i, button in enumerate(self.wall_buttons)
+                if button.isChecked()),
+                0,
+            )
             a["DELETE_WALLPAPERS_DIR"] = yn(w == 2)
             a["COPY_WALLPAPERS"] = yn(w in (0, 2))
+
         if self.make_pictures:
             a["CREATE_PICTURES_DIR"] = yn(self.make_pictures.isChecked())
-            a["COPY_WALLPAPERS"] = yn(self.make_pictures.isChecked())
+
+            # Only enable wallpaper copying when the directory is being created.
+            if not self.wall_buttons:
+                a["COPY_WALLPAPERS"] = yn(self.make_pictures.isChecked())
+
         return a
 
     def describe(self) -> list:
         out = []
-        if self.cfg_combo:
-            out.append(["- Scripts: updated, settings kept",
-                        "- Scripts: REMOVED, then installed clean",
-                        "- Scripts: left untouched"][self.cfg_combo.currentIndex()])
-        if self.wall_combo:
-            out.append(["- Wallpapers: kept, new ones added",
-                        "- Wallpapers: kept, nothing copied",
-                        "- Wallpapers: EVERYTHING DELETED first"][self.wall_combo.currentIndex()])
+
+        if self.cfg_buttons:
+            c = next(
+                (i for i, button in enumerate(self.cfg_buttons)
+                if button.isChecked()),
+                0,
+            )
+            out.append([
+                "- Scripts: updated, settings kept",
+                "- Scripts: REMOVED, then installed clean",
+                "- Scripts: left untouched",
+            ][c])
+
+        if self.wall_buttons:
+            w = next(
+                (i for i, button in enumerate(self.wall_buttons)
+                if button.isChecked()),
+                0,
+            )
+            out.append([
+                "- Wallpapers: kept, new ones added",
+                "- Wallpapers: kept, nothing copied",
+                "- Wallpapers: EVERYTHING DELETED first",
+            ][w])
+
         if self.make_pictures and self.make_pictures.isChecked():
             out.append(f"- {PICTURES} will be created")
+
         return out
 
 
@@ -901,23 +1100,78 @@ class OptionsPage(QWizardPage):
         return a
 
 
+
+
 class ExtrasPage(QWizardPage):
     def __init__(self):
         super().__init__()
         self.setTitle("Extras")
-        self.setSubTitle("Optional browser integration and applying a wallpaper right away.")
+        self.setSubTitle(
+            "Choose which optional actions should be performed."
+        )
+
         lay = QVBoxLayout(self)
         lay.setSpacing(12)
 
-        box = QGroupBox("Post-install & browser options")
-        v = QVBoxLayout(box)
-        v.setSpacing(8)
-        self.zen = QCheckBox("Set up Zen Browser live theme reload if Zen is found (needs sudo and a download)")
-        self.apply = QCheckBox("Apply a random wallpaper when finished (programs may close and reopen to take the theme)")
-        self.apply.setChecked(True)
-        v.addWidget(self.zen)
-        v.addWidget(self.apply)
-        lay.addWidget(box)
+        def create_option(title, description, checked=False):
+            card = QFrame()
+            card.setObjectName("ExtraOption")
+            card.setFrameShape(QFrame.Shape.StyledPanel)
+            card.setCursor(Qt.CursorShape.PointingHandCursor)
+
+            row = QHBoxLayout(card)
+            row.setContentsMargins(16, 12, 16, 12)
+            row.setSpacing(16)
+
+            text_col = QVBoxLayout()
+            text_col.setSpacing(4)
+
+            heading = label(title, bold=True)
+            detail = label(description)
+            detail.setStyleSheet("color: palette(text);")
+
+            text_col.addWidget(heading)
+            text_col.addWidget(detail)
+
+            toggle = SwitchToggle()
+            toggle.setChecked(checked)
+            toggle.setToolTip("Enable or disable this option")
+
+            row.addLayout(text_col, 1)
+            row.addWidget(toggle, 0, Qt.AlignmentFlag.AlignVCenter)
+
+            def sync_state(_checked=None):
+                card.setProperty("selected", toggle.isChecked())
+                card.style().unpolish(card)
+                card.style().polish(card)
+
+            toggle.toggled.connect(sync_state)
+
+            def toggle_card(event):
+                if event.button() == Qt.MouseButton.LeftButton:
+                    toggle.toggle()
+                QFrame.mousePressEvent(card, event)
+
+            card.mousePressEvent = toggle_card
+
+            sync_state()
+
+            return card, toggle
+
+        self.zen_card, self.zen = create_option(
+            "Setup Zen live theme reload",
+            "Set up live theme reloading if Zen Browser is found "
+            "(requires sudo and a download)."
+        )
+
+        self.apply_card, self.apply = create_option(
+            "Apply a random wallpaper when finished",
+            "Programs may close and reopen to apply the theme.",
+            checked=True,
+        )
+
+        lay.addWidget(self.zen_card)
+        lay.addWidget(self.apply_card)
         lay.addStretch()
 
     def nextId(self):
@@ -925,6 +1179,8 @@ class ExtrasPage(QWizardPage):
 
     def answers(self) -> dict:
         return {"APPLY_NOW": yn(self.apply.isChecked())}
+
+
 
 
 class SummaryPage(QWizardPage):

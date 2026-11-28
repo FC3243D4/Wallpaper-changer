@@ -988,7 +988,7 @@ def build_completion_html(action: str, rc: int, env: dict, log_lines: list[str])
             f"<h3 style='margin: 0 0 6px 0;'>Scripts updated</h3>"
             f"<p style='margin: 0 0 10px 0;'>New and changed scripts were copied to <code>{html.escape(cfg)}</code>.</p>"
             f"<p style='margin: 0 0 4px 0;'><b>Open the wallpaper menu</b></p>"
-            f"{_cmd_block(f'{cfg}/WallpaperMenu.sh')}"
+            f"{_cmd_block(f'{cfg}/WallpaperGui.py')}"
             f"<p style='margin: 0;'>If you added or removed wallpapers recently, delete <code>{html.escape(cache)}</code> so ratios refresh.</p>"
         )
 
@@ -997,7 +997,7 @@ def build_completion_html(action: str, rc: int, env: dict, log_lines: list[str])
             f"<h3 style='margin: 0 0 6px 0;'>Wallpapers synced</h3>"
             f"<p style='margin: 0 0 10px 0;'>Matching aspect ratio folders in <code>{html.escape(walls)}</code> were synced and the ratio cache was cleared.</p>"
             f"<p style='margin: 0 0 4px 0;'><b>Open the wallpaper menu</b></p>"
-            f"{_cmd_block(f'{cfg}/WallpaperMenu.sh')}"
+            f"{_cmd_block(f'{cfg}/WallpaperGui.py')}"
         )
 
     if action == "thumbnails":
@@ -1017,7 +1017,7 @@ def build_completion_html(action: str, rc: int, env: dict, log_lines: list[str])
     custom_walls = any("No ./wallpapers folder found" not in ln for ln in log_lines) and (REPO_WALLS.exists() or REPO_WALLS.is_symlink())
 
     if use_xrandr:
-        menu_cmd = f"{cfg}/WallpaperMenuXrandr.sh"
+        menu_cmd = f"{cfg}/WallpaperGui.py"
         random_cmd = f"{cfg}/WallpaperApplicatorXrandr.sh random"
         auto_cmd = f"{cfg}/WallpaperRandomAutoXrandr.sh"
         sfw_cmd = f"{cfg}/WallpaperApplicatorXrandr.sh random sfw"
@@ -1025,7 +1025,7 @@ def build_completion_html(action: str, rc: int, env: dict, log_lines: list[str])
         auto_sfw = f"{cfg}/WallpaperRandomAutoXrandr.sh sfw"
         auto_nsfw = f"{cfg}/WallpaperRandomAutoXrandr.sh nsfw"
     else:
-        menu_cmd = f"{cfg}/WallpaperMenu.sh"
+        menu_cmd = f"{cfg}/WallpaperGui.py"
         random_cmd = f"{cfg}/WallpaperApplication.sh random"
         auto_cmd = f"{cfg}/WallpaperRandomAuto.sh"
         sfw_cmd = f"{cfg}/WallpaperApplicator.sh random sfw"

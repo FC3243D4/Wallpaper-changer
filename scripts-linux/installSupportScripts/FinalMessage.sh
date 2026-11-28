@@ -44,7 +44,7 @@ else
         cat << EOF
 
 Open the wallpaper menu anytime with:
-$HOME/.config/WallpaperChanger/WallpaperMenu.sh
+$HOME/.config/WallpaperChanger/WallpaperGui.py
 
 Start the automatic wallpaper changer (cycles every 30 minutes — edit the script if you'd like a different interval):
 $HOME/.config/WallpaperChanger/WallpaperRandomAuto.sh
